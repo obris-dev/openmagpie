@@ -55,7 +55,11 @@ dev-cli-sync: ## Sync the magpie CLI's uv-managed env (cli/.venv)
 dev-cli: ## Run the magpie CLI via uv (e.g. make dev-cli ARGS="auth login")
 	cd cli && uv run magpie $(ARGS)
 
-dev-cli-types: ## Regenerate the CLI's typed models from the server schema
+dev-wire-schema: ## Refresh the committed wire-schema artifact from the server models
+	docker compose exec -T core uv run python manage.py dump_wire_schema > cli/schema/wire_schema.json
+	@echo "wrote cli/schema/wire_schema.json (commit it; CI guards staleness)"
+
+dev-cli-types: ## Regenerate the CLI's typed models from the committed wire schema
 	cd cli && uv run python scripts/gen_types.py
 
 dev-lint: ## Run linters (ruff + whitespace/final-newline on tracked text files)

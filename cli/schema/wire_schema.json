@@ -1,0 +1,324 @@
+{
+  "wire": {
+    "description": "One listener as it goes over the wire (list / create / dry-run /\nget / edit all serialize through this). Tolerates an unsaved\ninstance: `created_at` is None pre-save; `id` is the empty-string\nULID placeholder (the create dry-run view strips it).",
+    "properties": {
+      "id": {
+        "title": "Id",
+        "type": "string"
+      },
+      "name": {
+        "title": "Name",
+        "type": "string"
+      },
+      "instructions": {
+        "title": "Instructions",
+        "type": "string"
+      },
+      "kind": {
+        "title": "Kind",
+        "type": "string"
+      },
+      "delivery_mode": {
+        "title": "Delivery Mode",
+        "type": "string"
+      },
+      "is_active": {
+        "title": "Is Active",
+        "type": "boolean"
+      },
+      "poll_interval_seconds": {
+        "title": "Poll Interval Seconds",
+        "type": "integer"
+      },
+      "last_polled_at": {
+        "anyOf": [
+          {
+            "format": "date-time",
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Last Polled At"
+      },
+      "next_poll_at": {
+        "anyOf": [
+          {
+            "format": "date-time",
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Next Poll At"
+      },
+      "last_digest_at": {
+        "anyOf": [
+          {
+            "format": "date-time",
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Last Digest At"
+      },
+      "next_digest_at": {
+        "anyOf": [
+          {
+            "format": "date-time",
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Next Digest At"
+      },
+      "user_id": {
+        "title": "User Id",
+        "type": "string"
+      },
+      "data": {
+        "additionalProperties": true,
+        "default": {},
+        "title": "Data",
+        "type": "object"
+      },
+      "created_at": {
+        "anyOf": [
+          {
+            "format": "date-time",
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Created At"
+      }
+    },
+    "required": [
+      "id",
+      "name",
+      "instructions",
+      "kind",
+      "delivery_mode",
+      "is_active",
+      "poll_interval_seconds",
+      "user_id"
+    ],
+    "title": "ListenerWire",
+    "type": "object"
+  },
+  "configs": {
+    "semantic": {
+      "$defs": {
+        "EngineSpec": {
+          "description": "Which engine + model this listener uses to judge relevance.\n\n`kind` must be registered in `engine.registry`. `model` is informational,\nthe actual model is currently bound at registry-init time from settings\n(e.g. `OLLAMA_MODEL`). Wire `model` through to the engine call if/when\nper-listener model override becomes a real need.",
+          "properties": {
+            "kind": {
+              "title": "Kind",
+              "type": "string"
+            },
+            "model": {
+              "default": "",
+              "title": "Model",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "title": "EngineSpec",
+          "type": "object"
+        },
+        "LogNotifierSpec": {
+          "description": "Writes the batch to stdout. For dev / verification. No secrets,\nso it inherits the no-op `redacted` from NotifierSpecBase.",
+          "properties": {
+            "kind": {
+              "const": "log",
+              "default": "log",
+              "title": "Kind",
+              "type": "string"
+            },
+            "prefix": {
+              "default": "[hit]",
+              "title": "Prefix",
+              "type": "string"
+            },
+            "include_fields": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "title": "Include Fields",
+              "type": "array"
+            }
+          },
+          "title": "LogNotifierSpec",
+          "type": "object"
+        },
+        "RedditSubredditStreamSpec": {
+          "description": "Identity of one subreddit feed. Bound to RedditSubRedditConnector.",
+          "properties": {
+            "kind": {
+              "const": "reddit_subreddit",
+              "default": "reddit_subreddit",
+              "title": "Kind",
+              "type": "string"
+            },
+            "subreddit": {
+              "title": "Subreddit",
+              "type": "string"
+            }
+          },
+          "required": [
+            "subreddit"
+          ],
+          "title": "RedditSubredditStreamSpec",
+          "type": "object"
+        },
+        "StreamWatch": {
+          "description": "A stream this Listener is watching, identity + per-stream poll state.",
+          "properties": {
+            "spec": {
+              "discriminator": {
+                "mapping": {
+                  "reddit_subreddit": "#/$defs/RedditSubredditStreamSpec"
+                },
+                "propertyName": "kind"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/RedditSubredditStreamSpec"
+                }
+              ],
+              "title": "Spec"
+            },
+            "last_event_at": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Last Event At"
+            }
+          },
+          "required": [
+            "spec"
+          ],
+          "title": "StreamWatch",
+          "type": "object"
+        },
+        "WebhookNotifierSpec": {
+          "description": "POSTs a JSON payload to a configured URL.\n\nSecurity notes (single-tenant self-host assumption):\n  - URL scheme is validated to http/https here. Runtime delivery additionally\n    enforces `settings.WEBHOOK_REQUIRE_HTTPS` and `settings.WEBHOOK_BLOCK_PRIVATE_IPS`\n   , see notifications/notifiers/webhook.py.\n  - `headers` is forwarded verbatim. Fine when the operator controls the listener\n    config. If this is reused in a multi-tenant deployment, treat headers as\n    untrusted input (allowlist or strip Authorization/Cookie, etc.).",
+          "properties": {
+            "kind": {
+              "const": "webhook",
+              "default": "webhook",
+              "title": "Kind",
+              "type": "string"
+            },
+            "url": {
+              "title": "Url",
+              "type": "string"
+            },
+            "headers": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "default": {},
+              "title": "Headers",
+              "type": "object"
+            },
+            "include_fields": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "title": "Include Fields",
+              "type": "array"
+            }
+          },
+          "required": [
+            "url"
+          ],
+          "title": "WebhookNotifierSpec",
+          "type": "object"
+        }
+      },
+      "description": "Schema for Listener.data when Listener.kind == 'semantic'.",
+      "properties": {
+        "streams": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/StreamWatch"
+          },
+          "title": "Streams",
+          "type": "array"
+        },
+        "refined_instructions": {
+          "default": "",
+          "title": "Refined Instructions",
+          "type": "string"
+        },
+        "engine": {
+          "$ref": "#/$defs/EngineSpec"
+        },
+        "hit_threshold": {
+          "default": 0.8,
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Hit Threshold",
+          "type": "number"
+        },
+        "notifiers": {
+          "default": [],
+          "items": {
+            "discriminator": {
+              "mapping": {
+                "log": "#/$defs/LogNotifierSpec",
+                "webhook": "#/$defs/WebhookNotifierSpec"
+              },
+              "propertyName": "kind"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/WebhookNotifierSpec"
+              },
+              {
+                "$ref": "#/$defs/LogNotifierSpec"
+              }
+            ]
+          },
+          "title": "Notifiers",
+          "type": "array"
+        },
+        "digest_interval_seconds": {
+          "default": 3600,
+          "title": "Digest Interval Seconds",
+          "type": "integer"
+        }
+      },
+      "title": "SemanticListenerConfig",
+      "type": "object"
+    }
+  },
+  "config_titles": {
+    "semantic": "SemanticListenerConfig"
+  }
+}
