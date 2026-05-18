@@ -15,6 +15,7 @@ magpie = "openmagpie.cli:app"
 
 [dependency-groups]
 dev = [
+    "datamodel-code-generator>=0.57.0",
     "ruff>=0.11",
     "ty>=0.0.1",
 ]

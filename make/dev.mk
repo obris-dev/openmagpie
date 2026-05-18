@@ -55,6 +55,9 @@ dev-cli-sync: ## Sync the magpie CLI's uv-managed env (cli/.venv)
 dev-cli: ## Run the magpie CLI via uv (e.g. make dev-cli ARGS="auth login")
 	cd cli && uv run magpie $(ARGS)
 
+dev-cli-types: ## Regenerate the CLI's typed models from the server schema
+	cd cli && uv run python scripts/gen_types.py
+
 dev-lint: ## Run linters (ruff + whitespace/final-newline on tracked text files)
 	$(MAKE) dev-exec SVC=core CMD="uv run ruff check ."
 	$(MAKE) dev-exec SVC=core CMD="uv run ruff format --check ."

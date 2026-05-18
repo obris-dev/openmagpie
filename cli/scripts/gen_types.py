@@ -1,0 +1,133 @@
+"""Regenerate the CLI's typed models from the server's published schema.
+
+Pipeline (the "server owns the schema, client consumes" loop):
+
+  manage.py dump_wire_schema   # server: canonical Pydantic -> JSON Schema
+        |
+  datamodel-code-generator     # client: schema -> typed pydantic models
+        |
+  api/_generated_wire.py       # transport shell (data: opaque)
+  api/_generated_configs.py    # per-kind configs, base = _gen_base.ListenerConfig
+                               #   + CONFIG_BY_KIND / AnyListenerConfig (discovery)
+
+Run: `make cli-types` (then commit the generated files). CI runs this
+and fails on a diff - that staleness guard is what actually makes the
+server the single source (without it, codegen just trades manual drift
+for stale-generation drift).
+
+PoC note: the schema is pulled from the running dev container
+(`docker compose exec core`). Productionizing would fetch it from a
+schema endpoint or a checked-in artifact instead; the rest is identical.
+"""
+
+from __future__ import annotations
+
+import json
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+API = Path(__file__).resolve().parent.parent / "src" / "openmagpie" / "api"
+WIRE_OUT = API / "_generated_wire.py"
+CONFIGS_OUT = API / "_generated_configs.py"
+_BASE = "openmagpie.api._gen_base.ListenerConfig"
+
+_CODEGEN = [
+    "uv", "run", "datamodel-codegen",
+    "--input-file-type", "jsonschema",
+    "--output-model-type", "pydantic_v2.BaseModel",
+    "--target-python-version", "3.13",
+    "--use-standard-collections",
+    "--use-union-operator",
+    # Annotated[float, Field(ge=...)] not the deprecated confloat(...)
+    # (v1-style; runtime-ok but type-checkers reject calls in type pos).
+    "--use-annotated",
+    "--disable-timestamp",  # deterministic output -> CI staleness guard works
+]
+
+# datamodel-codegen emits a root `class Model(RootModel[Any])` for a
+# bare `$defs` document (no top-level type). It's dead noise; strip it
+# so the generated module carries no unused model.
+_ROOT_ARTIFACT = "class Model(RootModel[Any]):\n    root: Any\n\n\n"
+
+
+def _fetch_bundle() -> dict:
+    """Pull the JSON-Schema bundle from the server (single source)."""
+    out = subprocess.run(
+        ["docker", "compose", "exec", "-T", "core",
+         "uv", "run", "python", "manage.py", "dump_wire_schema"],
+        cwd=API.parents[3],  # repo root
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    return json.loads(out[out.index("{") :])
+
+
+def _codegen(schema: dict, out: Path, *, base_class: str | None) -> None:
+    with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as f:
+        json.dump(schema, f)
+        src = f.name
+    cmd = [*_CODEGEN, "--input", src, "--output", str(out)]
+    if base_class:
+        cmd += ["--base-class", base_class]
+    subprocess.run(cmd, check=True)
+
+
+def main() -> None:
+    bundle = _fetch_bundle()
+
+    # 1. Transport shell. data stays an opaque object (the schema says
+    #    additionalProperties: true) -> generated `data: dict[str, Any]`.
+    _codegen(bundle["wire"], WIRE_OUT, base_class=None)
+
+    # 2. Per-kind configs combined into one $defs doc so a single run
+    #    emits every kind sharing the discoverability base. Each kind's
+    #    own $defs are hoisted; refs are `#/$defs/<Model>` (pydantic
+    #    default ref_template), so they resolve in the merged doc.
+    combined: dict = {"$defs": {}}
+    for kind, schema in bundle["configs"].items():
+        combined["$defs"].update(schema.get("$defs", {}))
+        title = bundle["config_titles"][kind]
+        combined["$defs"][title] = {
+            k: v for k, v in schema.items() if k != "$defs"
+        }
+    _codegen(combined, CONFIGS_OUT, base_class=_BASE)
+    CONFIGS_OUT.write_text(
+        CONFIGS_OUT.read_text().replace(_ROOT_ARTIFACT, "", 1)
+    )
+
+    # 3. The kind -> model map + union, generated from config_titles so
+    #    no hand-maintained kind list. Discoverable; the `listener_config`
+    #    factory reads CONFIG_BY_KIND.
+    titles = bundle["config_titles"]
+    union = " | ".join(titles[k] for k in titles) or "ListenerConfig"
+    footer = [
+        "",
+        "",
+        "# ── generated registry (kind -> model) ──",
+        f"CONFIG_BY_KIND: dict[str, type[ListenerConfig]] = {{",
+        *[f'    "{k}": {titles[k]},' for k in titles],
+        "}",
+        "",
+        f"AnyListenerConfig = {union}",
+        "",
+    ]
+    with CONFIGS_OUT.open("a") as fh:
+        fh.write("\n".join(footer))
+
+    subprocess.run(
+        ["uv", "run", "ruff", "format", str(WIRE_OUT), str(CONFIGS_OUT)],
+        check=True,
+    )
+    subprocess.run(
+        ["uv", "run", "ruff", "check", "--fix", "--quiet",
+         str(WIRE_OUT), str(CONFIGS_OUT)],
+        check=False,
+    )
+    print(f"generated: {WIRE_OUT.name}, {CONFIGS_OUT.name}")
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -19,6 +19,7 @@ from typing import Any
 
 from listeners.models import Listener
 from listeners.registry import get_config_class
+from listeners.wire import ListenerWire
 from pydantic import ValidationError as PydanticValidationError
 from rest_framework import serializers
 
@@ -145,26 +146,26 @@ def listener_wire(listener: Listener) -> dict[str, Any]:
     dry-run / get / edit all go through here, so the response can't drift
     between endpoints.
 
-    Datetimes are returned raw; DRF's JSON renderer ISO-encodes them.
-    Tolerates an unsaved instance (dry-run): `created_at` is None
-    pre-save (auto_now_add), `id` is the empty-string ULID placeholder
-    (the create dry-run view strips it; edit keeps the real id).
+    Built and dumped through `wire.ListenerWire`: that Pydantic model is
+    the canonical shape the CLI codegens from, so the contract is
+    declared once (in `wire.py`) and never hand-copied across the
+    boundary. `mode="json"` ISO-encodes datetimes. Tolerates an unsaved
+    instance (dry-run): `created_at` is None pre-save; `id` is the
+    empty-string ULID placeholder (the create dry-run view strips it).
     """
-    return {
-        "id": listener.id,
-        "name": listener.name,
-        "instructions": listener.instructions,
-        "kind": listener.kind,
-        "delivery_mode": listener.delivery_mode,
-        "is_active": listener.is_active,
-        "poll_interval_seconds": listener.poll_interval_seconds,
-        "last_polled_at": listener.last_polled_at,
-        "next_poll_at": listener.next_poll_at,
-        "last_digest_at": listener.last_digest_at,
-        "next_digest_at": listener.next_digest_at,
-        # creator, for audit/display. Account-scoped reads mean this is
-        # NOT an ownership filter (see ListenerService).
-        "user_id": listener.user_id,
-        "data": _redacted_data(listener),
-        "created_at": listener.created_at,
-    }
+    return ListenerWire(
+        id=listener.id,
+        name=listener.name,
+        instructions=listener.instructions,
+        kind=listener.kind,
+        delivery_mode=listener.delivery_mode,
+        is_active=listener.is_active,
+        poll_interval_seconds=listener.poll_interval_seconds,
+        last_polled_at=listener.last_polled_at,
+        next_poll_at=listener.next_poll_at,
+        last_digest_at=listener.last_digest_at,
+        next_digest_at=listener.next_digest_at,
+        user_id=listener.user_id,
+        data=_redacted_data(listener),
+        created_at=listener.created_at,
+    ).model_dump(mode="json")
