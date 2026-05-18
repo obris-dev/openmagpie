@@ -1,4 +1,4 @@
-.PHONY: up build down logs logs-core logs-web dev-exec dev-manage dev-test dev-makemigrations dev-dbshell dev-migrate dev-bootstrap dev-lint dev-lint-fix dev-types dev-check dev-web dev-web-shell dev-cli-sync dev-cli
+.PHONY: up build down logs logs-core logs-web dev-exec dev-manage dev-test dev-makemigrations dev-dbshell dev-migrate dev-bootstrap dev-lint dev-lint-fix dev-types dev-check dev-web dev-web-shell dev-cli-sync dev-cli dev-cli-types dev-wire-schema dev-schema-guard
 
 up: ## Start local Docker dev environment
 	docker compose up -d
@@ -62,6 +62,14 @@ dev-wire-schema: ## Refresh the committed wire-schema artifact from the server m
 dev-cli-types: ## Regenerate the CLI's typed models from the committed wire schema
 	cd cli && uv run python scripts/gen_types.py
 
+dev-schema-guard: ## Staleness guards: schema vs server models, gen vs schema (fail on drift)
+	$(MAKE) dev-wire-schema
+	git diff --exit-code -- cli/schema/wire_schema.json \
+		|| { echo "wire schema stale vs server models - commit the regen"; exit 1; }
+	$(MAKE) dev-cli-types
+	git diff --exit-code -- cli/src/openmagpie/api/_generated_wire.py cli/src/openmagpie/api/_generated_configs.py \
+		|| { echo "generated CLI types stale vs schema - commit the regen"; exit 1; }
+
 dev-lint: ## Run linters (ruff + whitespace/final-newline on tracked text files)
 	$(MAKE) dev-exec SVC=core CMD="uv run ruff check ."
 	$(MAKE) dev-exec SVC=core CMD="uv run ruff format --check ."
@@ -75,7 +83,8 @@ dev-lint-fix: ## Auto-fix lint issues
 dev-types: ## Run ty static type checker
 	$(MAKE) dev-exec SVC=core CMD="uv run ty check ."
 
-dev-check: ## Run lint + types + tests (pre-commit habit)
+dev-check: ## Run lint + types + tests + schema guards (pre-commit habit)
 	$(MAKE) dev-lint
 	$(MAKE) dev-types
 	$(MAKE) dev-test
+	$(MAKE) dev-schema-guard
