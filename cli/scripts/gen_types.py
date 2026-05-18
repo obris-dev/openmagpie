@@ -97,9 +97,7 @@ def _scope_base(path: Path, kind_titles: list[str]) -> None:
     Deterministic: the kind titles come from the schema bundle."""
     text = path.read_text()
     for title in kind_titles:
-        text = text.replace(
-            f"class {title}(BaseModel):", f"class {title}(ListenerConfig):"
-        )
+        text = text.replace(f"class {title}(BaseModel):", f"class {title}(ListenerConfig):")
     # Inject the base import just after the `from __future__` line.
     anchor = "from __future__ import annotations\n"
     text = text.replace(anchor, anchor + "\n" + _BASE_IMPORT + "\n", 1)
@@ -109,8 +107,10 @@ def _scope_base(path: Path, kind_titles: list[str]) -> None:
 def main() -> None:
     bundle = _fetch_bundle()
 
-    # 1. Transport shell. `data` stays an opaque object -> dict[str, Any].
+    # 1. Transport + envelope models (one $defs doc). `data` stays an
+    #    opaque object -> dict[str, Any].
     _codegen(bundle["wire"], WIRE_OUT)
+    WIRE_OUT.write_text(WIRE_OUT.read_text().replace(_ROOT_ARTIFACT, "", 1))
     _stabilize_header(WIRE_OUT)
 
     # 2. Per-kind configs into one $defs doc (refs are `#/$defs/<Model>`,
@@ -119,13 +119,9 @@ def main() -> None:
     for kind, schema in bundle["configs"].items():
         combined["$defs"].update(schema.get("$defs", {}))
         title = bundle["config_titles"][kind]
-        combined["$defs"][title] = {
-            k: v for k, v in schema.items() if k != "$defs"
-        }
+        combined["$defs"][title] = {k: v for k, v in schema.items() if k != "$defs"}
     _codegen(combined, CONFIGS_OUT)
-    CONFIGS_OUT.write_text(
-        CONFIGS_OUT.read_text().replace(_ROOT_ARTIFACT, "", 1)
-    )
+    CONFIGS_OUT.write_text(CONFIGS_OUT.read_text().replace(_ROOT_ARTIFACT, "", 1))
     _stabilize_header(CONFIGS_OUT)
 
     titles = bundle["config_titles"]
@@ -153,8 +149,14 @@ def main() -> None:
     )
     subprocess.run(
         [
-            "uv", "run", "ruff", "check", "--fix", "--quiet",
-            str(WIRE_OUT), str(CONFIGS_OUT),
+            "uv",
+            "run",
+            "ruff",
+            "check",
+            "--fix",
+            "--quiet",
+            str(WIRE_OUT),
+            str(CONFIGS_OUT),
         ],
         check=False,
     )

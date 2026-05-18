@@ -19,7 +19,13 @@ from typing import Any
 
 from listeners.models import Listener
 from listeners.registry import get_config_class
-from listeners.wire import ListenerWire
+from listeners.wire import (
+    ListenerDetailWire,
+    ListenerListWire,
+    ListenerMutationWire,
+    ListenerWire,
+    WireSummary,
+)
 from pydantic import ValidationError as PydanticValidationError
 from rest_framework import serializers
 
@@ -141,31 +147,72 @@ def _redacted_data(listener: Listener) -> dict[str, Any]:
         return {"error": "config_unreadable"}
 
 
-def listener_wire(listener: Listener) -> dict[str, Any]:
-    """The single source for a Listener's wire shape. list / create /
-    dry-run / get / edit all go through here, so the response can't drift
-    between endpoints.
+def _summary(listener: Listener) -> WireSummary:
+    """Display projection from the kind's typed config (the schema
+    owner), as the default-free `WireSummary`. Same per-row fail-safe as
+    `_redacted_data`: a corrupt stored row degrades to an empty summary,
+    never a 500 (the fallback supplies the values the schema requires)."""
+    try:
+        config = get_config_class(str(listener.kind)).model_validate(
+            listener.data or {}
+        )
+        return WireSummary(**config.summary().model_dump())
+    except Exception:
+        return WireSummary(streams=[], notifiers=[], engine="")
 
-    Built and dumped through `wire.ListenerWire`: that Pydantic model is
-    the canonical shape the CLI codegens from, so the contract is
-    declared once (in `wire.py`) and never hand-copied across the
-    boundary. `mode="json"` ISO-encodes datetimes. Tolerates an unsaved
-    instance (dry-run): `created_at` is None pre-save; `id` is the
-    empty-string ULID placeholder (the create dry-run view strips it).
+
+def _record_fields(listener: Listener) -> dict[str, Any]:
+    """Every `ListenerWire` field, sourced from the model. Tolerates an
+    unsaved instance (dry-run): `created_at` None pre-save; `id` is the
+    empty-string ULID placeholder."""
+    return {
+        "id": listener.id,
+        "name": listener.name,
+        "instructions": listener.instructions,
+        "kind": listener.kind,
+        "delivery_mode": listener.delivery_mode,
+        "is_active": listener.is_active,
+        "poll_interval_seconds": listener.poll_interval_seconds,
+        "last_polled_at": listener.last_polled_at,
+        "next_poll_at": listener.next_poll_at,
+        "last_digest_at": listener.last_digest_at,
+        "next_digest_at": listener.next_digest_at,
+        "user_id": listener.user_id,
+        "data": _redacted_data(listener),
+        "created_at": listener.created_at,
+    }
+
+
+# Every endpoint's response is built and dumped through a `wire.*`
+# model, so the contract is declared once (wire.py) - the CLI codegens
+# the exact same shapes; nothing is hand-copied across the boundary.
+
+
+def wire_list(listeners: list[Listener]) -> dict[str, Any]:
+    """GET /v1/listeners envelope."""
+    return ListenerListWire(
+        items=[ListenerWire(**_record_fields(o)) for o in listeners]
+    ).model_dump(mode="json")
+
+
+def wire_detail(listener: Listener) -> dict[str, Any]:
+    """GET /v1/listeners/<id>: record + summary."""
+    return ListenerDetailWire(
+        **_record_fields(listener), summary=_summary(listener)
+    ).model_dump(mode="json")
+
+
+def wire_mutation(
+    listener: Listener, *, dry_run: bool, drop_id: bool
+) -> dict[str, Any]:
+    """create / dry-run / edit response: record + summary + `dry_run`.
+
+    `drop_id=True` on the create dry-run (no persisted row yet) -> `id`
+    serializes as null; edit dry-run keeps the real id.
     """
-    return ListenerWire(
-        id=listener.id,
-        name=listener.name,
-        instructions=listener.instructions,
-        kind=listener.kind,
-        delivery_mode=listener.delivery_mode,
-        is_active=listener.is_active,
-        poll_interval_seconds=listener.poll_interval_seconds,
-        last_polled_at=listener.last_polled_at,
-        next_poll_at=listener.next_poll_at,
-        last_digest_at=listener.last_digest_at,
-        next_digest_at=listener.next_digest_at,
-        user_id=listener.user_id,
-        data=_redacted_data(listener),
-        created_at=listener.created_at,
+    fields = _record_fields(listener)
+    if drop_id:
+        fields["id"] = None
+    return ListenerMutationWire(
+        **fields, summary=_summary(listener), dry_run=dry_run
     ).model_dump(mode="json")

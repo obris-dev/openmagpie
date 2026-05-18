@@ -1,123 +1,448 @@
 {
   "wire": {
-    "description": "One listener as it goes over the wire (list / create / dry-run /\nget / edit all serialize through this). Tolerates an unsaved\ninstance: `created_at` is None pre-save; `id` is the empty-string\nULID placeholder (the create dry-run view strips it).",
-    "properties": {
-      "id": {
-        "title": "Id",
-        "type": "string"
-      },
-      "name": {
-        "title": "Name",
-        "type": "string"
-      },
-      "instructions": {
-        "title": "Instructions",
-        "type": "string"
-      },
-      "kind": {
-        "title": "Kind",
-        "type": "string"
-      },
-      "delivery_mode": {
-        "title": "Delivery Mode",
-        "type": "string"
-      },
-      "is_active": {
-        "title": "Is Active",
-        "type": "boolean"
-      },
-      "poll_interval_seconds": {
-        "title": "Poll Interval Seconds",
-        "type": "integer"
-      },
-      "last_polled_at": {
-        "anyOf": [
-          {
-            "format": "date-time",
+    "$defs": {
+      "ListenerDetailWire": {
+        "description": "GET /v1/listeners/<id>: the record + its display summary.",
+        "properties": {
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
+          "name": {
+            "title": "Name",
             "type": "string"
           },
-          {
-            "type": "null"
-          }
-        ],
-        "default": null,
-        "title": "Last Polled At"
-      },
-      "next_poll_at": {
-        "anyOf": [
-          {
-            "format": "date-time",
+          "instructions": {
+            "title": "Instructions",
             "type": "string"
           },
-          {
-            "type": "null"
-          }
-        ],
-        "default": null,
-        "title": "Next Poll At"
-      },
-      "last_digest_at": {
-        "anyOf": [
-          {
-            "format": "date-time",
+          "kind": {
+            "title": "Kind",
             "type": "string"
           },
-          {
-            "type": "null"
-          }
-        ],
-        "default": null,
-        "title": "Last Digest At"
-      },
-      "next_digest_at": {
-        "anyOf": [
-          {
-            "format": "date-time",
+          "delivery_mode": {
+            "title": "Delivery Mode",
             "type": "string"
           },
-          {
-            "type": "null"
+          "is_active": {
+            "title": "Is Active",
+            "type": "boolean"
+          },
+          "poll_interval_seconds": {
+            "title": "Poll Interval Seconds",
+            "type": "integer"
+          },
+          "last_polled_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Polled At"
+          },
+          "next_poll_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Poll At"
+          },
+          "last_digest_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Digest At"
+          },
+          "next_digest_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Digest At"
+          },
+          "user_id": {
+            "title": "User Id",
+            "type": "string"
+          },
+          "data": {
+            "additionalProperties": true,
+            "title": "Data",
+            "type": "object"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "summary": {
+            "$ref": "#/$defs/WireSummary"
           }
+        },
+        "required": [
+          "id",
+          "name",
+          "instructions",
+          "kind",
+          "delivery_mode",
+          "is_active",
+          "poll_interval_seconds",
+          "last_polled_at",
+          "next_poll_at",
+          "last_digest_at",
+          "next_digest_at",
+          "user_id",
+          "data",
+          "created_at",
+          "summary"
         ],
-        "default": null,
-        "title": "Next Digest At"
-      },
-      "user_id": {
-        "title": "User Id",
-        "type": "string"
-      },
-      "data": {
-        "additionalProperties": true,
-        "default": {},
-        "title": "Data",
+        "title": "ListenerDetailWire",
         "type": "object"
       },
-      "created_at": {
-        "anyOf": [
-          {
-            "format": "date-time",
+      "ListenerListWire": {
+        "description": "GET /v1/listeners: the list envelope.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/$defs/ListenerWire"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "ListenerListWire",
+        "type": "object"
+      },
+      "ListenerMutationWire": {
+        "description": "create / dry-run / edit response: record + summary + the explicit\n`dry_run` marker.",
+        "properties": {
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
+          "name": {
+            "title": "Name",
             "type": "string"
           },
-          {
-            "type": "null"
+          "instructions": {
+            "title": "Instructions",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "delivery_mode": {
+            "title": "Delivery Mode",
+            "type": "string"
+          },
+          "is_active": {
+            "title": "Is Active",
+            "type": "boolean"
+          },
+          "poll_interval_seconds": {
+            "title": "Poll Interval Seconds",
+            "type": "integer"
+          },
+          "last_polled_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Polled At"
+          },
+          "next_poll_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Poll At"
+          },
+          "last_digest_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Digest At"
+          },
+          "next_digest_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Digest At"
+          },
+          "user_id": {
+            "title": "User Id",
+            "type": "string"
+          },
+          "data": {
+            "additionalProperties": true,
+            "title": "Data",
+            "type": "object"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "summary": {
+            "$ref": "#/$defs/WireSummary"
+          },
+          "dry_run": {
+            "title": "Dry Run",
+            "type": "boolean"
           }
+        },
+        "required": [
+          "id",
+          "name",
+          "instructions",
+          "kind",
+          "delivery_mode",
+          "is_active",
+          "poll_interval_seconds",
+          "last_polled_at",
+          "next_poll_at",
+          "last_digest_at",
+          "next_digest_at",
+          "user_id",
+          "data",
+          "created_at",
+          "summary",
+          "dry_run"
         ],
-        "default": null,
-        "title": "Created At"
+        "title": "ListenerMutationWire",
+        "type": "object"
+      },
+      "ListenerWire": {
+        "description": "One listener as it goes over the wire (list / create / dry-run /\nget / edit all serialize through this). Tolerates an unsaved\ninstance: `created_at` is null pre-save; `id` is null on the create\ndry-run preview (no persisted row yet).",
+        "properties": {
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "instructions": {
+            "title": "Instructions",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "delivery_mode": {
+            "title": "Delivery Mode",
+            "type": "string"
+          },
+          "is_active": {
+            "title": "Is Active",
+            "type": "boolean"
+          },
+          "poll_interval_seconds": {
+            "title": "Poll Interval Seconds",
+            "type": "integer"
+          },
+          "last_polled_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Polled At"
+          },
+          "next_poll_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Poll At"
+          },
+          "last_digest_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Digest At"
+          },
+          "next_digest_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Digest At"
+          },
+          "user_id": {
+            "title": "User Id",
+            "type": "string"
+          },
+          "data": {
+            "additionalProperties": true,
+            "title": "Data",
+            "type": "object"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "instructions",
+          "kind",
+          "delivery_mode",
+          "is_active",
+          "poll_interval_seconds",
+          "last_polled_at",
+          "next_poll_at",
+          "last_digest_at",
+          "next_digest_at",
+          "user_id",
+          "data",
+          "created_at"
+        ],
+        "title": "ListenerWire",
+        "type": "object"
+      },
+      "WireSummary": {
+        "description": "Display projection the server always fully populates (empty\nstrings/lists, never absent). Distinct from `configs.\nListenerConfigSummary` (which keeps defaults for the server-side\nfallback path) so the published schema stays default-free.",
+        "properties": {
+          "streams": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Streams",
+            "type": "array"
+          },
+          "notifiers": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Notifiers",
+            "type": "array"
+          },
+          "engine": {
+            "title": "Engine",
+            "type": "string"
+          }
+        },
+        "required": [
+          "streams",
+          "notifiers",
+          "engine"
+        ],
+        "title": "WireSummary",
+        "type": "object"
       }
-    },
-    "required": [
-      "id",
-      "name",
-      "instructions",
-      "kind",
-      "delivery_mode",
-      "is_active",
-      "poll_interval_seconds",
-      "user_id"
-    ],
-    "title": "ListenerWire",
-    "type": "object"
+    }
   },
   "configs": {
     "semantic": {

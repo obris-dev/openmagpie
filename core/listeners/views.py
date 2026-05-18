@@ -12,7 +12,6 @@ Listener-kind-specific validation lives in the Pydantic registry
 from __future__ import annotations
 
 import logging
-from typing import Any
 
 from accounts.services import AccountService
 from rest_framework import permissions, status
@@ -20,8 +19,12 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .models import Listener
-from .registry import get_config_class
-from .serializers import ListenerCreateSerializer, listener_wire
+from .serializers import (
+    ListenerCreateSerializer,
+    wire_detail,
+    wire_list,
+    wire_mutation,
+)
 from .services.listeners import ListenerService
 
 logger = logging.getLogger("listeners")
@@ -52,27 +55,6 @@ def _no_primary_account_response(user_id: str) -> Response:
         },
         status=status.HTTP_500_INTERNAL_SERVER_ERROR,
     )
-
-
-_EMPTY_SUMMARY = {"streams": [], "notifiers": [], "engine": ""}
-
-
-def _summary(listener) -> dict[str, Any]:
-    """Display projection built from the typed config (the only schema
-    owner) so the CLI never parses `data`.
-
-    Same per-row fail-safe as `_redacted_data`: on create/dry-run/edit
-    the config was just validated in-request, but GET-detail reads
-    stored data that could be corrupt - one bad listener must degrade to
-    an empty summary, not 500. Logged via `_redacted_data` already on
-    the same request, so just swallow + default here."""
-    try:
-        config = get_config_class(str(listener.kind)).model_validate(
-            listener.data or {}
-        )
-        return config.summary().model_dump(mode="json")
-    except Exception:
-        return dict(_EMPTY_SUMMARY)
 
 
 class ListenerListCreateView(APIView):
@@ -111,16 +93,10 @@ class ListenerListCreateView(APIView):
                 poll_interval_seconds=d["poll_interval_seconds"],
                 data=d["data"],
             )
-            preview_data = listener_wire(preview)
-            # `id` is an empty-string placeholder pre-save; drop it so a
-            # client never reads a meaningless id from the preview.
-            preview_data.pop("id", None)
+            # drop_id: no persisted row yet -> id serializes as null so
+            # a client never reads a meaningless placeholder.
             return Response(
-                {
-                    **preview_data,
-                    "summary": _summary(preview),
-                    "dry_run": True,
-                },
+                wire_mutation(preview, dry_run=True, drop_id=True),
                 status=status.HTTP_200_OK,
             )
 
@@ -134,14 +110,9 @@ class ListenerListCreateView(APIView):
             data=d["data"],
         )
         # Symmetric `dry_run: False` so a client can branch on the body
-        # alone (the 201 vs 200 status already distinguishes them, this
-        # just makes the contract explicit on both responses).
+        # alone (the 201 vs 200 status already distinguishes them).
         return Response(
-            {
-                **listener_wire(listener),
-                "summary": _summary(listener),
-                "dry_run": False,
-            },
+            wire_mutation(listener, dry_run=False, drop_id=False),
             status=status.HTTP_201_CREATED,
         )
 
@@ -152,7 +123,7 @@ class ListenerListCreateView(APIView):
         if account_id is None:
             return _no_primary_account_response(str(request.user.id))
         listeners = ListenerService(account_id=account_id).list()
-        return Response({"items": [listener_wire(o) for o in listeners]})
+        return Response(wire_list(listeners))
 
 
 def _not_found_response(listener_id: str) -> Response:
@@ -196,10 +167,7 @@ class ListenerDetailView(APIView):
         if isinstance(resolved, Response):
             return resolved
         _, listener = resolved
-        return Response(
-            {**listener_wire(listener), "summary": _summary(listener)},
-            status=status.HTTP_200_OK,
-        )
+        return Response(wire_detail(listener), status=status.HTTP_200_OK)
 
     def put(self, request, listener_id: str):
         resolved = self._resolve(request, listener_id)
@@ -240,21 +208,13 @@ class ListenerDetailView(APIView):
             # NOT strip id - the preview shows the actual listener.
             preview = svc.build_update(listener, **edit_kwargs)
             return Response(
-                {
-                    **listener_wire(preview),
-                    "summary": _summary(preview),
-                    "dry_run": True,
-                },
+                wire_mutation(preview, dry_run=True, drop_id=False),
                 status=status.HTTP_200_OK,
             )
 
         updated = svc.update(listener, **edit_kwargs)
         return Response(
-            {
-                **listener_wire(updated),
-                "summary": _summary(updated),
-                "dry_run": False,
-            },
+            wire_mutation(updated, dry_run=False, drop_id=False),
             status=status.HTTP_200_OK,
         )
 

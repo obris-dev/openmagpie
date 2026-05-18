@@ -20,7 +20,24 @@ from typing import Any
 
 from django.core.management.base import BaseCommand
 from listeners import registry
-from listeners.wire import ListenerWire
+from listeners.wire import (
+    ListenerDetailWire,
+    ListenerListWire,
+    ListenerMutationWire,
+    ListenerWire,
+    WireSummary,
+)
+from pydantic.json_schema import models_json_schema
+
+# Every wire/envelope model. Bundled into one $defs doc so the CLI
+# codegens them all in one module with shared, resolved refs.
+_WIRE_MODELS = [
+    ListenerWire,
+    ListenerDetailWire,
+    ListenerMutationWire,
+    ListenerListWire,
+    WireSummary,
+]
 
 
 class Command(BaseCommand):
@@ -28,8 +45,12 @@ class Command(BaseCommand):
 
     def handle(self, *args: Any, **options: Any) -> None:
         kinds = registry.kinds()
+        _, wire = models_json_schema(
+            [(m, "serialization") for m in _WIRE_MODELS],
+            ref_template="#/$defs/{model}",
+        )
         bundle = {
-            "wire": ListenerWire.model_json_schema(),
+            "wire": {"$defs": wire["$defs"]},
             "configs": {kind: cls.model_json_schema() for kind, cls in kinds.items()},
             "config_titles": {
                 kind: cls.model_json_schema().get("title", cls.__name__)

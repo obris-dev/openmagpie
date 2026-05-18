@@ -9,17 +9,64 @@ from pydantic import AwareDatetime, BaseModel, Field
 
 
 class ListenerWire(BaseModel):
-    id: Annotated[str, Field(title="Id")]
+    id: Annotated[str | None, Field(title="Id")]
     name: Annotated[str, Field(title="Name")]
     instructions: Annotated[str, Field(title="Instructions")]
     kind: Annotated[str, Field(title="Kind")]
     delivery_mode: Annotated[str, Field(title="Delivery Mode")]
     is_active: Annotated[bool, Field(title="Is Active")]
     poll_interval_seconds: Annotated[int, Field(title="Poll Interval Seconds")]
-    last_polled_at: Annotated[AwareDatetime | None, Field(title="Last Polled At")] = None
-    next_poll_at: Annotated[AwareDatetime | None, Field(title="Next Poll At")] = None
-    last_digest_at: Annotated[AwareDatetime | None, Field(title="Last Digest At")] = None
-    next_digest_at: Annotated[AwareDatetime | None, Field(title="Next Digest At")] = None
+    last_polled_at: Annotated[AwareDatetime | None, Field(title="Last Polled At")]
+    next_poll_at: Annotated[AwareDatetime | None, Field(title="Next Poll At")]
+    last_digest_at: Annotated[AwareDatetime | None, Field(title="Last Digest At")]
+    next_digest_at: Annotated[AwareDatetime | None, Field(title="Next Digest At")]
     user_id: Annotated[str, Field(title="User Id")]
-    data: Annotated[dict[str, Any] | None, Field(title="Data")] = {}
-    created_at: Annotated[AwareDatetime | None, Field(title="Created At")] = None
+    data: Annotated[dict[str, Any], Field(title="Data")]
+    created_at: Annotated[AwareDatetime | None, Field(title="Created At")]
+
+
+class WireSummary(BaseModel):
+    streams: Annotated[list[str], Field(title="Streams")]
+    notifiers: Annotated[list[str], Field(title="Notifiers")]
+    engine: Annotated[str, Field(title="Engine")]
+
+
+class ListenerDetailWire(BaseModel):
+    id: Annotated[str | None, Field(title="Id")]
+    name: Annotated[str, Field(title="Name")]
+    instructions: Annotated[str, Field(title="Instructions")]
+    kind: Annotated[str, Field(title="Kind")]
+    delivery_mode: Annotated[str, Field(title="Delivery Mode")]
+    is_active: Annotated[bool, Field(title="Is Active")]
+    poll_interval_seconds: Annotated[int, Field(title="Poll Interval Seconds")]
+    last_polled_at: Annotated[AwareDatetime | None, Field(title="Last Polled At")]
+    next_poll_at: Annotated[AwareDatetime | None, Field(title="Next Poll At")]
+    last_digest_at: Annotated[AwareDatetime | None, Field(title="Last Digest At")]
+    next_digest_at: Annotated[AwareDatetime | None, Field(title="Next Digest At")]
+    user_id: Annotated[str, Field(title="User Id")]
+    data: Annotated[dict[str, Any], Field(title="Data")]
+    created_at: Annotated[AwareDatetime | None, Field(title="Created At")]
+    summary: WireSummary
+
+
+class ListenerListWire(BaseModel):
+    items: Annotated[list[ListenerWire], Field(title="Items")]
+
+
+class ListenerMutationWire(BaseModel):
+    id: Annotated[str | None, Field(title="Id")]
+    name: Annotated[str, Field(title="Name")]
+    instructions: Annotated[str, Field(title="Instructions")]
+    kind: Annotated[str, Field(title="Kind")]
+    delivery_mode: Annotated[str, Field(title="Delivery Mode")]
+    is_active: Annotated[bool, Field(title="Is Active")]
+    poll_interval_seconds: Annotated[int, Field(title="Poll Interval Seconds")]
+    last_polled_at: Annotated[AwareDatetime | None, Field(title="Last Polled At")]
+    next_poll_at: Annotated[AwareDatetime | None, Field(title="Next Poll At")]
+    last_digest_at: Annotated[AwareDatetime | None, Field(title="Last Digest At")]
+    next_digest_at: Annotated[AwareDatetime | None, Field(title="Next Digest At")]
+    user_id: Annotated[str, Field(title="User Id")]
+    data: Annotated[dict[str, Any], Field(title="Data")]
+    created_at: Annotated[AwareDatetime | None, Field(title="Created At")]
+    summary: WireSummary
+    dry_run: Annotated[bool, Field(title="Dry Run")]
