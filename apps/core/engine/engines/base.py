@@ -1,3 +1,4 @@
+from collections.abc import Iterator
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -87,17 +88,34 @@ class Engine(Protocol):
 
     def judge_batch(self, requests: list[JudgeRequest]) -> list[JudgmentResult | Exception]:
         """Score N items concurrently; return one entry per input in
-        submission order.
+        submission order. Convenience wrapper over `judge_stream`;
+        drains the stream into a list before returning.
 
-        Implementations fan out internally (asyncio + an async HTTP
-        client for Ollama; future cloud engines might use a thread pool
-        or provider SDK). Per-item failures are returned as exception
-        instances (think `asyncio.gather(return_exceptions=True)`)
-        rather than raising, so the orchestrator can advance the cursor
-        past successes that precede a failure in the batch.
+        Per-item failures are returned as exception instances
+        (think `asyncio.gather(return_exceptions=True)`) rather than
+        raising, so the orchestrator can advance the cursor past
+        successes that precede a failure.
+        """
+        ...
 
-        The sync seam (this method returns a list, not a coroutine)
-        keeps Django callers sync. The engine owns the bridge.
+    def judge_stream(
+        self,
+        requests: list[JudgeRequest],
+    ) -> Iterator[tuple[int, JudgmentResult | Exception]]:
+        """Score N items with sliding-window concurrency = `self.concurrency`,
+        yielding `(submission_index, result)` tuples in COMPLETION ORDER.
+
+        The orchestrator iterates this to get sliding-window throughput:
+        as one item completes, the engine starts the next; no batch
+        boundaries. Closing the iterator early (the orchestrator
+        `break`s out of the for loop on error) signals the engine to
+        stop dispatching new requests, though items already in flight
+        run to completion.
+
+        Implementations fan out internally (asyncio + AsyncClient +
+        Semaphore for Ollama; future cloud engines may use a thread
+        pool or provider SDK). The sync iterator seam keeps Django
+        callers sync; the engine owns the bridge.
         """
         ...
 

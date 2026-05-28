@@ -3,16 +3,21 @@ scoring, with structured JSON output constrained by JudgmentJSON's
 schema. Also exposes /api/tags for the listener-config policy check
 that verifies a pinned `engine.model` is actually loaded.
 
-`judge_batch` fans the per-item HTTP calls out concurrently via
-`asyncio` + `httpx.AsyncClient`; the sync-on-the-outside seam
-(`asyncio.run` inside `judge_batch`) keeps Django callers sync. The
-single-item `judge()` shares the same internal path via a batch of one.
+`judge_stream` fans the per-item HTTP calls out with sliding-window
+concurrency: as one call completes the next starts (no batch
+boundaries). Sliding-window-bounded via `asyncio.Semaphore`; the
+async loop runs in a background thread and bridges results back to
+the sync iterator caller via `queue.Queue`. `judge_batch` is a
+convenience wrapper that drains the stream into a list.
 """
 
 from __future__ import annotations
 
 import asyncio
+import queue
+import threading
 import time
+from collections.abc import Iterator
 from typing import Any
 
 import httpx
@@ -25,6 +30,16 @@ from openmagpie_schema.engine import EngineStatus
 from ..base import EngineModelInvalid, JudgeRequest, JudgmentJSON, JudgmentResult
 from .prompts import CONTENT_TRUNCATE, SYSTEM_PROMPT, USER_PROMPT_TEMPLATE
 from .responses import OllamaChatResponse, OllamaTagsResponse
+
+# Recoverable failure modes for an LLM call. Captured by `judge_stream`'s
+# internal try/except and returned as exception instances so the
+# orchestrator can decide whether to retry next cycle.
+_BATCH_RECOVERABLE = (httpx.HTTPError, ValidationError)
+
+# Sentinel pushed to the result queue when the asyncio worker thread
+# has finished (all tasks complete or stopped). Lets the sync iterator
+# know to terminate cleanly.
+_STREAM_DONE = object()
 
 
 class OllamaEngine:
@@ -66,25 +81,96 @@ class OllamaEngine:
     # ── Batch API (the orchestrator's hot path) ───────────────────────
 
     def judge_batch(self, requests: list[JudgeRequest]) -> list[JudgmentResult | Exception]:
-        """Score N observations concurrently against Ollama.
-
-        Returns one entry per input in submission order; each entry is
-        either a JudgmentResult (success) or a captured exception
-        (recoverable LLM-call failure). Empty input is a no-op
-        returning an empty list, no event loop spinup.
-        """
+        """Drain `judge_stream` into a list in submission order.
+        Convenience wrapper; callers that want streaming throughput
+        should use `judge_stream` directly."""
         if not requests:
             return []
-        return asyncio.run(self._judge_batch_async(requests))
+        results: list[JudgmentResult | Exception | None] = [None] * len(requests)
+        for idx, result in self.judge_stream(requests):
+            results[idx] = result
+        # Any None left would be a bug in the streamer (every submitted
+        # index must produce one result); cast keeps the type-checker happy.
+        return [r for r in results if r is not None]
 
-    async def _judge_batch_async(self, requests: list[JudgeRequest]) -> list[JudgmentResult | Exception]:
-        """Open one AsyncClient for the batch (so connections pool
-        across the N calls) and gather every per-item coroutine."""
+    def judge_stream(
+        self,
+        requests: list[JudgeRequest],
+    ) -> Iterator[tuple[int, JudgmentResult | Exception]]:
+        """Sliding-window streaming. Internally runs an asyncio loop in
+        a daemon thread; the loop fans `requests` out with at most
+        `self.concurrency` in flight (semaphore-bounded). As each
+        completes, its `(idx, result)` lands on a sync `queue.Queue`
+        which this iterator drains.
+
+        Closing the iterator early (the orchestrator `break`s out of
+        the for loop on a recoverable error) sets a stop flag; the
+        worker stops submitting new requests but lets in-flight ones
+        run to completion before the thread exits. Their results go
+        nowhere, but the in-flight HTTP calls are honored rather than
+        cancelled mid-flight (cancelling httpx mid-request can leave
+        connections in awkward states)."""
+        if not requests:
+            return
+
+        out_queue: queue.Queue = queue.Queue()
+        stop = threading.Event()
+
+        def run_loop() -> None:
+            try:
+                asyncio.run(self._stream_async(requests, out_queue, stop))
+            finally:
+                out_queue.put(_STREAM_DONE)
+
+        worker = threading.Thread(target=run_loop, daemon=True, name="ollama-judge-stream")
+        worker.start()
+
+        try:
+            while True:
+                item = out_queue.get()
+                if item is _STREAM_DONE:
+                    return
+                yield item
+        finally:
+            # Signal the worker to stop scheduling new requests. In-flight
+            # ones drain naturally; the daemon thread dies on process exit.
+            stop.set()
+
+    async def _stream_async(
+        self,
+        requests: list[JudgeRequest],
+        out_queue: queue.Queue,
+        stop: threading.Event,
+    ) -> None:
+        """Fan `requests` out with at most `self.concurrency` in flight
+        via an asyncio.Semaphore. Each completed coroutine pushes
+        `(idx, result_or_exc)` onto the sync queue immediately.
+        `return_exceptions=True` on the gather isn't enough on its own
+        because we want results to land in the queue AS THEY HAPPEN,
+        not after the slowest finishes."""
+        sem = asyncio.Semaphore(self.concurrency)
+
+        async def bounded(client: httpx.AsyncClient, idx: int, request: JudgeRequest) -> None:
+            # Honor the stop flag before acquiring the semaphore so a
+            # cancellation signal doesn't have to wait for an in-flight
+            # call to release a slot.
+            if stop.is_set():
+                return
+            async with sem:
+                if stop.is_set():
+                    return
+                try:
+                    result: JudgmentResult | Exception = await self._judge_one_async(client, request)
+                except _BATCH_RECOVERABLE as exc:
+                    result = exc
+                out_queue.put((idx, result))
+
         async with httpx.AsyncClient(timeout=120.0) as client:
-            return await asyncio.gather(
-                *(self._judge_one_async(client, req) for req in requests),
-                return_exceptions=True,
-            )
+            tasks = [asyncio.create_task(bounded(client, i, r)) for i, r in enumerate(requests)]
+            # gather drains everything; per-task exceptions can't propagate
+            # because bounded() catches _BATCH_RECOVERABLE itself and any
+            # other exception is a programming bug we want to surface.
+            await asyncio.gather(*tasks)
 
     async def _judge_one_async(
         self,
