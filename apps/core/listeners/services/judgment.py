@@ -264,20 +264,16 @@ class JudgeListenerOperation:
             est_seconds = max(1, round(pending * _est_seconds_per_item(self.listener) / max(1, concurrency)))
             self.on_progress(JudgeCycleStarted(listener=self.listener, pending=pending, est_seconds=est_seconds))
 
-        # Pre-hydrate everything in cursor order. Unhydrateables are
-        # captured so the walker can advance the cursor past them in
-        # ULID order; hydratables go to the engine stream. Hydration
-        # is sync + fast, so doing it up front lets the engine fan-out
-        # have all the work it needs.
+        # Pre-hydrate everything. Unhydrateables get marked + emitted
+        # immediately so the operator sees the poison rows up front;
+        # hydratables go to the engine stream. Cursor advancement
+        # happens once, at the end, via a linear scan over `items_info`.
         items_info: list[_ItemInfo] = []
         for item in self.feed_svc.iter_items_in_window(feed, after_id=cursor, through_id=latest):
             try:
                 obs = hydrate_data(item.data)
                 items_info.append(_ItemInfo(item=item, obs=obs, hydrate_err=None))
             except UnhydrateableObservation as exc:
-                # PERMANENT skip: a renamed/removed connector can't ever
-                # hydrate this item. Logged here; emitted to the operator
-                # in cursor order by the walker below.
                 logger.warning(
                     "skipping un-hydrateable item listener=%s feed_item=%s: %s",
                     self.listener.id,
@@ -286,13 +282,13 @@ class JudgeListenerOperation:
                 )
                 items_info.append(_ItemInfo(item=item, obs=None, hydrate_err=str(exc)))
 
-        # Build judge requests for hydratable items, plus a map from
-        # cursor-order position to engine-stream submission index.
+        # Build judge requests for hydratables; remember which items_info
+        # entry each judge_idx maps back to, for outcome lookup later.
         requests: list[JudgeRequest] = []
-        judge_idx_for_items_idx: dict[int, int] = {}
+        items_idx_for_judge_idx: list[int] = []
         for items_idx, info in enumerate(items_info):
             if info.obs is not None:
-                judge_idx_for_items_idx[items_idx] = len(requests)
+                items_idx_for_judge_idx.append(items_idx)
                 requests.append(
                     JudgeRequest(
                         observation=info.obs,
@@ -301,136 +297,95 @@ class JudgeListenerOperation:
                     )
                 )
 
-        # Engine outcomes by submission index; None until the engine
-        # streams them back. The walker reads this in items-idx order
-        # to advance the cursor through the contiguous success prefix.
-        outcomes: list[JudgmentResult | Exception | None] = [None] * len(requests)
-
-        # Cycle-running state. `processed` is success-or-error count
-        # (drives the progress display); `judged` is successful judges
-        # only (drives the JudgeResult); `cycle_latency_ms` accumulates
-        # per-call latency so the running ETA reflects this cycle's
-        # actual pacing (more accurate than the cross-cycle EWMA).
+        # Cycle-running state. `processed` drives the progress display
+        # (success-or-error count); `judged` is the success-only count
+        # in JudgeResult; `cycle_latency_ms` accumulates per-call
+        # latency so the running ETA refines off this cycle's actual
+        # pacing instead of the cross-cycle EWMA.
         judged = 0
         hits = 0
         processed = 0
-        last_success = cursor
         failed = False
         cycle_latency_ms = 0
-        walker_idx = 0  # next items_idx the walker should consider
+        outcomes: list[JudgmentResult | Exception | None] = [None] * len(requests)
 
-        def walk_and_emit() -> None:
-            """Walk items_info in ULID order, emitting events and
-            advancing the cursor through contiguous successes. Stops
-            at the first item whose outcome isn't ready (judgeable
-            items still in flight) or at the first recoverable error
-            (halts cursor; sets `failed`)."""
-            nonlocal walker_idx, processed, judged, hits, cycle_latency_ms, last_success, failed
-            while walker_idx < len(items_info):
-                info = items_info[walker_idx]
-
-                if info.hydrate_err is not None:
-                    # Unhydrateable: emit + advance cursor past it.
-                    processed += 1
-                    self.on_progress(
-                        JudgeItemDone(
-                            listener=self.listener,
-                            external_id=info.item.external_id,
-                            obs=None,
-                            error=f"un-hydrateable: {info.hydrate_err}",
-                            done=processed,
-                            total=pending,
-                            eta_seconds=_running_eta_seconds(
-                                pending, processed, judged, cycle_latency_ms, self.listener, concurrency
-                            ),
-                        )
-                    )
-                    last_success = str(info.item.id)
-                    walker_idx += 1
-                    continue
-
-                # Judgeable: outcome must be in before we can emit.
-                judge_idx = judge_idx_for_items_idx[walker_idx]
-                outcome_or_none = outcomes[judge_idx]
-                if outcome_or_none is None:
-                    return  # waiting for this one; can't advance past it
-
-                if isinstance(outcome_or_none, Exception):
-                    if not isinstance(outcome_or_none, _RECOVERABLE_ERRORS):
-                        # Programming bug; propagate.
-                        raise outcome_or_none
-                    logger.warning(
-                        "item judgment failed listener=%s feed_item=%s err=%s: %s; "
-                        "holding cursor, will retry from here next cycle",
-                        self.listener.id,
-                        info.item.id,
-                        type(outcome_or_none).__name__,
-                        outcome_or_none,
-                    )
-                    processed += 1
-                    self.on_progress(
-                        JudgeItemDone(
-                            listener=self.listener,
-                            external_id=info.item.external_id,
-                            obs=info.obs,
-                            error=f"{type(outcome_or_none).__name__}: {outcome_or_none}",
-                            done=processed,
-                            total=pending,
-                            eta_seconds=_running_eta_seconds(
-                                pending, processed, judged, cycle_latency_ms, self.listener, concurrency
-                            ),
-                        )
-                    )
-                    failed = True
-                    walker_idx += 1
-                    return  # halt; cursor stops here
-
-                # Success: persist + deliver, emit progress, advance cursor.
-                outcome = self._persist_and_deliver(info.item, info.obs, outcome_or_none)
-                if outcome.hit:
-                    hits += 1
-                judged += 1
-                processed += 1
-                cycle_latency_ms += outcome.latency_ms
-                _record_judge_latency(self.listener, outcome.latency_ms)
-                self.on_progress(
-                    JudgeItemDone(
-                        listener=self.listener,
-                        external_id=info.item.external_id,
-                        obs=outcome.obs,
-                        score=outcome.score,
-                        hit=outcome.hit,
-                        latency_ms=outcome.latency_ms,
-                        done=processed,
-                        total=pending,
-                        eta_seconds=_running_eta_seconds(
-                            pending, processed, judged, cycle_latency_ms, self.listener, concurrency
-                        ),
-                    )
+        def emit(*, info: _ItemInfo, outcome: _ItemOutcome | None = None, error: str | None = None) -> None:
+            """One call site for JudgeItemDone so the args stay aligned
+            across the three emit paths (success, error, unhydrateable)."""
+            self.on_progress(
+                JudgeItemDone(
+                    listener=self.listener,
+                    external_id=info.item.external_id,
+                    obs=outcome.obs if outcome else info.obs,
+                    score=outcome.score if outcome else None,
+                    hit=outcome.hit if outcome else False,
+                    error=error,
+                    latency_ms=outcome.latency_ms if outcome else 0,
+                    done=processed,
+                    total=pending,
+                    eta_seconds=_running_eta_seconds(
+                        pending, processed, judged, cycle_latency_ms, self.listener, concurrency
+                    ),
                 )
-                last_success = str(info.item.id)
-                walker_idx += 1
+            )
 
-        # First pass: emit any leading unhydrateables (no engine call needed).
-        walk_and_emit()
+        # Emit unhydrateables up front, in cursor order. They never go
+        # to the engine and have no in-flight state to wait on.
+        for info in items_info:
+            if info.hydrate_err is not None:
+                processed += 1
+                emit(info=info, error=f"un-hydrateable: {info.hydrate_err}")
 
-        # Stream judge results from the engine. The engine fans `requests`
-        # out with sliding-window concurrency = `self.engine.concurrency`;
-        # results land here in COMPLETION order. After each result we
-        # try to advance the walker (which emits in cursor order). On
-        # the first recoverable error we break out of the stream — the
-        # iterator's cleanup signals the engine to stop dispatching new
-        # requests (in-flight ones drain naturally).
+        # Stream judge results in COMPLETION order. Emit per item as it
+        # lands; break on the first recoverable error so the stream's
+        # cleanup cancels any queued workers.
         for engine_idx, result in self.engine.judge_stream(requests):
             outcomes[engine_idx] = result
-            walk_and_emit()
-            if failed:
+            info = items_info[items_idx_for_judge_idx[engine_idx]]
+
+            if isinstance(result, Exception):
+                if not isinstance(result, _RECOVERABLE_ERRORS):
+                    raise result  # programming bug; propagate
+                logger.warning(
+                    "item judgment failed listener=%s feed_item=%s err=%s: %s; "
+                    "holding cursor, will retry from here next cycle",
+                    self.listener.id,
+                    info.item.id,
+                    type(result).__name__,
+                    result,
+                )
+                processed += 1
+                emit(info=info, error=f"{type(result).__name__}: {result}")
+                failed = True
                 break
 
-        # Final walk in case there are trailing unhydrateables after the
-        # last judgeable item (stream loop won't fire for items the
-        # walker hasn't reached yet).
-        walk_and_emit()
+            assert info.obs is not None  # judgeables always have an obs
+            outcome = self._persist_and_deliver(info.item, info.obs, result)
+            if outcome.hit:
+                hits += 1
+            judged += 1
+            processed += 1
+            cycle_latency_ms += outcome.latency_ms
+            _record_judge_latency(self.listener, outcome.latency_ms)
+            emit(info=info, outcome=outcome)
+
+        # Cursor advance: walk items_info in ULID order, advancing
+        # through unhydrateables and successful judges. Halt at the
+        # first item that's not done OR errored. This is the single
+        # source of truth for `last_success`; engine completion order
+        # doesn't enter into it. Single pass, judge_idx tracked
+        # inline so we don't pay an O(N) reverse-lookup per item.
+        last_success = cursor
+        next_judge_idx = 0
+        for info in items_info:
+            if info.hydrate_err is not None:
+                last_success = str(info.item.id)
+                continue
+            outcome_or_none = outcomes[next_judge_idx]
+            next_judge_idx += 1
+            if outcome_or_none is None or isinstance(outcome_or_none, Exception):
+                break  # not done OR errored; halt cursor here
+            last_success = str(info.item.id)
 
         cursor_target = last_success if failed else str(latest)
         if cursor_target != cursor:

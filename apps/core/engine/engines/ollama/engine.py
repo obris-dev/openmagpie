@@ -3,21 +3,18 @@ scoring, with structured JSON output constrained by JudgmentJSON's
 schema. Also exposes /api/tags for the listener-config policy check
 that verifies a pinned `engine.model` is actually loaded.
 
-`judge_stream` fans the per-item HTTP calls out with sliding-window
-concurrency: as one call completes the next starts (no batch
-boundaries). Sliding-window-bounded via `asyncio.Semaphore`; the
-async loop runs in a background thread and bridges results back to
-the sync iterator caller via `queue.Queue`. `judge_batch` is a
-convenience wrapper that drains the stream into a list.
+`judge_stream` fans the per-item HTTP calls out via a thread pool
+bounded by `self.concurrency`. Results yield as each call completes
+(`concurrent.futures.as_completed`). The httpx client and pool live
+for the lifetime of the stream; closing the iterator early cancels
+queued workers, lets in-flight ones drain, and closes the client.
 """
 
 from __future__ import annotations
 
-import asyncio
-import queue
-import threading
 import time
 from collections.abc import Iterator
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any
 
 import httpx
@@ -31,15 +28,10 @@ from ..base import EngineModelInvalid, JudgeRequest, JudgmentJSON, JudgmentResul
 from .prompts import CONTENT_TRUNCATE, SYSTEM_PROMPT, USER_PROMPT_TEMPLATE
 from .responses import OllamaChatResponse, OllamaTagsResponse
 
-# Recoverable failure modes for an LLM call. Captured by `judge_stream`'s
-# internal try/except and returned as exception instances so the
-# orchestrator can decide whether to retry next cycle.
-_BATCH_RECOVERABLE = (httpx.HTTPError, ValidationError)
-
-# Sentinel pushed to the result queue when the asyncio worker thread
-# has finished (all tasks complete or stopped). Lets the sync iterator
-# know to terminate cleanly.
-_STREAM_DONE = object()
+# Recoverable failure modes for an LLM call. Captured by `judge_stream`
+# and yielded as exception instances so the orchestrator can advance
+# the cursor past successes that precede a failure.
+_RECOVERABLE = (httpx.HTTPError, ValidationError)
 
 
 class OllamaEngine:
@@ -54,14 +46,12 @@ class OllamaEngine:
         # judge() also takes a per-call `model` override; calling the instance
         # attribute `self.model` made `model or self.model` read ambiguously.
         self.default_model = default_model
-        # Orchestrator hint: max items it should submit per batch. The
-        # engine itself fans out whatever it's given; this attribute is
-        # the contract the orchestrator sizes its in-flight window
-        # against. Must be matched by `OLLAMA_NUM_PARALLEL` on the
+        # Max items the orchestrator submits per cycle. Sized via
+        # OLLAMA_CONCURRENCY env; must match OLLAMA_NUM_PARALLEL on the
         # Ollama side or extra concurrency just queues server-side.
         self.concurrency = max(1, concurrency)
 
-    # ── Single-item API (back-compat / one-off callers) ───────────────
+    # ── Single-item API ───────────────────────────────────────────────
 
     def judge(
         self,
@@ -70,130 +60,72 @@ class OllamaEngine:
         *,
         model: str | None = None,
     ) -> JudgmentResult:
-        """Score one observation. Implemented on top of `judge_batch`
-        with a one-item list so both APIs share one transport path."""
+        """Score one observation. Routes through `judge_batch` so all
+        paths share one transport implementation."""
         results = self.judge_batch([JudgeRequest(observation=observation, listener=listener, model=model)])
         result = results[0]
         if isinstance(result, Exception):
             raise result
         return result
 
-    # ── Batch API (the orchestrator's hot path) ───────────────────────
+    # ── Batch + stream APIs (the orchestrator's hot path) ─────────────
 
     def judge_batch(self, requests: list[JudgeRequest]) -> list[JudgmentResult | Exception]:
-        """Drain `judge_stream` into a list in submission order.
-        Convenience wrapper; callers that want streaming throughput
-        should use `judge_stream` directly."""
+        """Drain `judge_stream` into a list in submission order. Useful
+        when callers want all results buffered; the orchestrator uses
+        `judge_stream` directly for sliding-window throughput."""
         if not requests:
             return []
         results: list[JudgmentResult | Exception | None] = [None] * len(requests)
         for idx, result in self.judge_stream(requests):
             results[idx] = result
-        # Any None left would be a bug in the streamer (every submitted
-        # index must produce one result); cast keeps the type-checker happy.
         return [r for r in results if r is not None]
 
     def judge_stream(
         self,
         requests: list[JudgeRequest],
     ) -> Iterator[tuple[int, JudgmentResult | Exception]]:
-        """Sliding-window streaming. Internally runs an asyncio loop in
-        a daemon thread; the loop fans `requests` out with at most
-        `self.concurrency` in flight (semaphore-bounded). As each
-        completes, its `(idx, result)` lands on a sync `queue.Queue`
-        which this iterator drains.
+        """Sliding-window streaming via a thread pool bounded at
+        `self.concurrency`. Yields `(submission_idx, result)` tuples
+        as each call completes; not in submission order.
 
-        Closing the iterator early (the orchestrator `break`s out of
-        the for loop on a recoverable error) sets a stop flag; the
-        worker stops submitting new requests but lets in-flight ones
-        run to completion before the thread exits. Their results go
-        nowhere, but the in-flight HTTP calls are honored rather than
-        cancelled mid-flight (cancelling httpx mid-request can leave
-        connections in awkward states)."""
+        Closing the iterator early (the orchestrator `break`s on a
+        recoverable error) cancels queued workers, waits for in-flight
+        ones to drain (so the httpx connection isn't yanked mid-call),
+        and closes the client."""
         if not requests:
             return
-
-        out_queue: queue.Queue = queue.Queue()
-        stop = threading.Event()
-
-        def run_loop() -> None:
-            try:
-                asyncio.run(self._stream_async(requests, out_queue, stop))
-            finally:
-                out_queue.put(_STREAM_DONE)
-
-        worker = threading.Thread(target=run_loop, daemon=True, name="ollama-judge-stream")
-        worker.start()
-
+        client = httpx.Client(timeout=120.0)
+        pool = ThreadPoolExecutor(max_workers=self.concurrency, thread_name_prefix="ollama-judge")
         try:
-            while True:
-                item = out_queue.get()
-                if item is _STREAM_DONE:
-                    return
-                yield item
-        finally:
-            # Signal the worker to stop scheduling new requests. In-flight
-            # ones drain naturally; the daemon thread dies on process exit.
-            stop.set()
-
-    async def _stream_async(
-        self,
-        requests: list[JudgeRequest],
-        out_queue: queue.Queue,
-        stop: threading.Event,
-    ) -> None:
-        """Fan `requests` out with at most `self.concurrency` in flight
-        via an asyncio.Semaphore. Each completed coroutine pushes
-        `(idx, result_or_exc)` onto the sync queue immediately.
-        `return_exceptions=True` on the gather isn't enough on its own
-        because we want results to land in the queue AS THEY HAPPEN,
-        not after the slowest finishes."""
-        sem = asyncio.Semaphore(self.concurrency)
-
-        async def bounded(client: httpx.AsyncClient, idx: int, request: JudgeRequest) -> None:
-            # Honor the stop flag before acquiring the semaphore so a
-            # cancellation signal doesn't have to wait for an in-flight
-            # call to release a slot.
-            if stop.is_set():
-                return
-            async with sem:
-                if stop.is_set():
-                    return
+            futures = {pool.submit(self._judge_one, client, r): i for i, r in enumerate(requests)}
+            for future in as_completed(futures):
+                idx = futures[future]
                 try:
-                    result: JudgmentResult | Exception = await self._judge_one_async(client, request)
-                except _BATCH_RECOVERABLE as exc:
-                    result = exc
-                out_queue.put((idx, result))
+                    yield idx, future.result()
+                except _RECOVERABLE as exc:
+                    yield idx, exc
+        finally:
+            # Cancel queued (not-yet-started) tasks; wait for in-flight
+            # ones so they don't crash on a closed client.
+            pool.shutdown(wait=True, cancel_futures=True)
+            client.close()
 
-        async with httpx.AsyncClient(timeout=120.0) as client:
-            tasks = [asyncio.create_task(bounded(client, i, r)) for i, r in enumerate(requests)]
-            # gather drains everything; per-task exceptions can't propagate
-            # because bounded() catches _BATCH_RECOVERABLE itself and any
-            # other exception is a programming bug we want to surface.
-            await asyncio.gather(*tasks)
+    # ── Per-item HTTP call (sync) ─────────────────────────────────────
 
-    async def _judge_one_async(
-        self,
-        client: httpx.AsyncClient,
-        request: JudgeRequest,
-    ) -> JudgmentResult:
-        """One Ollama /api/chat call. Mirrors the sync path's prompt
-        construction and response parsing; only the transport (sync
-        httpx -> async httpx) differs."""
+    def _judge_one(self, client: httpx.Client, request: JudgeRequest) -> JudgmentResult:
+        """One Ollama /api/chat call. Worker-thread function for
+        `judge_stream`; can also be invoked directly."""
         use_model = request.model or self.default_model
         payload = self._build_payload(request, use_model)
         started = time.perf_counter()
-        response = await client.post(f"{self.url}/api/chat", json=payload)
+        response = client.post(f"{self.url}/api/chat", json=payload)
         response.raise_for_status()
         elapsed_ms = int((time.perf_counter() - started) * 1000)
         return self._parse_chat(response.text, use_model, elapsed_ms)
 
-    # ── Shared internals ──────────────────────────────────────────────
-
     def _build_payload(self, request: JudgeRequest, use_model: str) -> dict[str, Any]:
-        """Compose the /api/chat body. Shared by sync and async paths so
-        there's exactly one place the prompt + structured-output shape
-        is constructed."""
+        """Compose the /api/chat body."""
         user_prompt = USER_PROMPT_TEMPLATE.format(
             listener_instructions=str(request.listener.instructions),
             source=request.observation.source,
@@ -221,9 +153,7 @@ class OllamaEngine:
         }
 
     def _parse_chat(self, response_text: str, use_model: str, elapsed_ms: int) -> JudgmentResult:
-        """Validate Ollama's wrapper + the structured JSON inside,
-        return a JudgmentResult. ValidationError on a shape drift
-        propagates as a recoverable error."""
+        """Parse Ollama's wrapper + the structured JSON inside."""
         chat = OllamaChatResponse.model_validate_json(response_text)
         raw_content = chat.message.content
         parsed = JudgmentJSON.model_validate_json(raw_content)
