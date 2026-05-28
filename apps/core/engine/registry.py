@@ -8,6 +8,7 @@ _REGISTRY: dict[str, Engine] = {
     OllamaEngine.kind: OllamaEngine(
         url=settings.OLLAMA_URL,
         default_model=settings.OLLAMA_DEFAULT_MODEL,
+        concurrency=settings.OLLAMA_CONCURRENCY,
     ),
 }
 

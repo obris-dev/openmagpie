@@ -32,6 +32,7 @@ from pydantic import ValidationError
 from common.locks import poll_lock
 from engine import registry as engine_registry
 from engine.engines import Engine
+from engine.engines.base import JudgeRequest, JudgmentResult
 from events.observations import Observation
 from events.registry import UnhydrateableObservation, hydrate_data
 from events.registry import hydrate as hydrate_event
@@ -159,19 +160,21 @@ def _running_eta_seconds(
     judged: int,
     cycle_latency_ms: int,
     listener: Listener,
+    concurrency: int = 1,
 ) -> int:
-    """ETA in seconds for the rest of the current cycle.
+    """Wall-clock ETA in seconds for the rest of the current cycle.
 
     Uses the in-cycle mean per successful judge when we have data
     (`judged > 0`); falls back to the listener's cross-cycle EWMA for
-    the all-errors-so-far edge case. Cost is `remaining * mean`, with
-    `remaining = pending - processed` so error items don't inflate
-    the remaining count."""
+    the all-errors-so-far edge case. With `concurrency=N`, N items
+    finish every `mean_seconds`, so wall-clock = `remaining * mean / N`.
+    `remaining = pending - processed` so error items don't inflate it.
+    """
     remaining = max(0, pending - processed)
     if remaining == 0:
         return 0
     mean_seconds = (cycle_latency_ms / judged / 1000.0) if judged > 0 else _est_seconds_per_item(listener)
-    return max(0, round(remaining * mean_seconds))
+    return max(0, round(remaining * mean_seconds / max(1, concurrency)))
 
 
 class JudgeListenerOperation:
@@ -236,10 +239,12 @@ class JudgeListenerOperation:
         # Size up the cycle before the slow leg. One cheap COUNT against
         # the same `(cursor, latest]` window the loop will iterate, so
         # callers can render "judging N items (~Ns)" up front. ETA uses
-        # the per-listener EWMA so the number tracks reality across runs.
+        # the per-listener EWMA divided by engine concurrency so the
+        # wall-clock estimate accounts for parallel fan-out.
         pending = self.feed_svc.count_items_in_window(feed, after_id=cursor, through_id=latest)
+        concurrency = self.engine.concurrency
         if pending > 0:
-            est_seconds = max(1, round(pending * _est_seconds_per_item(self.listener)))
+            est_seconds = max(1, round(pending * _est_seconds_per_item(self.listener) / max(1, concurrency)))
             self.on_progress(JudgeCycleStarted(listener=self.listener, pending=pending, est_seconds=est_seconds))
 
         judged = 0
@@ -251,83 +256,128 @@ class JudgeListenerOperation:
         # mean for THIS cycle (more accurate than the cross-cycle EWMA
         # once any data lands; accounts for model warm-up, host load, etc).
         cycle_latency_ms = 0
-        for item in self.feed_svc.iter_items_in_window(feed, after_id=cursor, through_id=latest):
-            # Hydrate up front so the error reporting below has obs when
-            # possible and falls back to item.external_id when not.
-            try:
-                obs = hydrate_data(item.data)
-            except UnhydrateableObservation as exc:
-                # PERMANENT skip: a renamed/removed connector can't ever
-                # hydrate this item. Advance past it so we don't loop on
-                # the same poison row forever; surface it on-screen so
-                # the operator sees the dead row without grepping logs.
-                logger.warning(
-                    "skipping un-hydrateable item listener=%s feed_item=%s: %s",
-                    self.listener.id,
-                    item.id,
-                    exc,
-                )
-                processed += 1
-                last_success = str(item.id)
-                self.on_progress(
-                    JudgeItemDone(
-                        listener=self.listener,
-                        external_id=item.external_id,
-                        obs=None,
-                        error=f"un-hydrateable: {exc}",
-                        done=processed,
-                        total=pending,
-                        eta_seconds=_running_eta_seconds(pending, processed, judged, cycle_latency_ms, self.listener),
-                    )
-                )
-                continue
+        items_iter = self.feed_svc.iter_items_in_window(feed, after_id=cursor, through_id=latest)
 
-            try:
-                outcome = self._judge_item(item, obs)
-            except _RECOVERABLE_ERRORS as exc:
-                logger.warning(
-                    "item judgment failed listener=%s feed_item=%s err=%s: %s; "
-                    "holding cursor, will retry from here next cycle",
-                    self.listener.id,
-                    item.id,
-                    type(exc).__name__,
-                    exc,
-                )
-                processed += 1
-                self.on_progress(
-                    JudgeItemDone(
-                        listener=self.listener,
-                        external_id=item.external_id,
-                        obs=obs,
-                        error=f"{type(exc).__name__}: {exc}",
-                        done=processed,
-                        total=pending,
-                        eta_seconds=_running_eta_seconds(pending, processed, judged, cycle_latency_ms, self.listener),
+        # Batch loop: collect up to `concurrency` hydrated items, submit
+        # to `engine.judge_batch`, process results in submission order.
+        # Unhydrateable items are emitted as error events and skipped
+        # before they reach the batch (cursor advances past them, same
+        # as the sequential path used to do).
+        while not failed:
+            batch: list[tuple[FeedItem, Observation]] = []
+            for _ in range(max(1, concurrency)):
+                try:
+                    item = next(items_iter)
+                except StopIteration:
+                    break
+                try:
+                    obs = hydrate_data(item.data)
+                except UnhydrateableObservation as exc:
+                    # PERMANENT skip: a renamed/removed connector can't
+                    # ever hydrate this item. Advance past it so we
+                    # don't loop on the same poison row forever; surface
+                    # it on-screen so the operator sees the dead row
+                    # without grepping logs.
+                    logger.warning(
+                        "skipping un-hydrateable item listener=%s feed_item=%s: %s",
+                        self.listener.id,
+                        item.id,
+                        exc,
                     )
-                )
-                failed = True
+                    processed += 1
+                    last_success = str(item.id)
+                    self.on_progress(
+                        JudgeItemDone(
+                            listener=self.listener,
+                            external_id=item.external_id,
+                            obs=None,
+                            error=f"un-hydrateable: {exc}",
+                            done=processed,
+                            total=pending,
+                            eta_seconds=_running_eta_seconds(
+                                pending, processed, judged, cycle_latency_ms, self.listener, concurrency
+                            ),
+                        )
+                    )
+                    continue
+                batch.append((item, obs))
+
+            if not batch:
                 break
 
-            if outcome.hit:
-                hits += 1
-            judged += 1
-            processed += 1
-            cycle_latency_ms += outcome.latency_ms
-            last_success = str(item.id)
-            _record_judge_latency(self.listener, outcome.latency_ms)
-            self.on_progress(
-                JudgeItemDone(
-                    listener=self.listener,
-                    external_id=item.external_id,
-                    obs=outcome.obs,
-                    score=outcome.score,
-                    hit=outcome.hit,
-                    latency_ms=outcome.latency_ms,
-                    done=processed,
-                    total=pending,
-                    eta_seconds=_running_eta_seconds(pending, processed, judged, cycle_latency_ms, self.listener),
+            # Fan the batch out to the engine. judge_batch returns one
+            # entry per input in submission order; failures come back as
+            # exception instances (asyncio.gather(return_exceptions=True)
+            # semantics) so a single bad item doesn't poison the rest of
+            # the batch.
+            requests = [
+                JudgeRequest(observation=obs, listener=self.listener, model=self.config.engine.model or None)
+                for (_, obs) in batch
+            ]
+            results = self.engine.judge_batch(requests)
+
+            # Process results in submission order. Cursor advances only
+            # through items that PRECEDE any in-batch failure; successes
+            # AFTER a failure still emit progress (the LLM cost was
+            # paid, the hit is persisted) but don't advance the cursor,
+            # so retry next cycle re-judges from the failure point.
+            seen_failure_in_batch = False
+            for (item, obs), result in zip(batch, results, strict=True):
+                if isinstance(result, Exception):
+                    if not isinstance(result, _RECOVERABLE_ERRORS):
+                        # Programming bug; propagate.
+                        raise result
+                    logger.warning(
+                        "item judgment failed listener=%s feed_item=%s err=%s: %s; "
+                        "holding cursor, will retry from here next cycle",
+                        self.listener.id,
+                        item.id,
+                        type(result).__name__,
+                        result,
+                    )
+                    processed += 1
+                    self.on_progress(
+                        JudgeItemDone(
+                            listener=self.listener,
+                            external_id=item.external_id,
+                            obs=obs,
+                            error=f"{type(result).__name__}: {result}",
+                            done=processed,
+                            total=pending,
+                            eta_seconds=_running_eta_seconds(
+                                pending, processed, judged, cycle_latency_ms, self.listener, concurrency
+                            ),
+                        )
+                    )
+                    seen_failure_in_batch = True
+                    failed = True
+                    continue
+
+                # Success: persist hit if applicable, deliver if instant.
+                outcome = self._persist_and_deliver(item, obs, result)
+                if outcome.hit:
+                    hits += 1
+                judged += 1
+                processed += 1
+                cycle_latency_ms += outcome.latency_ms
+                _record_judge_latency(self.listener, outcome.latency_ms)
+                if not seen_failure_in_batch:
+                    last_success = str(item.id)
+                self.on_progress(
+                    JudgeItemDone(
+                        listener=self.listener,
+                        external_id=item.external_id,
+                        obs=outcome.obs,
+                        score=outcome.score,
+                        hit=outcome.hit,
+                        latency_ms=outcome.latency_ms,
+                        done=processed,
+                        total=pending,
+                        eta_seconds=_running_eta_seconds(
+                            pending, processed, judged, cycle_latency_ms, self.listener, concurrency
+                        ),
+                    )
                 )
-            )
 
         cursor_target = last_success if failed else str(latest)
         if cursor_target != cursor:
@@ -360,26 +410,27 @@ class JudgeListenerOperation:
                     exc,
                 )
 
-    def _judge_item(self, item: FeedItem, obs: Observation) -> "_ItemOutcome":
-        """Judge one already-hydrated observation; persist + (if instant)
-        deliver on a hit.
+    def _persist_and_deliver(
+        self,
+        item: FeedItem,
+        obs: Observation,
+        result: JudgmentResult,
+    ) -> "_ItemOutcome":
+        """Apply a JudgmentResult: persist a hit Event if the score
+        clears the threshold, and (for instant-mode listeners) fire
+        delivery synchronously. Returns the data `run()` needs to
+        update running cycle stats and emit progress.
 
-        Takes `obs` from the caller so `run()` can hydrate up front and
-        report errors uniformly when hydration fails vs when the engine
-        call fails. Returns the data the caller needs to update running
-        cycle stats and emit progress; doesn't fire `on_progress`
-        itself (run() does, so the progress line carries done / total /
-        ETA computed against the running cumulative latency).
+        Split out from the engine call so the batch path can submit
+        N judges in parallel and then handle persist + delivery in
+        submission order (Django ORM stays sync, the LLM fan-out
+        lives behind `engine.judge_batch`).
 
         The `hit` field means "a new Event landed," not just "the
         engine scored above threshold." When the unique constraint
         refuses a dedup re-emit the line shouldn't claim HIT, otherwise
         the cycle's hits counter, the HIT markers, and the new Event
         rows would disagree."""
-        # `config.engine.model or None`: empty string in the listener config
-        # means "use the engine's server-side default" (settings.OLLAMA_DEFAULT_MODEL),
-        # so collapse "" -> None before handing to the engine.
-        result = self.engine.judge(obs, self.listener, model=self.config.engine.model or None)
         is_hit = result.score >= self.config.hit_threshold
 
         new_event_persisted = False

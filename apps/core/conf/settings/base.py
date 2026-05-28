@@ -190,6 +190,11 @@ ENGINE_DEFAULT_KIND = os.environ.get("ENGINE_DEFAULT_KIND", "ollama")
 # per-Listener overrides. See core/.env.example for example values.
 OLLAMA_URL = os.environ["OLLAMA_URL"]
 OLLAMA_DEFAULT_MODEL = os.environ["OLLAMA_DEFAULT_MODEL"]
+# Max items the orchestrator submits per judge batch. Default 1 keeps
+# the conservative one-call-at-a-time behavior. Higher values speed up
+# backfills proportionally, BUT must be matched by `OLLAMA_NUM_PARALLEL`
+# on the Ollama side or extra concurrency just queues server-side.
+OLLAMA_CONCURRENCY = max(1, int(os.environ.get("OLLAMA_CONCURRENCY", "1")))
 
 # WebhookNotifier security gates. Defaults assume single-tenant self-host with
 # possible internal targets (e.g. an OpenClaw instance on the same box). Set

@@ -35,6 +35,17 @@ class JudgmentResult:
     raw_response: str
 
 
+@dataclass(frozen=True)
+class JudgeRequest:
+    """One item to score in a batch. Shape matches the args of
+    `Engine.judge`; the batch surface takes a list of these so the
+    engine can fan them out concurrently behind the sync seam."""
+
+    observation: Observation
+    listener: Listener
+    model: str | None = None
+
+
 class EngineModelInvalid(ValueError):
     """The model a listener pinned can't be used by this engine
     instance — not loaded on the upstream server, doesn't match the
@@ -50,6 +61,12 @@ class Engine(Protocol):
     """A pluggable relevance engine. Implementations live in this package."""
 
     kind: str
+    concurrency: int
+    """Max number of items this engine instance handles in parallel for
+    `judge_batch`. The orchestrator uses it to size its in-flight
+    window. Default 1 (sequential) is the conservative behavior;
+    operators raise it via env to speed up backfills (and must match
+    it server-side, e.g. `OLLAMA_NUM_PARALLEL` on the Ollama box)."""
 
     def judge(
         self,
@@ -60,9 +77,27 @@ class Engine(Protocol):
     ) -> JudgmentResult:
         """Score how relevant the observation is to the listener's interest.
 
-        `model` lets the caller override the engine's default model on a
-        per-listener basis (so `SemanticListenerConfig.engine.model` isn't
-        a no-op). None means "use the engine instance's configured default."
+        Single-item facade; for cycles with many items the orchestrator
+        uses `judge_batch` instead. `model` lets the caller override the
+        engine's default model on a per-listener basis (so
+        `SemanticListenerConfig.engine.model` isn't a no-op). None means
+        "use the engine instance's configured default."
+        """
+        ...
+
+    def judge_batch(self, requests: list[JudgeRequest]) -> list[JudgmentResult | Exception]:
+        """Score N items concurrently; return one entry per input in
+        submission order.
+
+        Implementations fan out internally (asyncio + an async HTTP
+        client for Ollama; future cloud engines might use a thread pool
+        or provider SDK). Per-item failures are returned as exception
+        instances (think `asyncio.gather(return_exceptions=True)`)
+        rather than raising, so the orchestrator can advance the cursor
+        past successes that precede a failure in the batch.
+
+        The sync seam (this method returns a list, not a coroutine)
+        keeps Django callers sync. The engine owns the bridge.
         """
         ...
 
