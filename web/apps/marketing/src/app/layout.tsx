@@ -20,7 +20,7 @@ const geistMono = Geist_Mono({
 // shared composer. The file-based opengraph-image/twitter-image attach
 // automatically.
 export const metadata = buildMetadata({
-  title: `${siteMeta.name} — ${siteMeta.tagline}`,
+  title: `${siteMeta.name} - ${siteMeta.tagline}`,
 });
 
 export default function RootLayout({

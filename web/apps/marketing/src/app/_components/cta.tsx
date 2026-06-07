@@ -15,7 +15,10 @@ export function Cta() {
             aria-hidden
             className="pointer-events-none absolute -right-6 -bottom-10 hidden sm:block"
           >
-            <Mascot className="h-auto w-48 opacity-20 mix-blend-multiply lg:w-56 dark:opacity-25 dark:mix-blend-screen" />
+            <Mascot
+              className="h-auto w-48 opacity-20 mix-blend-multiply lg:w-56 dark:opacity-25 dark:mix-blend-screen"
+              sizes="(min-width: 1024px) 224px, 192px"
+            />
           </div>
           <div className="relative z-10 max-w-3xl">
             <Emblem size={48} />

@@ -37,8 +37,8 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
         className="pointer-events-none absolute -bottom-10 -right-16 hidden md:block lg:-bottom-6 lg:-right-10"
       >
         <Mascot
-          priority
           className="h-auto w-[28rem] opacity-[0.18] mix-blend-multiply dark:mix-blend-screen dark:opacity-25 lg:w-[32rem]"
+          sizes="(min-width: 1024px) 512px, 448px"
         />
       </div>
 

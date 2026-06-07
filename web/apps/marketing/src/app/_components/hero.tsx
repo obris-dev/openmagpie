@@ -1,6 +1,5 @@
 import { Mascot } from "@magpie/ui";
-import { links } from "./constants";
-import { GithubIcon } from "./icons";
+import { GithubLink } from "./github-link";
 import { WaitlistForm } from "./waitlist-form";
 import { LiveTicker } from "./live-ticker";
 import { Container } from "./section";
@@ -72,15 +71,12 @@ export function Hero() {
               <p className="mt-3 text-sm text-ink-subtle dark:text-paper/55">
                 One email, at launch. Or self-host free, CLI today with a web UI
                 on the way.{" "}
-                <a
-                  href={links.github}
-                  target="_blank"
-                  rel="noreferrer noopener"
+                <GithubLink
+                  iconClassName="mr-1 inline-block size-3.5 align-[-0.15em]"
                   className="font-medium text-ink-muted underline-offset-4 hover:text-ink hover:underline dark:text-paper/70 dark:hover:text-paper"
                 >
-                  <GithubIcon className="mr-1 inline-block size-3.5 align-[-0.15em]" />
                   Self-host it free
-                </a>
+                </GithubLink>
               </p>
             </div>
           </div>
@@ -91,8 +87,8 @@ export function Hero() {
               className="pointer-events-none absolute -top-9 -right-2 z-20 hidden sm:block lg:-top-14"
             >
               <Mascot
-                priority
                 className="h-auto w-28 drop-shadow-2xl lg:w-36"
+                sizes="(min-width: 1024px) 144px, 112px"
               />
             </div>
             <LiveTicker />

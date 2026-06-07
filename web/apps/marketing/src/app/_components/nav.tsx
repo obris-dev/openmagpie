@@ -1,7 +1,6 @@
 import { ThemeToggle } from "@magpie/ui";
-import { links } from "./constants";
-import { GithubIcon } from "./icons";
 import { ThemedLogo } from "./themed-logo";
+import { GithubLink } from "./github-link";
 import { MobileMenu } from "./mobile-menu";
 
 export function Nav() {
@@ -27,16 +26,12 @@ export function Nav() {
           </a>
         </div>
         <div className="flex items-center gap-2 sm:gap-3">
-          <a
-            href={links.github}
-            target="_blank"
-            rel="noreferrer noopener"
+          <GithubLink
             aria-label="OpenMagpie on GitHub"
             className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm text-ink-muted hover:text-ink dark:text-paper/70 dark:hover:text-paper"
           >
-            <GithubIcon className="size-4" />
             <span className="hidden min-[880px]:inline">GitHub</span>
-          </a>
+          </GithubLink>
           <a
             href="#waitlist"
             className="hidden items-center rounded-md bg-signal px-4 py-2 text-sm font-medium text-paper transition-colors hover:bg-signal-600 min-[880px]:inline-flex dark:hover:bg-signal-700"

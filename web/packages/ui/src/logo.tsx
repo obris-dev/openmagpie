@@ -59,14 +59,18 @@ export interface MascotProps {
   /** Display size + placement (e.g. "w-72 h-auto"); the 1224x1014 aspect is kept. */
   className?: string;
   priority?: boolean;
+  /** Rendered width hint so next/image picks a small srcset candidate instead of
+   * fetching the full 1224px source (the display size is much smaller). */
+  sizes?: string;
 }
 
 /**
  * The illustrated magpie holding a gem (1224x1014 artwork). Display size and
  * placement come from `className` (e.g. `w-72 h-auto`); the aspect ratio is
- * preserved. Decorative by default; pass `alt` when it carries meaning.
+ * preserved. Decorative by default; pass `alt` when it carries meaning. Pass
+ * `sizes` to avoid over-fetching the source at small render sizes.
  */
-export function Mascot({ alt = "", className, priority }: MascotProps) {
+export function Mascot({ alt = "", className, priority, sizes }: MascotProps) {
   return (
     <Image
       src="/brand/mascot.png"
@@ -74,6 +78,7 @@ export function Mascot({ alt = "", className, priority }: MascotProps) {
       height={1014}
       alt={alt}
       priority={priority}
+      sizes={sizes}
       className={className}
     />
   );
