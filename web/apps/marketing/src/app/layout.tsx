@@ -1,6 +1,6 @@
-import type { Metadata } from "next";
 import { Poppins, Geist_Mono } from "next/font/google";
 import { Providers } from "./providers";
+import { buildMetadata, siteMeta } from "@magpie/api-utils/site";
 import "./globals.css";
 
 const poppins = Poppins({
@@ -16,15 +16,12 @@ const geistMono = Geist_Mono({
   display: "swap",
 });
 
-export const metadata: Metadata = {
-  title: "OpenMagpie — join the conversations that matter, while they're live",
-  description:
-    "Open-source, self-hostable listening. Describe what you care about in plain language and OpenMagpie surfaces the Reddit, Hacker News, and feed conversations worth your reply.",
-  icons: {
-    icon: "/favicon.svg",
-    apple: "/apple-touch-icon.png",
-  },
-};
+// Marketing leads with the tagline title; base + OG/Twitter come from the
+// shared composer. The file-based opengraph-image/twitter-image attach
+// automatically.
+export const metadata = buildMetadata({
+  title: `${siteMeta.name} — ${siteMeta.tagline}`,
+});
 
 export default function RootLayout({
   children,

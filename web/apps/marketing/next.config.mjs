@@ -1,7 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  transpilePackages: ["@magpie/tailwind-config", "@magpie/ui"],
+  transpilePackages: ["@magpie/api-utils", "@magpie/tailwind-config", "@magpie/ui"],
   // None of our pages are meant to be embedded; deny framing everywhere.
   async headers() {
     return [

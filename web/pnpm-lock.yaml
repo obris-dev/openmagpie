@@ -65,6 +65,9 @@ importers:
 
   apps/marketing:
     dependencies:
+      '@magpie/api-utils':
+        specifier: workspace:*
+        version: link:../../packages/api-utils
       '@magpie/tailwind-config':
         specifier: workspace:*
         version: link:../../packages/tailwind-config
@@ -118,6 +121,9 @@ importers:
       '@types/node':
         specifier: ^22.10.0
         version: 22.19.19
+      next:
+        specifier: ^16.1.6
+        version: 16.2.6(@babel/core@7.29.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
       typescript:
         specifier: ^5.6.3
         version: 5.9.3

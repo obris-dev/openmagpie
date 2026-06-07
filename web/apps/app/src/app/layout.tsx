@@ -1,6 +1,6 @@
-import type { Metadata } from "next";
 import { Poppins, Geist_Mono } from "next/font/google";
 import { Providers } from "./providers";
+import { buildMetadata } from "@magpie/api-utils/site";
 import "./globals.css";
 
 const poppins = Poppins({
@@ -16,14 +16,9 @@ const geistMono = Geist_Mono({
   display: "swap",
 });
 
-export const metadata: Metadata = {
-  title: "OpenMagpie",
-  description: "Self-hosted semantic listener. What's worth your attention.",
-  icons: {
-    icon: "/favicon.svg",
-    apple: "/apple-touch-icon.png",
-  },
-};
+// Shared base (brand name title, description, icons, metadataBase). The app is
+// a different surface than marketing, so it can override OG/Twitter here later.
+export const metadata = buildMetadata();
 
 export default function RootLayout({
   children,

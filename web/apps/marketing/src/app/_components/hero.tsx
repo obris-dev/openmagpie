@@ -40,7 +40,7 @@ export function Hero() {
         >
           Find the conversations that matter.{" "}
           <span className="text-signal [text-shadow:0_0_22px_rgba(0,183,195,0.18)]">
-            Join in while they&apos;re live.
+            Join in while they&apos;re happening.
           </span>
         </h1>
 

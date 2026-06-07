@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@magpie/api-utils": "workspace:*",
     "@magpie/tailwind-config": "workspace:*",
     "@magpie/ui": "workspace:*",
     "next": "^16.1.6",
