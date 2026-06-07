@@ -2,7 +2,7 @@ const matches = [
   { src: "r/SaaS", score: "0.94", text: "Tried 4 monitoring tools, still doing it by hand every morning" },
   { src: "Hacker News", score: "0.91", text: "Ask HN: tracking mentions without paying $400/mo?" },
   { src: "r/selfhosted", score: "0.89", text: "Anything open source for listening to subreddits + RSS?" },
-  { src: "RSS · indie blog", score: "0.88", text: "Why we dropped our social-listening SaaS" },
+  { src: "RSS | indie blog", score: "0.88", text: "Why we dropped our social-listening SaaS" },
   { src: "r/Entrepreneur", score: "0.92", text: "Where do you find people actually asking for what you build?" },
   { src: "Hacker News", score: "0.90", text: "Show HN: I self-host my own mention tracker" },
 ];
@@ -21,7 +21,7 @@ export function LiveTicker() {
           Live
         </span>
         <span className="font-mono text-xs text-ink-subtle dark:text-paper/55">
-          matches · ai-tools-listener
+          matches | ai-tools-listener
         </span>
       </div>
 

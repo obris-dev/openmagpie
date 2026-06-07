@@ -4,7 +4,12 @@ Conventions for the web monorepo. Cross-cutting rules live in [../AGENTS.md](../
 
 ## Layout
 
-pnpm workspace at `web/`. Single app for now: `apps/app` (Next.js 16 + React 19 + TypeScript + Tailwind v4).
+pnpm workspace at `web/`. Two apps, both Next.js 16 + React 19 + TypeScript + Tailwind v4:
+
+- `apps/app`, the product UI + auth (port 3001).
+- `apps/marketing`, the public landing / waitlist (port 3000).
+
+The shared `@source` glob (see Tailwind v4 below) already covers every app, so a new app needs no per-app Tailwind wiring.
 
 Packages:
 

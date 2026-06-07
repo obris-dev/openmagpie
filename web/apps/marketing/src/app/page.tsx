@@ -13,14 +13,11 @@ export default function LandingPage() {
       <Nav />
       <main>
         <Hero />
+        {/* Alternating bands set here so the section rhythm lives in one place. */}
         <Problem />
-        <div className="bg-paper-soft/40 dark:bg-ink-soft/30">
-          <HowItWorks />
-        </div>
+        <HowItWorks band />
         <WhereItListens />
-        <div className="bg-paper-soft/40 dark:bg-ink-soft/30">
-          <Comparison />
-        </div>
+        <Comparison band />
         <Cta />
       </main>
       <Footer />

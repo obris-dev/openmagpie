@@ -1,10 +1,11 @@
 import { Emblem, Mascot } from "@magpie/ui";
 import { WaitlistForm } from "./waitlist-form";
+import { Container, Heading, Lead } from "./section";
 
 export function Cta() {
   return (
     <section id="waitlist" className="relative">
-      <div className="mx-auto max-w-6xl px-6 py-20 sm:py-28">
+      <Container className="py-20 sm:py-28">
         <div className="reveal relative overflow-hidden rounded-3xl border border-ink/10 bg-paper-soft px-6 py-16 sm:px-14 dark:border-paper/10 dark:bg-ink-soft">
           <div
             aria-hidden
@@ -18,15 +19,12 @@ export function Cta() {
           </div>
           <div className="relative z-10 max-w-3xl">
             <Emblem size={48} />
-            <h2 className="mt-5 text-3xl font-bold tracking-tight text-balance sm:text-5xl">
-              Don&apos;t want to run it yourself?
-            </h2>
-            <p className="mt-4 max-w-xl text-lg leading-relaxed text-ink-muted dark:text-paper/70">
-              You&apos;ve already got enough on your plate, keeping another
-              system up shouldn&apos;t be yet another thing to worry about.
-              We&apos;ll handle it, sign up to get notified when early access
-              opens.
-            </p>
+            <Heading>Don&apos;t want to run it yourself?</Heading>
+            <Lead className="mt-4 max-w-xl">
+              You&apos;ve already got enough on your plate, keeping another system
+              up shouldn&apos;t be yet another thing to worry about. We&apos;ll
+              handle it, sign up to get notified when early access opens.
+            </Lead>
             <div className="mt-8 max-w-md">
               <WaitlistForm idPrefix="cta" />
             </div>
@@ -35,7 +33,7 @@ export function Cta() {
             </p>
           </div>
         </div>
-      </div>
+      </Container>
     </section>
   );
 }

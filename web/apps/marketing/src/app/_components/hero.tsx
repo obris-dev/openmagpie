@@ -3,6 +3,7 @@ import { links } from "./constants";
 import { GithubIcon } from "./icons";
 import { WaitlistForm } from "./waitlist-form";
 import { LiveTicker } from "./live-ticker";
+import { Container } from "./section";
 
 const badges = ["Apache 2.0", "Self-hostable", "Bring your own LLM"];
 
@@ -22,7 +23,7 @@ export function Hero() {
         className="pointer-events-none absolute inset-0 opacity-[0.35] [background-image:linear-gradient(rgba(0,183,195,0.07)_1px,transparent_1px),linear-gradient(90deg,rgba(0,183,195,0.07)_1px,transparent_1px)] [background-size:48px_48px] [mask-image:radial-gradient(ellipse_at_top,black,transparent_75%)]"
       />
 
-      <div className="relative z-10 mx-auto max-w-6xl px-6 pt-32 pb-16 sm:pt-40">
+      <Container className="relative z-10 pt-32 pb-16 sm:pt-40">
         <div className="load-in flex flex-wrap items-center gap-2">
           {badges.map((b) => (
             <span
@@ -97,7 +98,7 @@ export function Hero() {
             <LiveTicker />
           </div>
         </div>
-      </div>
+      </Container>
     </section>
   );
 }
