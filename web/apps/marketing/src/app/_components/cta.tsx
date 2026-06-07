@@ -1,5 +1,4 @@
-import Image from "next/image";
-import { Emblem } from "@magpie/ui";
+import { Emblem, Mascot } from "@magpie/ui";
 import { WaitlistForm } from "./waitlist-form";
 
 export function Cta() {
@@ -15,13 +14,7 @@ export function Cta() {
             aria-hidden
             className="pointer-events-none absolute -right-6 -bottom-10 hidden sm:block"
           >
-            <Image
-              src="/brand/mascot.png"
-              alt=""
-              width={1224}
-              height={1014}
-              className="h-auto w-48 opacity-20 mix-blend-multiply lg:w-56 dark:opacity-25 dark:mix-blend-screen"
-            />
+            <Mascot className="h-auto w-48 opacity-20 mix-blend-multiply lg:w-56 dark:opacity-25 dark:mix-blend-screen" />
           </div>
           <div className="relative z-10 max-w-3xl">
             <Emblem size={48} />

@@ -54,21 +54,26 @@ export function Logo({ height = 32, on = "light", className }: LogoProps) {
 }
 
 export interface MascotProps {
-  size?: number;
+  /** Decorative by default (alt=""); pass a description when it conveys meaning. */
+  alt?: string;
+  /** Display size + placement (e.g. "w-72 h-auto"); the 1224x1014 aspect is kept. */
   className?: string;
+  priority?: boolean;
 }
 
 /**
- * The illustrated magpie holding a gem, used as a hero / accent visual.
+ * The illustrated magpie holding a gem (1224x1014 artwork). Display size and
+ * placement come from `className` (e.g. `w-72 h-auto`); the aspect ratio is
+ * preserved. Decorative by default; pass `alt` when it carries meaning.
  */
-export function Mascot({ size = 240, className }: MascotProps) {
+export function Mascot({ alt = "", className, priority }: MascotProps) {
   return (
     <Image
       src="/brand/mascot.png"
-      width={size}
-      height={size}
-      alt="The OpenMagpie magpie holding a signal gem"
-      priority
+      width={1224}
+      height={1014}
+      alt={alt}
+      priority={priority}
       className={className}
     />
   );

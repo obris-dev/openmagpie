@@ -1,6 +1,5 @@
-import Image from "next/image";
 import type { ReactNode } from "react";
-import { ThemeToggle } from "@magpie/ui";
+import { Mascot, ThemeToggle } from "@magpie/ui";
 
 /**
  * Auth shell:
@@ -32,18 +31,12 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
         ].join(" ")}
       />
 
-      {/* Mascot peek, bottom-right, hidden < md. The source PNG is
-       * landscape (1224x1014 ≈ 1.21:1); render at intrinsic aspect so the
-       * bird doesn't get squashed. */}
+      {/* Mascot peek, bottom-right, hidden < md. */}
       <div
         aria-hidden
         className="pointer-events-none absolute -bottom-10 -right-16 hidden md:block lg:-bottom-6 lg:-right-10"
       >
-        <Image
-          src="/brand/mascot.png"
-          alt=""
-          width={1224}
-          height={1014}
+        <Mascot
           priority
           className="h-auto w-[28rem] opacity-[0.18] mix-blend-multiply dark:mix-blend-screen dark:opacity-25 lg:w-[32rem]"
         />

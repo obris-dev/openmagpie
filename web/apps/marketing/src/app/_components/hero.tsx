@@ -1,4 +1,4 @@
-import Image from "next/image";
+import { Mascot } from "@magpie/ui";
 import { links } from "./constants";
 import { GithubIcon } from "./icons";
 import { WaitlistForm } from "./waitlist-form";
@@ -89,11 +89,7 @@ export function Hero() {
               aria-hidden
               className="pointer-events-none absolute -top-14 -right-2 z-20 hidden sm:block"
             >
-              <Image
-                src="/brand/mascot.png"
-                alt=""
-                width={1224}
-                height={1014}
+              <Mascot
                 priority
                 className="h-auto w-28 drop-shadow-2xl lg:w-36"
               />

@@ -22,10 +22,10 @@ const base =
   "transition-colors disabled:pointer-events-none disabled:opacity-50";
 
 const variants: Record<ButtonVariant, string> = {
-  // Primary rests on Signal (#00B7C3, the brand teal) and darkens one step
-  // to signal-700 (#00777F) on hover. Glow (#7DF9FF) is reserved for accent
-  // uses (selection, focus glow, etc.), not the button hover state.
-  primary: "bg-signal text-paper hover:bg-signal-700",
+  // Primary rests on Signal (#00B7C3, the brand teal). Hover darkens to
+  // signal-600 in light mode (signal-700 reads too heavy on a light surface)
+  // and to signal-700 in dark. Glow is reserved for accents, not the hover.
+  primary: "bg-signal text-paper hover:bg-signal-600 dark:hover:bg-signal-700",
   secondary:
     "bg-paper-soft text-ink hover:bg-paper-deep " +
     "dark:bg-ink-soft dark:text-paper dark:hover:bg-ink",
