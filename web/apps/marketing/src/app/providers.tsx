@@ -2,10 +2,12 @@
 
 import { ThemeProvider } from "next-themes";
 import type { ReactNode } from "react";
+import { NotificationProvider } from "@magpie/ui";
 
 /**
  * System / light / dark via next-themes, identical wiring to the product app
- * so the marketing site, auth, and app all flip together.
+ * so the marketing site, auth, and app all flip together. NotificationProvider
+ * sits inside so toasts render under the active theme.
  */
 export function Providers({ children }: { children: ReactNode }) {
   return (
@@ -15,7 +17,7 @@ export function Providers({ children }: { children: ReactNode }) {
       enableSystem
       disableTransitionOnChange
     >
-      {children}
+      <NotificationProvider>{children}</NotificationProvider>
     </ThemeProvider>
   );
 }

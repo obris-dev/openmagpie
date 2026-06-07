@@ -89,7 +89,7 @@ When you add a new endpoint, add an action. Don't sprinkle `apiFetchParsed(...)`
 
 - `credentials: "include"` on every API call so the `auth_token` cookie ships.
 - JSON in, JSON out. Throws `ApiError` (carrying `status` + parsed `body`) on non-2xx.
-- `resolveApiBase()` throws at build/load time if `NEXT_PUBLIC_API_URL` is missing in production. The localhost fallback applies only in dev.
+- Base + path are joined by `buildApiUrl(path)` (in `routes.ts`), which resolves the API origin lazily via `resolveApiBase()`. In production `resolveApiBase()` throws if `NEXT_PUBLIC_API_URL` is missing (no silent localhost); the localhost fallback applies only in dev. Resolution is lazy, so the throw surfaces on the first request, not at module load — keeping importers side-effect-free.
 
 ## `@magpie/auth`
 

@@ -1,23 +1,44 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { Button, Input } from "@magpie/ui";
+import { Button, Input, useNotification } from "@magpie/ui";
+import { waitlistActions } from "@magpie/api-utils/waitlist";
 
 /**
- * Inline waitlist capture: email + submit, with a success state. No backend
- * yet, the submit is a placeholder until a form provider is chosen. Input and
- * Button come from @magpie/ui; `items-stretch` keeps them the same height in
- * the side-by-side row.
+ * Inline waitlist capture: email + submit. Posts to the public `/v1/waitlist`
+ * endpoint (idempotent server-side). Success swaps the form for a persistent
+ * confirmation card; failures surface as an error toast (useNotification).
+ * `idPrefix` doubles as the `source` so we can tell which form converted (hero
+ * vs cta). Input and Button come from @magpie/ui.
  */
 export function WaitlistForm({ idPrefix = "wl" }: { idPrefix?: string }) {
   const [email, setEmail] = useState("");
   const [done, setDone] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const notify = useNotification();
 
-  function onSubmit(e: FormEvent<HTMLFormElement>) {
+  async function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (!email.trim()) return;
-    // TODO: POST to the chosen waitlist provider once one is set.
-    setDone(true);
+    if (!email.trim() || submitting) return;
+    setSubmitting(true);
+    const fail = () =>
+      notify({
+        title: "Something went wrong",
+        body: "We couldn't add you just now. Please try again.",
+        isError: true,
+      });
+    try {
+      const { ok } = await waitlistActions.submit(email.trim(), idPrefix);
+      if (ok) {
+        setDone(true);
+      } else {
+        fail();
+      }
+    } catch {
+      fail();
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   if (done) {
@@ -55,8 +76,8 @@ export function WaitlistForm({ idPrefix = "wl" }: { idPrefix?: string }) {
         placeholder="you@company.com"
         className="min-w-0 flex-1"
       />
-      <Button type="submit" className="shrink-0">
-        Join the waitlist
+      <Button type="submit" loading={submitting} className="shrink-0">
+        {submitting ? "Joining…" : "Join the waitlist"}
       </Button>
     </form>
   );

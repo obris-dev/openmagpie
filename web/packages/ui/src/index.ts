@@ -16,3 +16,5 @@ export { Logo, Emblem, Mascot } from "./logo";
 export type { LogoProps, EmblemProps, MascotProps } from "./logo";
 export { ThemeToggle } from "./theme-toggle";
 export type { ThemeToggleProps } from "./theme-toggle";
+export { NotificationProvider, useNotification } from "./notification";
+export type { NotifyOptions } from "./notification";

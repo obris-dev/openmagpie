@@ -13,24 +13,7 @@
 
 import type { ZodType } from "zod";
 
-function resolveApiBase(): string {
-  const fromEnv = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "");
-  if (fromEnv) return fromEnv;
-  if (process.env.NODE_ENV === "production") {
-    // Production builds with no API URL almost certainly mean the env
-    // wasn't wired up. Failing loudly at module load is better than
-    // silently shipping a build that hits localhost from the user's
-    // browser.
-    throw new Error(
-      "NEXT_PUBLIC_API_URL is required in production. " +
-        "Set it at build time to the API origin (e.g. https://api.example.com).",
-    );
-  }
-  // Dev fallback so a fresh `pnpm dev` works zero-config.
-  return "http://localhost:8000";
-}
-
-const API_BASE = resolveApiBase();
+import { buildApiUrl } from "./routes";
 
 export interface ApiFetchOptions extends Omit<RequestInit, "body"> {
   body?: unknown;
@@ -65,8 +48,7 @@ export async function apiFetch<T = unknown>(
     init.body = JSON.stringify(body);
   }
 
-  const url = path.startsWith("http") ? path : `${API_BASE}${path}`;
-  const response = await fetch(url, init);
+  const response = await fetch(buildApiUrl(path), init);
 
   const text = await response.text();
   const parsed = text ? safeParseJson(text) : null;

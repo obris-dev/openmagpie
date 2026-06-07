@@ -6,6 +6,12 @@ import os
 # the dev loop still works out of the box.
 os.environ.setdefault("BASE_URL", "http://localhost:8000")
 os.environ.setdefault("WEB_BASE_URL", "http://localhost:3001")
+# The marketing site (separate Next app) ; its public waitlist POST is
+# cross-origin to the API, so its origin has to be on the CORS allowlist.
+os.environ.setdefault("MARKETING_BASE_URL", "http://localhost:3000")
+# Email-render sidecar (web/apps/email-render). Dev default only ; base.py
+# leaves it empty so prod must set it explicitly (no localhost fallback).
+os.environ.setdefault("EMAIL_RENDER_URL", "http://localhost:3010")
 # Browser ↔ Django is plain HTTP in dev; secure cookies would never get sent.
 os.environ.setdefault("AUTH_COOKIE_SECURE", "false")
 # Dev points at the docker-compose flaresolverr service ; prod operators
@@ -28,6 +34,6 @@ ALLOWED_HOSTS = ["localhost", "127.0.0.1", "core", ".ngrok-free.app"]
 # session-bearing responses. Safe-method GETs aren't gated by our
 # Origin-check CSRF (only non-safe methods are), so the allowlist is
 # the only thing keeping cross-origin reads off the browser cookie.
-CORS_ALLOWED_ORIGINS = [os.environ["WEB_BASE_URL"]]
+CORS_ALLOWED_ORIGINS = [os.environ["WEB_BASE_URL"], os.environ["MARKETING_BASE_URL"]]
 CORS_ALLOW_CREDENTIALS = True
-CSRF_TRUSTED_ORIGINS = [os.environ["WEB_BASE_URL"]]
+CSRF_TRUSTED_ORIGINS = [os.environ["WEB_BASE_URL"], os.environ["MARKETING_BASE_URL"]]

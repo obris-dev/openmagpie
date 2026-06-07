@@ -52,3 +52,58 @@
   --radius-lg: 14px;
   --radius-xl: 20px;
 }
+
+/* Radix Toast enter/exit + swipe for `@magpie/ui` <NotificationProvider>.
+ * Self-contained (this stack has no tailwind animate plugin); driven off the
+ * data-state / data-swipe attributes Radix sets. Motion is disabled under
+ * prefers-reduced-motion. */
+@keyframes magpie-toast-in {
+  from {
+    opacity: 0;
+    transform: translateX(110%);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes magpie-toast-out {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(110%);
+  }
+}
+
+.magpie-toast[data-state="open"] {
+  animation: magpie-toast-in 180ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.magpie-toast[data-state="closed"] {
+  animation: magpie-toast-out 120ms ease-in;
+}
+
+.magpie-toast[data-swipe="move"] {
+  transform: translateX(var(--radix-toast-swipe-move-x));
+}
+
+.magpie-toast[data-swipe="cancel"] {
+  transform: translateX(0);
+  transition: transform 180ms ease-out;
+}
+
+.magpie-toast[data-swipe="end"] {
+  animation: magpie-toast-out 120ms ease-in;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .magpie-toast[data-state="open"],
+  .magpie-toast[data-state="closed"],
+  .magpie-toast[data-swipe="end"] {
+    animation: none;
+  }
+}

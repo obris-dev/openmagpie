@@ -29,7 +29,37 @@ export const apiRoutes = {
     deviceSessionDeny: (sessionId: string) =>
       `/${VERSION}/auth/device-sessions/${sessionId}/deny`,
   },
+  // Public, unauthenticated waitlist signup (called from the marketing site).
+  waitlist: `/${VERSION}/waitlist`,
 } as const;
+
+/**
+ * Resolve the API origin (no trailing slash) at CALL time. Throws in
+ * production when NEXT_PUBLIC_API_URL is unset (a misconfigured build), falls
+ * back to localhost in dev. Resolving lazily (vs. fetch-wrapper's eager
+ * module-load `API_BASE`) keeps importers of this module side-effect-free, so
+ * the marketing site can build a URL without tripping the prod throw at import.
+ */
+export function resolveApiBase(): string {
+  const fromEnv = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "");
+  if (fromEnv) return fromEnv;
+  if (process.env.NODE_ENV === "production") {
+    throw new Error(
+      "NEXT_PUBLIC_API_URL is required in production. " +
+        "Set it at build time to the API origin (e.g. https://api.example.com).",
+    );
+  }
+  return "http://localhost:8000";
+}
+
+/**
+ * Build an absolute API URL from a route path (e.g. `apiRoutes.waitlist`).
+ * Absolute URLs pass through unchanged, matching `apiFetch`. This is the one
+ * place base + path are joined for browser fetches.
+ */
+export function buildApiUrl(path: string): string {
+  return path.startsWith("http") ? path : `${resolveApiBase()}${path}`;
+}
 
 export const webRoutes = {
   home: "/",

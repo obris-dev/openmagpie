@@ -43,6 +43,7 @@ LOCAL_APPS = [
     "feeds",
     "engine",
     "watches",
+    "waitlist",
 ]
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
@@ -130,6 +131,29 @@ WEB_BASE_URL = os.environ["WEB_BASE_URL"]
 # lockstep when bumping versions.
 API_VERSION_PREFIX = os.environ.get("API_VERSION_PREFIX", "v1")
 
+# Transactional email (waitlist welcome / invite). Templates are rendered
+# out-of-process by the email-render service (EMAIL_RENDER_URL/render) and sent
+# through Django's EMAIL_BACKEND. The backend defaults to the console backend
+# so dev needs no SMTP creds (mail prints to the runserver log); prod points it
+# at Brevo SMTP via env. See common.email.EmailService.
+#
+# EMAIL_RENDER_URL has NO localhost default here (dev seeds it in local.py),
+# so an unset value in prod fails loudly via EmailRenderError instead of
+# silently POSTing to localhost. Email is best-effort, so this never breaks a
+# signup; it just means no mail until the render service URL is set.
+EMAIL_RENDER_URL = os.environ.get("EMAIL_RENDER_URL", "").rstrip("/")
+DEFAULT_FROM_EMAIL = os.environ.get("DEFAULT_FROM_EMAIL", "OpenMagpie <noreply@openmagpie.ai>")
+EMAIL_BACKEND = os.environ.get("EMAIL_BACKEND", "django.core.mail.backends.console.EmailBackend")
+EMAIL_HOST = os.environ.get("EMAIL_HOST", "")
+EMAIL_PORT = int(os.environ.get("EMAIL_PORT", "587"))
+EMAIL_HOST_USER = os.environ.get("EMAIL_HOST_USER", "")
+EMAIL_HOST_PASSWORD = os.environ.get("EMAIL_HOST_PASSWORD", "")
+EMAIL_USE_TLS = env_bool("EMAIL_USE_TLS", "true")
+# Bounds BOTH the render request (httpx) and the SMTP send (Django reads
+# EMAIL_TIMEOUT) so a hung render service or SMTP server can't pin a worker
+# (the welcome email is sent inline on signup). Seconds.
+EMAIL_TIMEOUT = int(os.environ.get("EMAIL_TIMEOUT", "10"))
+
 # CORS / CSRF for the web client. Empty by default so prod has to opt-in
 # explicitly via env; `local.py` overrides with permissive dev defaults.
 CORS_ALLOWED_ORIGINS = [o.strip() for o in os.environ.get("CORS_ALLOWED_ORIGINS", "").split(",") if o.strip()]
@@ -159,6 +183,12 @@ REST_FRAMEWORK = {
     # browsers stop sending invalid credentials on every subsequent
     # request after a server-side revoke / expiry.
     "EXCEPTION_HANDLER": "auth_api.exception_handlers.auth_aware_exception_handler",
+    # No DEFAULT_THROTTLE_CLASSES (the API isn't globally rate-limited).
+    # Only the public waitlist endpoint opts in, via ScopedRateThrottle +
+    # `throttle_scope = "waitlist"`; this maps that scope to a per-IP rate.
+    "DEFAULT_THROTTLE_RATES": {
+        "waitlist": os.environ.get("WAITLIST_THROTTLE_RATE", "30/hour"),
+    },
 }
 
 OAUTH2_PROVIDER = {

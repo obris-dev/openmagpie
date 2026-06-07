@@ -1,8 +1,11 @@
+from unittest import mock
+
 from django.core.cache import cache
 from django.core.exceptions import ImproperlyConfigured
 from django.test import SimpleTestCase, override_settings
 
 from common.commands import SingleFlightCommand
+from common.email import EmailRenderError, EmailService
 from common.locks import named_lock
 
 _LOCMEM = {"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache", "LOCATION": "lock-tests"}}
@@ -78,3 +81,45 @@ class ResolveJobNameTests(SimpleTestCase):
         Command.__module__ = "watches.services.something"
         with self.assertRaises(ImproperlyConfigured):
             Command().resolve_job_name()
+
+
+@override_settings(EMAIL_RENDER_URL="http://render.test", EMAIL_TIMEOUT=10)
+class EmailRenderTemplateTests(SimpleTestCase):
+    """render_template converts EVERY render failure to EmailRenderError, so the
+    documented contract holds and callers can catch one type."""
+
+    @staticmethod
+    def _response(*, json_value=None, json_exc=None):
+        resp = mock.Mock()
+        resp.raise_for_status = mock.Mock()  # 2xx, no-op
+        resp.json = mock.Mock(side_effect=json_exc) if json_exc else mock.Mock(return_value=json_value)
+        return resp
+
+    def test_unconfigured_url_raises(self) -> None:
+        with override_settings(EMAIL_RENDER_URL=""), self.assertRaises(EmailRenderError):
+            EmailService.render_template(template="x", props={})
+
+    @mock.patch("common.email.httpx.post")
+    def test_non_json_body_raises(self, post: mock.Mock) -> None:
+        post.return_value = self._response(json_exc=ValueError("not json"))
+        with self.assertRaises(EmailRenderError):
+            EmailService.render_template(template="x", props={})
+
+    @mock.patch("common.email.httpx.post")
+    def test_missing_keys_raise(self, post: mock.Mock) -> None:
+        # success truthy but no html / plainText -> KeyError, still wrapped.
+        post.return_value = self._response(json_value={"success": True})
+        with self.assertRaises(EmailRenderError):
+            EmailService.render_template(template="x", props={})
+
+    @mock.patch("common.email.httpx.post")
+    def test_success_false_raises(self, post: mock.Mock) -> None:
+        post.return_value = self._response(json_value={"success": False, "error": "boom"})
+        with self.assertRaises(EmailRenderError):
+            EmailService.render_template(template="x", props={})
+
+    @mock.patch("common.email.httpx.post")
+    def test_ok_returns_html_and_plain_text(self, post: mock.Mock) -> None:
+        post.return_value = self._response(json_value={"success": True, "html": "<p>hi</p>", "plainText": "hi"})
+        out = EmailService.render_template(template="x", props={})
+        self.assertEqual(out, {"html": "<p>hi</p>", "plainText": "hi"})
