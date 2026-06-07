@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1029.53 195.48">
+  <g>
+    <circle cx="97.74" cy="97.74" r="97.74" fill="#00B7C3"/>
+    <polygon points="121.77,8.05 113.30,82.18 187.43,73.71 119.00,103.44 163.40,163.40 103.44,119.00 73.71,187.43 82.18,113.30 8.05,121.77 76.48,92.04 32.08,32.08 92.04,76.48" fill="#F7F7F5"/>
+    <text x="249.53" y="137.34" font-family="'Poppins', system-ui, sans-serif" font-weight="600" font-size="120px" fill="#111111">OpenMagpie</text>
+  </g>
+</svg>

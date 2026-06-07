@@ -1,0 +1,129 @@
+@import "tailwindcss";
+
+/* Shared brand theme + monorepo source globs (single source of truth for
+ * color tokens AND which workspace dirs Tailwind scans). Relative path to
+ * dodge package-resolution edge cases in PostCSS. */
+@import "../../../../packages/tailwind-config/theme.css";
+
+/* Force Tailwind v4's `dark:` variant to the `class="dark"` strategy
+ * (next-themes adds the class to <html>) instead of `prefers-color-scheme`. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Restore the pointer cursor Tailwind v4 preflight strips from buttons. */
+@layer base {
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]),
+  summary {
+    cursor: pointer;
+  }
+}
+
+html {
+  font-family: var(--font-sans);
+  background: var(--color-paper);
+  color: var(--color-ink);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  scroll-behavior: smooth;
+}
+
+html.dark {
+  background: var(--color-ink);
+  color: var(--color-paper);
+}
+
+body {
+  min-height: 100dvh;
+}
+
+::selection {
+  background: var(--color-signal);
+  color: var(--color-ink);
+}
+
+/* Motion, all guarded by reduced-motion (and feature support) so the page is
+ * fully usable and fully visible without it. */
+@media (prefers-reduced-motion: no-preference) {
+  /* Staggered above-the-fold entrance; per-element delays set inline. */
+  .load-in {
+    opacity: 0;
+    animation: load-in 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  @keyframes load-in {
+    from {
+      opacity: 0;
+      transform: translateY(0.75rem);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  /* Below-the-fold scroll reveal, pure CSS via the view() timeline (no JS).
+   * Where the timeline isn't supported the element just stays visible. */
+  @supports (animation-timeline: view()) {
+    .reveal {
+      animation: reveal linear both;
+      animation-timeline: view();
+      animation-range: entry 0% cover 18%;
+    }
+    @keyframes reveal {
+      from {
+        opacity: 0;
+        transform: translateY(1.25rem);
+      }
+      to {
+        opacity: 1;
+        transform: none;
+      }
+    }
+  }
+}
+
+/* Live-feed ticker (alt landing). The track holds the list twice; animating
+ * to -50% loops seamlessly. The mask fades the top and bottom edges. */
+.ticker-mask {
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent,
+    #000 12%,
+    #000 88%,
+    transparent
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    transparent,
+    #000 12%,
+    #000 88%,
+    transparent
+  );
+}
+@media (prefers-reduced-motion: no-preference) {
+  .ticker-track {
+    animation: ticker 32s linear infinite;
+  }
+  .ticker:hover .ticker-track {
+    animation-play-state: paused;
+  }
+  @keyframes ticker {
+    from {
+      transform: translateY(0);
+    }
+    to {
+      transform: translateY(-50%);
+    }
+  }
+  .pulse-dot {
+    animation: pulse-dot 2s ease-in-out infinite;
+  }
+  @keyframes pulse-dot {
+    0%,
+    100% {
+      box-shadow: 0 0 0 0 rgba(0, 183, 195, 0.5);
+    }
+    50% {
+      box-shadow: 0 0 0 6px rgba(0, 183, 195, 0);
+    }
+  }
+}

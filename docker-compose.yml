@@ -77,17 +77,21 @@ services:
     # pnpm itself is baked into the image (see web/Dockerfile). We
     # still run install at start because the node_modules volume mount
     # would hide anything baked in; `pnpm install` is a no-op when the
-    # lockfile matches what's already in the volume.
+    # lockfile matches what's already in the volume. `pnpm dev` runs every
+    # app in parallel (the product app on 3001, the marketing site on 3000),
+    # one install for the whole workspace.
     command: sh -c "pnpm install --frozen-lockfile=false && pnpm dev"
     environment:
       NEXT_PUBLIC_API_URL: http://localhost:8000
       NEXT_PUBLIC_API_VERSION: v1
     ports:
+      - "3000:3000"
       - "3001:3001"
     volumes:
       - ./web:/web
       - magpie_node_modules:/web/node_modules
       - magpie_app_node_modules:/web/apps/app/node_modules
+      - magpie_marketing_node_modules:/web/apps/marketing/node_modules
     depends_on:
       # service_healthy (not the default service_started) means web only
       # starts once core's /healthz is green. Without this, web boots
@@ -100,3 +104,4 @@ volumes:
   magpie_pgdata:
   magpie_node_modules:
   magpie_app_node_modules:
+  magpie_marketing_node_modules:

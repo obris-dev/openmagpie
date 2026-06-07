@@ -4,9 +4,9 @@
   "private": true,
   "description": "OpenMagpie web — auth + future product UI",
   "scripts": {
-    "dev": "pnpm --filter @magpie/app dev",
-    "build": "pnpm --filter @magpie/app build",
-    "start": "pnpm --filter @magpie/app start",
+    "dev": "pnpm -r --parallel dev",
+    "build": "pnpm -r build",
+    "start": "pnpm -r --parallel start",
     "lint": "pnpm -r lint",
     "typecheck": "pnpm -r typecheck"
   },
