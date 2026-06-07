@@ -2,6 +2,7 @@ import { ThemeToggle } from "@magpie/ui";
 import { links } from "./constants";
 import { GithubIcon } from "./icons";
 import { ThemedLogo } from "./themed-logo";
+import { MobileMenu } from "./mobile-menu";
 
 export function Nav() {
   return (
@@ -14,7 +15,7 @@ export function Nav() {
         <a href="#top" aria-label="OpenMagpie home" className="shrink-0">
           <ThemedLogo height={26} />
         </a>
-        <div className="hidden items-center gap-7 text-sm text-ink-muted md:flex dark:text-paper/70">
+        <div className="hidden items-center gap-7 text-sm text-ink-muted min-[880px]:flex dark:text-paper/70">
           <a href="#how" className="hover:text-ink dark:hover:text-paper">
             How it works
           </a>
@@ -30,18 +31,20 @@ export function Nav() {
             href={links.github}
             target="_blank"
             rel="noreferrer noopener"
-            className="hidden items-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm text-ink-muted hover:text-ink sm:inline-flex dark:text-paper/70 dark:hover:text-paper"
+            aria-label="OpenMagpie on GitHub"
+            className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm text-ink-muted hover:text-ink dark:text-paper/70 dark:hover:text-paper"
           >
             <GithubIcon className="size-4" />
-            GitHub
+            <span className="hidden min-[880px]:inline">GitHub</span>
           </a>
           <a
             href="#waitlist"
-            className="inline-flex items-center rounded-md bg-signal px-4 py-2 text-sm font-medium text-paper transition-colors hover:bg-signal-600 dark:hover:bg-signal-700"
+            className="hidden items-center rounded-md bg-signal px-4 py-2 text-sm font-medium text-paper transition-colors hover:bg-signal-600 min-[880px]:inline-flex dark:hover:bg-signal-700"
           >
             Join the waitlist
           </a>
           <ThemeToggle />
+          <MobileMenu />
         </div>
       </nav>
     </header>

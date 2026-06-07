@@ -1,25 +1,6 @@
 import type { SVGProps } from "react";
 
-/** North-east arrow, our marker for "this link leaves the site". */
-export function ArrowUpRight(props: SVGProps<SVGSVGElement>) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={2}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden
-      {...props}
-    >
-      <path d="M7 17 17 7" />
-      <path d="M7 7h10v10" />
-    </svg>
-  );
-}
-
-/** GitHub mark, the natural "this is the repo" signal (no arrow needed). */
+/** GitHub mark. Custom because heroicons is a UI icon set, not brand logos. */
 export function GithubIcon(props: SVGProps<SVGSVGElement>) {
   return (
     <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden {...props}>

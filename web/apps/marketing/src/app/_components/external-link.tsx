@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { ArrowUpRight } from "./icons";
+import { ArrowUpRightIcon } from "@heroicons/react/16/solid";
 
 /** Inline text link that leaves the site, marked with the ↗ glyph. */
 export function ExternalLink({
@@ -19,7 +19,7 @@ export function ExternalLink({
       className={`inline-flex items-center gap-0.5 underline-offset-4 hover:underline ${className}`}
     >
       {children}
-      <ArrowUpRight className="size-3.5 opacity-70" />
+      <ArrowUpRightIcon className="size-3.5 opacity-70" />
     </a>
   );
 }

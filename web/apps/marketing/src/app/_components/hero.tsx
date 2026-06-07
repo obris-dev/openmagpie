@@ -87,7 +87,7 @@ export function Hero() {
           <div className="load-in relative" style={{ animationDelay: "300ms" }}>
             <div
               aria-hidden
-              className="pointer-events-none absolute -top-14 -right-2 z-20 hidden sm:block"
+              className="pointer-events-none absolute -top-9 -right-2 z-20 hidden sm:block lg:-top-14"
             >
               <Mascot
                 priority

@@ -1,4 +1,4 @@
-.PHONY: quickstart install-cli up build down logs logs-core logs-web dev-exec dev-manage dev-test dev-makemigrations dev-dbshell dev-migrate dev-bootstrap dev-tick up-jobs down-jobs _job-up dev-lint dev-lint-fix dev-types dev-check dev-web dev-web-shell dev-cli-sync dev-cli hooks
+.PHONY: quickstart install-cli up build down logs logs-core logs-web dev-exec dev-manage dev-test dev-makemigrations dev-dbshell dev-migrate dev-bootstrap dev-tick up-jobs down-jobs _job-up dev-lint dev-lint-fix dev-types dev-check dev-web dev-web-reinstall dev-web-shell dev-cli-sync dev-cli hooks
 
 quickstart: ## One command from a fresh clone: env + build (wait healthy) + migrate
 	@test -f apps/core/.env || { cp apps/core/.env.example apps/core/.env; echo "Created apps/core/.env from .env.example"; }
@@ -107,6 +107,10 @@ down-jobs: ## Stop the background tickers started by up-jobs
 
 dev-web: ## Start (or restart) the Next.js dev container (app + marketing) and tail its logs
 	docker compose up -d web
+	docker compose logs -f web
+
+dev-web-reinstall: ## Recreate the web container so it re-runs pnpm install (after adding a web dependency), then tail logs
+	docker compose up -d --force-recreate web
 	docker compose logs -f web
 
 dev-web-shell: ## Open a shell in the web container
