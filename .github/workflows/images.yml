@@ -19,9 +19,14 @@ permissions:
 
 jobs:
   # Decide which images to build from what the push touched, then emit a dynamic
-  # matrix the build job fans out over. The filters track each image's REAL
-  # build context, not just its app dir:
-  #  - core's context is the repo root, so it bundles apps/core PLUS its
+  # matrix the build job fans out over. The filters track each image's FUNCTIONAL
+  # inputs (the files that change the built artifact) — intentionally narrower
+  # than the literal Docker build context. core's Dockerfile does `COPY . /app`,
+  # so apps/cli + root files ride along, but they're inert in the core image
+  # (it runs only openmagpie-core), and any CLI change that actually matters
+  # bumps uv.lock — which IS filtered. So a CLI-only edit skipping a core
+  # rebuild just leaves an unused, identical-to-source copy embedded; no drift.
+  #  - core's context is the repo root; its artifact is apps/core PLUS its
   #    workspace dep packages/openmagpie-schema, resolved via the root
   #    uv.lock/pyproject — all of which must trigger a rebuild.
   #  - email-render's context is web/ and it has NO @magpie/* workspace deps
