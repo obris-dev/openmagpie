@@ -5,3 +5,8 @@ dist
 *.log
 .DS_Store
 .env*.local
+# OpenNext / wrangler (Cloudflare Workers) build output + local secrets
+.open-next
+.wrangler
+.dev.vars
+cloudflare-env.d.ts

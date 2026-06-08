@@ -7,13 +7,17 @@
     "build": "next build",
     "start": "next start -p 3000",
     "lint": "next lint",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
+    "cf-deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy",
+    "cf-typegen": "wrangler types --env-interface CloudflareEnv cloudflare-env.d.ts"
   },
   "dependencies": {
     "@heroicons/react": "^2.1.5",
     "@magpie/api-utils": "workspace:*",
     "@magpie/tailwind-config": "workspace:*",
     "@magpie/ui": "workspace:*",
+    "@opennextjs/cloudflare": "^1.19.11",
     "next": "^16.1.6",
     "next-themes": "^0.4.4",
     "react": "^19.2.4",
@@ -27,6 +31,7 @@
     "eslint": "^9.16.0",
     "eslint-config-next": "^16.1.6",
     "tailwindcss": "^4.0.0",
-    "typescript": "^5.6.3"
+    "typescript": "^5.6.3",
+    "wrangler": "^4.98.0"
   }
 }

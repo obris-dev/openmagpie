@@ -1,0 +1,16 @@
+{
+  // Cloudflare Workers deploy for the @magpie/app Next.js app (OpenNext).
+  // Generic + deployment-agnostic on purpose: no account_id, no routes/custom
+  // domains, no secrets. The operator sets those out-of-band — `wrangler login`
+  // (or CLOUDFLARE_ACCOUNT_ID), the custom domain in the Cloudflare dashboard
+  // (app.openmagpie.ai -> this worker), and env/secrets via `wrangler secret`
+  // / dashboard vars. A self-hoster overrides `name` + their own domain.
+  "main": ".open-next/worker.js",
+  "name": "openmagpie-app",
+  "compatibility_date": "2025-03-25",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
+  }
+}
