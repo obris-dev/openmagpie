@@ -317,6 +317,18 @@ wheels = [
 ]
 
 [[package]]
+name = "gunicorn"
+version = "26.0.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "packaging" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/6d/b7/a4a3f632f823e432ce6bc65f62961b7980c898c77f075a2f7118cb3846fe/gunicorn-26.0.0.tar.gz", hash = "sha256:ca9346f85e3a4aeeb64d491045c16b9a35647abd37ea15efe53080eb8b090baf", size = 727286, upload-time = "2026-05-05T06:38:25.529Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/e6/40/9c2384fc2be4ad25dd4a49decd5ad9ea5a3639814c11bd40ab77cb9f0a14/gunicorn-26.0.0-py3-none-any.whl", hash = "sha256:40233d26a5f0d1872916188c276e21641155111c2853f0c2cd55260aec0d24fc", size = 212009, upload-time = "2026-05-05T06:38:23.007Z" },
+]
+
+[[package]]
 name = "h11"
 version = "0.16.0"
 source = { registry = "https://pypi.org/simple" }
@@ -455,15 +467,20 @@ dependencies = [
     { name = "feedparser" },
     { name = "httpx" },
     { name = "openmagpie-schema" },
-    { name = "psycopg", extra = ["binary"] },
+    { name = "psycopg" },
     { name = "pydantic" },
     { name = "python-dotenv" },
     { name = "ulid" },
 ]
 
 [package.dev-dependencies]
+cloud = [
+    { name = "gunicorn" },
+    { name = "psycopg", extra = ["c"] },
+]
 dev = [
     { name = "django-stubs" },
+    { name = "psycopg", extra = ["binary"] },
     { name = "ruff" },
     { name = "ty" },
     { name = "watchfiles" },
@@ -478,15 +495,20 @@ requires-dist = [
     { name = "feedparser", specifier = ">=6.0" },
     { name = "httpx", specifier = ">=0.28" },
     { name = "openmagpie-schema", editable = "packages/openmagpie-schema" },
-    { name = "psycopg", extras = ["binary"], specifier = ">=3.3" },
+    { name = "psycopg", specifier = ">=3.3" },
     { name = "pydantic", specifier = ">=2.5" },
     { name = "python-dotenv", specifier = ">=1.1" },
     { name = "ulid", specifier = ">=1.1" },
 ]
 
 [package.metadata.requires-dev]
+cloud = [
+    { name = "gunicorn", specifier = ">=23.0" },
+    { name = "psycopg", extras = ["c"], specifier = ">=3.3" },
+]
 dev = [
     { name = "django-stubs", specifier = ">=5.1" },
+    { name = "psycopg", extras = ["binary"], specifier = ">=3.3" },
     { name = "ruff", specifier = ">=0.11" },
     { name = "ty", specifier = ">=0.0.1" },
     { name = "watchfiles", specifier = ">=1.0" },
@@ -504,6 +526,15 @@ dependencies = [
 requires-dist = [{ name = "pydantic", specifier = ">=2.5" }]
 
 [[package]]
+name = "packaging"
+version = "26.2"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/d7/f1/e7a6dd94a8d4a5626c03e4e99c87f241ba9e350cd9e6d75123f992427270/packaging-26.2.tar.gz", hash = "sha256:ff452ff5a3e828ce110190feff1178bb1f2ea2281fa2075aadb987c2fb221661", size = 228134, upload-time = "2026-04-24T20:15:23.917Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/df/b2/87e62e8c3e2f4b32e5fe99e0b86d576da1312593b39f47d8ceef365e95ed/packaging-26.2-py3-none-any.whl", hash = "sha256:5fc45236b9446107ff2415ce77c807cee2862cb6fac22b8a73826d0693b0980e", size = 100195, upload-time = "2026-04-24T20:15:22.081Z" },
+]
+
+[[package]]
 name = "psycopg"
 version = "3.3.4"
 source = { registry = "https://pypi.org/simple" }
@@ -518,6 +549,9 @@ wheels = [
 [package.optional-dependencies]
 binary = [
     { name = "psycopg-binary", marker = "implementation_name != 'pypy'" },
+]
+c = [
+    { name = "psycopg-c", marker = "implementation_name != 'pypy'" },
 ]
 
 [[package]]
@@ -548,6 +582,12 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/c4/b1/f6670f00fa7ea601584623f6c11602ab92117d83eaff885e0210f6de7418/psycopg_binary-3.3.4-cp314-cp314-musllinux_1_2_x86_64.whl", hash = "sha256:47c656a8a7ba6eb0cff1801a4caaa9c8bdc12d03080e273aff1c8ac39971a77e", size = 4255811, upload-time = "2026-05-01T23:31:44.986Z" },
     { url = "https://files.pythonhosted.org/packages/eb/e6/5fff07a70d1f945ed90ae131c3bd76cab32beff7c58c6db15ad5820b6d1f/psycopg_binary-3.3.4-cp314-cp314-win_amd64.whl", hash = "sha256:c37e024c07308cd06cf3ec51bfd0e7f6157585a4d84d1bce4a7f5f7913719bf8", size = 3666849, upload-time = "2026-05-01T23:31:51.165Z" },
 ]
+
+[[package]]
+name = "psycopg-c"
+version = "3.3.4"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/21/7c/c08364f2eab2913e4068b3b955d963e7a3491986a85429990969525def30/psycopg_c-3.3.4.tar.gz", hash = "sha256:ed8106128b2d04359c185fc9641b4409abfce4d0b6fb1d1ff6800646e27f1a22", size = 647111, upload-time = "2026-05-01T23:31:58.032Z" }
 
 [[package]]
 name = "pycparser"

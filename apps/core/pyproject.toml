@@ -16,7 +16,7 @@ dependencies = [
     "feedparser>=6.0",
     "httpx>=0.28",
     "openmagpie-schema",
-    "psycopg[binary]>=3.3",
+    "psycopg>=3.3",  # impl extra is env-specific: [binary] in dev, [c] in cloud
     "pydantic>=2.5",
     "python-dotenv>=1.1",
     "ulid>=1.1",
@@ -25,9 +25,23 @@ dependencies = [
 [dependency-groups]
 dev = [
     "django-stubs>=5.1",
+    # psycopg's prebuilt binary (bundles libpq) for frictionless local dev;
+    # the cloud image compiles psycopg[c] against system libpq instead.
+    "psycopg[binary]>=3.3",
     "ruff>=0.11",
     "ty>=0.0.1",
     "watchfiles>=1.0",
+]
+# Cloud-only (matches DJANGO_ENV=cloud / conf.settings.cloud). NOT installed by
+# a default `uv sync`, so local dev / CI / tests stay lean and never need
+# gunicorn; the cloud Docker image opts in with `uv sync --group cloud`. Locked
+# in uv.lock, so the version is reproducible. (The `dev` group above keeps its
+# name because uv auto-installs the group literally named `dev`.)
+cloud = [
+    "gunicorn>=23.0",
+    # psycopg's C build (compiled against system libpq) — psycopg's documented
+    # prod choice; the Dockerfile installs libpq-dev (build) + libpq5 (runtime).
+    "psycopg[c]>=3.3",
 ]
 
 # openmagpie-schema is resolved as a workspace member; the workspace

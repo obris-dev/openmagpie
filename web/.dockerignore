@@ -1,0 +1,9 @@
+# Build context for the email-render image is the web/ workspace. Exclude
+# installed/built artifacts so the image does a clean `pnpm install` from the
+# lockfile (no host node_modules leaking in) and the context stays small.
+**/node_modules
+**/.next
+**/dist
+**/.turbo
+.DS_Store
+.idea

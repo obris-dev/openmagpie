@@ -1,0 +1,21 @@
+# Build context for the core image is the repo root. Keep the host's local
+# artifacts out so the image builds its OWN venv (gunicorn baked in via the
+# Dockerfile's `uv sync --group cloud`, no host .venv leaking in / runtime
+# re-install) and stays small + reproducible.
+.venv
+**/.venv
+.git
+.github
+**/__pycache__
+**/*.pyc
+.ruff_cache
+**/.ruff_cache
+**/.pytest_cache
+.idea
+.vscode
+.DS_Store
+.jobs
+docs
+
+# The core (uv/Python) image doesn't need the web pnpm workspace at all.
+web
