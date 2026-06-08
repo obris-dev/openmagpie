@@ -4,6 +4,10 @@ name: images
 # PR-gated) or a manual run — never on tags. Each build publishes an immutable
 # `sha-<short>` (+ a moving `latest`); deploys pin a specific sha via a PR in
 # the openmagpie-deployments repo, so the release gate is a review, not a tag.
+#
+# Each image only rebuilds when its build context actually changed (see the
+# `changes` job): a web-only merge skips the core build and vice versa. A manual
+# `workflow_dispatch` forces BOTH — the force-rebuild escape hatch.
 on:
   push:
     branches: [main]
@@ -14,21 +18,65 @@ permissions:
   packages: write
 
 jobs:
+  # Decide which images to build from what the push touched, then emit a dynamic
+  # matrix the build job fans out over. The filters track each image's REAL
+  # build context, not just its app dir:
+  #  - core's context is the repo root, so it bundles apps/core PLUS its
+  #    workspace dep packages/openmagpie-schema, resolved via the root
+  #    uv.lock/pyproject — all of which must trigger a rebuild.
+  #  - email-render's context is web/ and it has NO @magpie/* workspace deps
+  #    (just react-email/react/tsx), so web/packages/** is deliberately OMITTED.
+  #    If it ever takes a @magpie/* dep, add web/packages/** to its filter.
+  # Both include this workflow file, so changing the build itself rebuilds all.
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            core:
+              - 'apps/core/**'
+              - 'packages/**'
+              - 'pyproject.toml'
+              - 'uv.lock'
+              - '.python-version'
+              - '.github/workflows/images.yml'
+            email:
+              - 'web/apps/email-render/**'
+              - 'web/pnpm-lock.yaml'
+              - 'web/pnpm-workspace.yaml'
+              - 'web/package.json'
+              - '.github/workflows/images.yml'
+      - id: set
+        # Assemble the matrix include[] as JSON. A manual run forces both;
+        # otherwise include only the images whose filter matched. `[]` (nothing
+        # relevant changed) skips the build job via its `if` guard below.
+        env:
+          DISPATCH: ${{ github.event_name == 'workflow_dispatch' }}
+          CORE: ${{ steps.filter.outputs.core }}
+          EMAIL: ${{ steps.filter.outputs.email }}
+        run: |
+          core='{"image":"openmagpie-core","context":".","dockerfile":"apps/core/Dockerfile"}'
+          email='{"image":"openmagpie-email-render","context":"web","dockerfile":"web/apps/email-render/Dockerfile"}'
+          items=()
+          if [ "$DISPATCH" = "true" ] || [ "$CORE" = "true" ]; then items+=("$core"); fi
+          if [ "$DISPATCH" = "true" ] || [ "$EMAIL" = "true" ]; then items+=("$email"); fi
+          printf 'matrix=[%s]\n' "$(IFS=,; echo "${items[*]}")" >> "$GITHUB_OUTPUT"
+
   build:
+    needs: changes
+    # Skip entirely when nothing relevant changed (e.g. a docs-only merge).
+    if: needs.changes.outputs.matrix != '[]'
     name: ${{ matrix.image }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        include:
-          # Core API: build context is the repo root (the uv workspace).
-          - image: openmagpie-core
-            context: .
-            dockerfile: apps/core/Dockerfile
-          # Email-render sidecar: build context is the web/ pnpm workspace.
-          - image: openmagpie-email-render
-            context: web
-            dockerfile: web/apps/email-render/Dockerfile
+        include: ${{ fromJSON(needs.changes.outputs.matrix) }}
     steps:
       - uses: actions/checkout@v4
 
