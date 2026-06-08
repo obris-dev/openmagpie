@@ -10,13 +10,21 @@ from enum import StrEnum
 
 
 class WaitlistState(StrEnum):
-    """Lifecycle of a waitlist signup (single opt-in).
-
-    - PENDING:      on the list, awaiting an early-access invite.
-    - INVITED:      early-access invite email sent.
-    - UNSUBSCRIBED: opted out ; never email.
+    """The PERSON's lifecycle on the waitlist (single opt-in) — their
+    invite-eligibility, NOT email delivery. Delivery of any given email lives on
+    `OutboundEmail.state` (mailer); the two are independent. The welcome email
+    does not move this state — a fresh signup stays PENDING with its welcome
+    already sent. PENDING -> INVITED is a deliberate rollout decision, never
+    inferred from email rows (an email being sent says nothing about whether
+    you've decided to invite someone).
     """
 
+    # On the list, but NOT yet sent the official early-access invite.
     PENDING = "pending"
+    # The official early-access invite has been sent (a deliberate rollout
+    # decision). Set by the early-access invite flow (added in a later change);
+    # stays INVITED even if that invite email later fails to deliver (the
+    # failure shows on the OutboundEmail row, not here).
     INVITED = "invited"
+    # Opted out — never email.
     UNSUBSCRIBED = "unsubscribed"

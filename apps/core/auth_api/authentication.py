@@ -35,7 +35,7 @@ def _allowed_origins() -> set[str]:
 
     Pulled directly from settings each call so test overrides take effect.
     """
-    origins = {settings.WEB_BASE_URL.rstrip("/")}
+    origins = {settings.APP_BASE_URL.rstrip("/")}
     for o in getattr(settings, "CORS_ALLOWED_ORIGINS", []):
         origins.add(o.rstrip("/"))
     return origins

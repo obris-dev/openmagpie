@@ -49,6 +49,7 @@ LOCAL_APPS = [
     "engine",
     "watches",
     "waitlist",
+    "mailer",
 ]
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
@@ -126,26 +127,35 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 BASE_URL = os.environ["BASE_URL"]
 
-# Where the web app lives, used to build the browser-facing authorize URL
-# the CLI prints during device flow. Required; dev.py supplies a localhost
-# default so the dev loop works out of the box.
-WEB_BASE_URL = os.environ["WEB_BASE_URL"]
+# Where the PRODUCT APP lives (login, the browser-facing authorize URL the CLI
+# prints during device flow, the cookie-auth Origin allowlist). Required;
+# local.py / cloud.py supply env-specific defaults.
+APP_BASE_URL = os.environ["APP_BASE_URL"]
+
+# Where the MARKETING site lives (the public landing + waitlist). Used for
+# links in outbound email; also an allowed CORS origin. Required (like
+# APP_BASE_URL): an empty value would silently ship broken links in delivered
+# mail, so fail at boot instead. local.py / cloud.py supply env-specific defaults.
+MARKETING_BASE_URL = os.environ["MARKETING_BASE_URL"]
 
 # All HTTP API routes are mounted under /{API_VERSION_PREFIX}/. The web
 # frontend reads the same value from NEXT_PUBLIC_API_VERSION, keep them in
 # lockstep when bumping versions.
 API_VERSION_PREFIX = os.environ.get("API_VERSION_PREFIX", "v1")
 
-# Transactional email (waitlist welcome / invite). Templates are rendered
-# out-of-process by the email-render service (EMAIL_RENDER_URL/render) and sent
-# through Django's EMAIL_BACKEND. The backend defaults to the console backend
-# so dev needs no SMTP creds (mail prints to the runserver log); prod points it
-# at Brevo SMTP via env. See common.email.EmailService.
+# Transactional email. Enqueued (mailer.OutboundEmail) by request handlers, then
+# rendered out-of-process by the email-render service (EMAIL_RENDER_URL/render)
+# and sent via Django's EMAIL_BACKEND by the send_outbound_emails drain. The
+# backend defaults to the console backend so dev needs no SMTP creds (mail
+# prints to the drain's output); prod points it at Brevo SMTP via env. See
+# common.email.EmailService + apps/core/mailer.
 #
-# EMAIL_RENDER_URL has NO localhost default here (dev seeds it in local.py),
-# so an unset value in prod fails loudly via EmailRenderError instead of
-# silently POSTing to localhost. Email is best-effort, so this never breaks a
-# signup; it just means no mail until the render service URL is set.
+# EMAIL_RENDER_URL has NO localhost default here (dev seeds it in local.py), so
+# an unset value fails loudly (EmailRenderError) rather than POSTing to
+# localhost. This does NOT silently skip: the drain retries the row to the
+# attempts cap, then marks it FAILED (visible), so a missing/broken render URL
+# surfaces instead of vanishing. Enqueue itself is a cheap insert, so a signup
+# never blocks or fails on email.
 EMAIL_RENDER_URL = os.environ.get("EMAIL_RENDER_URL", "").rstrip("/")
 DEFAULT_FROM_EMAIL = os.environ.get("DEFAULT_FROM_EMAIL", "OpenMagpie <noreply@openmagpie.ai>")
 EMAIL_BACKEND = os.environ.get("EMAIL_BACKEND", "django.core.mail.backends.console.EmailBackend")
@@ -156,8 +166,17 @@ EMAIL_HOST_PASSWORD = os.environ.get("EMAIL_HOST_PASSWORD", "")
 EMAIL_USE_TLS = env_bool("EMAIL_USE_TLS", "true")
 # Bounds BOTH the render request (httpx) and the SMTP send (Django reads
 # EMAIL_TIMEOUT) so a hung render service or SMTP server can't pin a worker
-# (the welcome email is sent inline on signup). Seconds.
+# (the send_outbound_emails drain renders + sends out-of-request). Seconds.
 EMAIL_TIMEOUT = int(os.environ.get("EMAIL_TIMEOUT", "10"))
+
+# Outbound-email queue drain (mailer.send_outbound_emails). Mirror the
+# WATCH_RUN_* tunables: a row is claimed (attempts++) only while attempts <
+# MAX; past it it stays terminally FAILED. STALE_SECONDS reaps a SENDING row
+# orphaned by a crashed worker back to PENDING; RETRY_SECONDS is the backoff a
+# transient failure waits before the next attempt.
+EMAIL_SEND_MAX_ATTEMPTS = int(os.environ.get("EMAIL_SEND_MAX_ATTEMPTS", "5"))
+EMAIL_SEND_STALE_SECONDS = int(os.environ.get("EMAIL_SEND_STALE_SECONDS", "300"))
+EMAIL_SEND_RETRY_SECONDS = int(os.environ.get("EMAIL_SEND_RETRY_SECONDS", "300"))
 
 # CORS / CSRF for the web client. Empty by default so prod has to opt-in
 # explicitly via env; `local.py` overrides with permissive dev defaults.

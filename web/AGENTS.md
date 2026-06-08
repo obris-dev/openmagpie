@@ -140,3 +140,4 @@ type Phase = (typeof PHASE)[keyof typeof PHASE];
 
 - `NEXT_PUBLIC_API_URL` is **required in production**. `resolveApiBase()` throws if missing.
 - `NEXT_PUBLIC_API_VERSION` is the prefix string (default `"v1"`); keep in lockstep with Django's `API_VERSION_PREFIX`.
+- `ASSETS_URL` (used by `apps/email-render`) is the public base for brand image URLs baked into emails — the recipient's mail client fetches them, so it must be publicly reachable. Defaults to the marketing site; dev sets it to `http://localhost:3000` (see the `web` service in `docker-compose.yml`). Set it in prod to wherever `/brand/*` is served.

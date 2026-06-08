@@ -37,7 +37,7 @@ from rest_framework import permissions, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from common.web_urls import AUTH_DEVICE, web_url
+from common.web_urls import AUTH_DEVICE, app_url
 
 from .constants import AuthErrorCode, DeviceSessionStatus
 from .device_session_store import DeviceSessionClient, DeviceSessionState, Store
@@ -58,7 +58,7 @@ _USER_CODE_LENGTH = 8
 
 
 def _authorize_url(session_id: str) -> str:
-    return web_url(AUTH_DEVICE, session_id=session_id)
+    return app_url(AUTH_DEVICE, session_id=session_id)
 
 
 def _client_ip(request: HttpRequest) -> str | None:

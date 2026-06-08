@@ -11,7 +11,8 @@ env:
   DJANGO_ENV: local
   DJANGO_SECRET_KEY: ci-not-a-secret
   BASE_URL: http://localhost:8000
-  WEB_BASE_URL: http://localhost:3001
+  APP_BASE_URL: http://localhost:3001
+  MARKETING_BASE_URL: http://localhost:3000
   # No LLM in CI ; the test suite mocks the engine, this just satisfies config.
   OLLAMA_URL: http://localhost:11434
   OLLAMA_DEFAULT_MODEL: qwen2.5:7b

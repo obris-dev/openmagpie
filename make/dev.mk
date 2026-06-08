@@ -63,11 +63,12 @@ dev-migrate: ## Run Django database migrations + ensure cache table exists + boo
 dev-bootstrap: ## Alias for dev-migrate (first-run setup)
 	$(MAKE) dev-migrate
 
-dev-tick: ## Run one pipeline pass: poll feeds -> trigger watches -> drain runs -> flush digests
+dev-tick: ## Run one pipeline pass: poll feeds -> trigger watches -> drain runs -> flush digests -> send email
 	$(MAKE) dev-manage CMD="poll_due_feeds"
 	$(MAKE) dev-manage CMD="process_due_watches"
 	$(MAKE) dev-manage CMD="process_due_runs"
 	$(MAKE) dev-manage CMD="process_due_digests"
+	$(MAKE) dev-manage CMD="send_outbound_emails"
 
 # Background tickers: each stage on its OWN cadence (they're decoupled ;
 # poll writes items, trigger enqueues runs, drain executes them). Each
@@ -81,13 +82,15 @@ POLL_INTERVAL ?= 300
 TRIGGER_INTERVAL ?= 300
 DRAIN_INTERVAL ?= 60
 DIGEST_INTERVAL ?= 60
+EMAIL_INTERVAL ?= 60
 
-up-jobs: ## Start poll/trigger/drain/digest as independent background tickers
+up-jobs: ## Start poll/trigger/drain/digest/email as independent background tickers
 	@mkdir -p $(JOBS_DIR)
 	@$(MAKE) --no-print-directory _job-up NAME=poll    CMD=poll_due_feeds      INTERVAL=$(POLL_INTERVAL)
 	@$(MAKE) --no-print-directory _job-up NAME=trigger CMD=process_due_watches INTERVAL=$(TRIGGER_INTERVAL)
 	@$(MAKE) --no-print-directory _job-up NAME=drain   CMD=process_due_runs    INTERVAL=$(DRAIN_INTERVAL)
 	@$(MAKE) --no-print-directory _job-up NAME=digest  CMD=process_due_digests INTERVAL=$(DIGEST_INTERVAL)
+	@$(MAKE) --no-print-directory _job-up NAME=email   CMD=send_outbound_emails INTERVAL=$(EMAIL_INTERVAL)
 
 _job-up:
 	@if [ -f $(JOBS_DIR)/$(NAME).pid ] && kill -0 $$(cat $(JOBS_DIR)/$(NAME).pid) 2>/dev/null; then \
@@ -99,7 +102,7 @@ _job-up:
 	fi
 
 down-jobs: ## Stop the background tickers started by up-jobs
-	@for n in poll trigger drain digest; do \
+	@for n in poll trigger drain digest email; do \
 		if [ -f $(JOBS_DIR)/$$n.pid ]; then \
 			kill $$(cat $(JOBS_DIR)/$$n.pid) 2>/dev/null; rm -f $(JOBS_DIR)/$$n.pid; echo "$$n stopped"; \
 		else echo "$$n not running"; fi; \

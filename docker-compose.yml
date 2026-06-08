@@ -84,14 +84,22 @@ services:
     environment:
       NEXT_PUBLIC_API_URL: http://localhost:8000
       NEXT_PUBLIC_API_VERSION: v1
+      # Base the email-render sidecar uses for brand image URLs in emails. Dev
+      # points at the local marketing origin so previews load the emblem; prod
+      # sets it to the public asset host (defaults to the marketing site).
+      ASSETS_URL: http://localhost:3000
     ports:
       - "3000:3000"
       - "3001:3001"
+      # email-render sidecar (runs in this container via `pnpm dev`); core
+      # reaches it at http://web:3010, also published for local curl/preview.
+      - "3010:3010"
     volumes:
       - ./web:/web
       - magpie_node_modules:/web/node_modules
       - magpie_app_node_modules:/web/apps/app/node_modules
       - magpie_marketing_node_modules:/web/apps/marketing/node_modules
+      - magpie_email_render_node_modules:/web/apps/email-render/node_modules
     depends_on:
       # service_healthy (not the default service_started) means web only
       # starts once core's /healthz is green. Without this, web boots
@@ -105,3 +113,4 @@ volumes:
   magpie_node_modules:
   magpie_app_node_modules:
   magpie_marketing_node_modules:
+  magpie_email_render_node_modules:

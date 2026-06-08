@@ -13,12 +13,13 @@ default (here or in base.py). (S) = secret, store in the secret manager.
     POSTGRES_PASSWORD     (S)  db password
     OLLAMA_URL                 reachable Ollama instance
     OLLAMA_DEFAULT_MODEL       e.g. qwen2.5:7b
-    EMAIL_RENDER_URL           email-render sidecar URL (else welcome mail is skipped)
+    EMAIL_RENDER_URL           email-render sidecar URL (unset -> sends retry to the cap, then FAILED)
     EMAIL_HOST_USER       (S)  Brevo SMTP login
     EMAIL_HOST_PASSWORD   (S)  Brevo SMTP key
 
 Defaulted to the openmagpie.ai deployment (override via env for another):
-    BASE_URL, WEB_BASE_URL, ALLOWED_HOSTS, CORS_ALLOWED_ORIGINS, CSRF_TRUSTED_ORIGINS.
+    BASE_URL, APP_BASE_URL, MARKETING_BASE_URL, ALLOWED_HOSTS,
+    CORS_ALLOWED_ORIGINS, CSRF_TRUSTED_ORIGINS.
 This instance's own IP is auto-added to ALLOWED_HOSTS at runtime for health checks.
 
 Optional overrides: DEFAULT_FROM_EMAIL, EMAIL_HOST/PORT (non-Brevo relay),
@@ -31,10 +32,11 @@ import os
 import socket
 
 # Canonical openmagpie.ai URLs, seeded BEFORE base.py reads BASE_URL /
-# WEB_BASE_URL as required os.environ[...] (the same pattern local.py uses for
+# APP_BASE_URL as required os.environ[...] (the same pattern local.py uses for
 # its localhost defaults). Override any via env for a different deployment.
 os.environ.setdefault("BASE_URL", "https://api.openmagpie.ai")
-os.environ.setdefault("WEB_BASE_URL", "https://app.openmagpie.ai")
+os.environ.setdefault("APP_BASE_URL", "https://app.openmagpie.ai")
+os.environ.setdefault("MARKETING_BASE_URL", "https://openmagpie.ai")
 os.environ.setdefault("ALLOWED_HOSTS", "api.openmagpie.ai")
 # Browser origins that call the API: the app + both marketing hosts (apex +
 # www). www stays OUT of ALLOWED_HOSTS (that's the API host only) but IS a CORS
