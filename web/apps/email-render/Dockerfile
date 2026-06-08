@@ -3,7 +3,7 @@
 # @magpie/* workspace deps (just react-email + react + tsx), so a `pnpm deploy`
 # yields a self-contained bundle we copy into a clean runner. Runs via tsx (no
 # build step) — devDeps are included so tsx is present.
-FROM node:22-alpine AS builder
+FROM node:24-alpine AS builder
 RUN corepack enable && corepack prepare pnpm@9.12.0 --activate
 WORKDIR /web
 
@@ -12,7 +12,7 @@ RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
     pnpm install --frozen-lockfile --filter @magpie/email-render... \
  && pnpm --filter @magpie/email-render --prod=false deploy /out
 
-FROM node:22-alpine
+FROM node:24-alpine
 WORKDIR /app
 ENV NODE_ENV=production
 COPY --from=builder /out /app

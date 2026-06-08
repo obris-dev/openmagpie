@@ -4,7 +4,7 @@
 # docker-compose.yml because the node_modules volume is mounted at
 # start, hiding anything baked into the image.
 
-FROM node:22-alpine
+FROM node:24-alpine
 
 # `corepack enable` wires the pnpm shim; `corepack prepare ... --activate`
 # fetches the pinned version once at build time. Pin this in lockstep
