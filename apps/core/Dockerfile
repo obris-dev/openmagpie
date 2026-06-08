@@ -63,9 +63,11 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
-# The built venv + app code. The venv's python symlinks to /usr/local/bin's
-# 3.14, which the runtime base provides too.
-COPY --from=builder /app /app
+# The built venv + app code, owned by the non-root runtime user (uid 1000). The
+# --chown is what lets the same non-root user re-sync the venv in the dev
+# compose flow (`uv run` without --no-sync); prod uses --no-sync and only reads
+# it. The venv's python symlinks to /usr/local/bin's 3.14 (the runtime base).
+COPY --from=builder --chown=1000:1000 /app /app
 
 # Drop root (defense-in-depth on a shared cluster). App code + .venv are
 # world-readable, nothing writes to /app at runtime, and the CMD's --no-sync
