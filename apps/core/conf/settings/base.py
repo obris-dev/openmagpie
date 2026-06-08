@@ -15,8 +15,13 @@ BASE_DIR = Path(__file__).resolve().parents[2]  # core/
 
 SECRET_KEY = os.environ["DJANGO_SECRET_KEY"]
 
-DJANGO_ENV = os.environ.get("DJANGO_ENV", "local")
-IS_PRODUCTION = DJANGO_ENV == "prod"
+# Two environments: "cloud" (hosted -> conf.settings.cloud) and "local" (dev ->
+# conf.settings.local). Unset defaults to "cloud" so a deploy that forgets
+# DJANGO_ENV fails SAFE into locked-down settings; dev opts into "local" via
+# .env (see apps/core/.env.example). The wsgi/asgi/manage entrypoints pick the
+# settings module with the same "cloud" default.
+DJANGO_ENV = os.environ.get("DJANGO_ENV", "cloud")
+IS_CLOUD = DJANGO_ENV == "cloud"
 
 DJANGO_APPS = [
     "django.contrib.auth",
