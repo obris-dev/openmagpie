@@ -7,6 +7,9 @@
   // / dashboard vars. A self-hoster overrides `name` + their own domain.
   "main": ".open-next/worker.js",
   "name": "openmagpie-marketing",
+  // Serve only on the configured custom domains; don't expose the *.workers.dev
+  // URL. Applies on the next deploy.
+  "workers_dev": false,
   "compatibility_date": "2025-03-25",
   "compatibility_flags": ["nodejs_compat"],
   "assets": {
