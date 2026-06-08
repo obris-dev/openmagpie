@@ -3,7 +3,7 @@ from django.utils.translation import gettext_lazy as _
 
 from common.models import BaseModel
 
-from ..constants import WaitlistState
+from ..constants import WaitlistCategory, WaitlistState
 
 
 class WaitlistSignup(BaseModel):
@@ -13,8 +13,8 @@ class WaitlistSignup(BaseModel):
     there is no `account_id` / `user_id` scoping. `email` is unique, which makes
     signup idempotent (re-submitting the same address is a no-op). Single
     opt-in: created PENDING, flipped to INVITED when an early-access invite is
-    sent (stamping `invited_at`), or UNSUBSCRIBED on opt-out. `state` is a bare
-    CharField (see `waitlist.constants`).
+    sent (stamping `invited_at`), or UNSUBSCRIBED on opt-out. `state` and
+    `category` are bare CharFields (see `waitlist.constants`).
     """
 
     email = models.EmailField(_("email"), unique=True)
@@ -22,6 +22,14 @@ class WaitlistSignup(BaseModel):
         _("state"),
         max_length=32,
         default=WaitlistState.PENDING.value,
+    )
+    category = models.CharField(
+        _("category"),
+        max_length=32,
+        default=WaitlistCategory.UNKNOWN.value,
+        help_text=_(
+            "What the signup is waiting for (web_ui / cloud / either); UNKNOWN until they pick on the confirmation card"
+        ),
     )
     source = models.CharField(
         _("source"),
@@ -37,6 +45,7 @@ class WaitlistSignup(BaseModel):
         verbose_name_plural = _("waitlist signups")
         indexes = [
             models.Index(fields=["state"]),
+            models.Index(fields=["category"]),
         ]
 
     def __str__(self) -> str:

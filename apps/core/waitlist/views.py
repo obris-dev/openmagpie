@@ -29,5 +29,6 @@ class WaitlistSignupView(APIView):
         signup, _created = WaitlistService.signup(
             email=serializer.validated_data["email"],
             source=serializer.validated_data.get("source", ""),
+            category=serializer.validated_data["category"],
         )
         return Response({"email": signup.email}, status=status.HTTP_200_OK)

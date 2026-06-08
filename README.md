@@ -192,7 +192,7 @@ See [AGENTS.md](AGENTS.md) for the design conventions (char pointers, typed-blob
 
 Self-hosting is free and stays free. A managed hosted version (no infrastructure to run) is in the works as the paid tier.
 
-Waitlist: TODO (add link).
+Join the waitlist at [openmagpie.ai](https://www.openmagpie.ai/).
 
 ## Project structure
 
@@ -212,7 +212,7 @@ apps/
   cli/                        magpie CLI (Typer + httpx + Pydantic); distributed as a standalone wheel
 packages/
   openmagpie-schema/          Pure Pydantic models shared by core + cli (configs, wire types, feed shapes)
-web/                          pnpm workspace: apps/app (Next.js) + packages/{ui,api-utils,auth,tailwind-config}
+web/                          pnpm workspace: apps/{app,marketing,email-render} (Next.js) + packages/{ui,api-utils,auth,tailwind-config}
 make/                         Per-concern Makefile targets
 scripts/                      Helper scripts (whitespace check, make-help)
 ```

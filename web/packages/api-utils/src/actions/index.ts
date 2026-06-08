@@ -1,3 +1,3 @@
 export { authActions } from "./auth";
-export { waitlistActions } from "./waitlist";
-export type { WaitlistResult } from "./waitlist";
+export { waitlistActions, WAITLIST_CATEGORY } from "./waitlist";
+export type { WaitlistResult, WaitlistCategory } from "./waitlist";

@@ -1,8 +1,8 @@
 export { apiFetch, apiFetchParsed, ApiError } from "./fetch-wrapper";
 export type { ApiFetchOptions } from "./fetch-wrapper";
 export { apiRoutes, webRoutes, withNext, safeNext } from "./routes";
-export { authActions, waitlistActions } from "./actions";
-export type { WaitlistResult } from "./actions";
+export { authActions, waitlistActions, WAITLIST_CATEGORY } from "./actions";
+export type { WaitlistResult, WaitlistCategory } from "./actions";
 export {
   AuthUserSchema,
   BrowserAuthResponseSchema,
