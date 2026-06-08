@@ -29,6 +29,8 @@ DJANGO_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    # Enables ArrayField (+ its lookups), used by waitlist.source_interests.
+    "django.contrib.postgres",
 ]
 
 THIRD_PARTY_APPS = [

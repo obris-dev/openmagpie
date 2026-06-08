@@ -1,10 +1,10 @@
 """Waitlist enums (shared, zero-Django).
 
-The Python-side source of truth for a waitlist signup's `state` and `category`.
-Lives here (not server-only) so the server validates and branches against one
-set of values. The server's `waitlist.constants` re-exports them ; the DB
-columns stay bare CharFields (no `choices=`), so adding a value never forces a
-migration.
+The Python-side source of truth for a waitlist signup's `state` and
+`source_interests` (and the deprecated `category`). Lives here (not server-only)
+so the server validates and branches against one set of values. The server's
+`waitlist.constants` re-exports them; the DB columns stay choice-free (bare
+CharField, or an array of CharField), so adding a value never forces a migration.
 """
 
 from enum import StrEnum
@@ -52,3 +52,28 @@ class WaitlistCategory(StrEnum):
     CLOUD = "cloud"
     # Happy with whichever ships first; no preference between the two.
     EITHER = "either"
+
+
+class WaitlistSourceInterest(StrEnum):
+    """Which (not-yet-shipped) sources a signup most wants supported. An
+    optional, MULTI-select vote captured on the marketing confirmation card.
+    Drives connector roadmap priority and seeds a future "the source you asked
+    for just shipped" follow-up email, so it keeps the relationship going past
+    signup without gating it.
+
+    Members mirror the README roadmap connectors. A signup's votes are stored as
+    a SET (the `source_interests` array); no vote is just an empty array, so
+    there's no UNKNOWN sentinel. OTHER pairs with the free-text
+    `source_interest_other` column (what they typed). As connectors ship, retire
+    the corresponding member here and drop it from the marketing card's options.
+    """
+
+    LINKEDIN = "linkedin"
+    SLACK = "slack"
+    X = "x"
+    BLUESKY = "bluesky"
+    MASTODON = "mastodon"
+    GITHUB = "github"
+    HACKER_NEWS = "hacker_news"
+    # Picked "Something else"; the free text lands in `source_interest_other`.
+    OTHER = "other"

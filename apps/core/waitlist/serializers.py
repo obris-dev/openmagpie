@@ -2,7 +2,7 @@
 
 from rest_framework import serializers
 
-from .constants import WaitlistCategory
+from .constants import WaitlistSourceInterest
 
 
 class _EmailField(serializers.EmailField):
@@ -21,12 +21,22 @@ class WaitlistSignupSerializer(serializers.Serializer):
         max_length=64,
         default="",
     )
-    # Which offering they're waiting for. Omitted on the initial email POST
-    # (defaults to UNKNOWN) and sent on the confirmation card's second POST.
-    # ChoiceField rejects anything off the enum; UNKNOWN is accepted but is a
-    # no-op server-side (the service only records a real pick).
-    category = serializers.ChoiceField(
-        choices=[c.value for c in WaitlistCategory],
+    # Multi-select source vote. Omitted on the initial email POST (defaults to
+    # []) and sent on the confirmation card's submit. Each element must be a
+    # valid source (ChoiceField rejects anything else); an empty list is a
+    # no-op server-side (the service only records a non-empty vote).
+    source_interests = serializers.ListField(
+        child=serializers.ChoiceField(choices=[c.value for c in WaitlistSourceInterest]),
         required=False,
-        default=WaitlistCategory.UNKNOWN.value,
+        default=list,
+        # At most one of each source; rejects an oversized list cheaply (before
+        # per-element validation + de-dup). Throttling is the real DoS guard.
+        max_length=len(WaitlistSourceInterest),
+    )
+    # Free text paired with "other" among source_interests. Ignored otherwise.
+    source_interest_other = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        max_length=120,
+        default="",
     )

@@ -1,3 +1,4 @@
+from django.contrib.postgres.fields import ArrayField
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 
@@ -13,8 +14,8 @@ class WaitlistSignup(BaseModel):
     there is no `account_id` / `user_id` scoping. `email` is unique, which makes
     signup idempotent (re-submitting the same address is a no-op). Single
     opt-in: created PENDING, flipped to INVITED when an early-access invite is
-    sent (stamping `invited_at`), or UNSUBSCRIBED on opt-out. `state` and
-    `category` are bare CharFields (see `waitlist.constants`).
+    sent (stamping `invited_at`), or UNSUBSCRIBED on opt-out. `state` and the
+    deprecated `category` are bare CharFields (see `waitlist.constants`).
     """
 
     email = models.EmailField(_("email"), unique=True)
@@ -23,13 +24,31 @@ class WaitlistSignup(BaseModel):
         max_length=32,
         default=WaitlistState.PENDING.value,
     )
+    # DEPRECATED: superseded by `source_interests`. The web_ui/cloud/either
+    # question contradicted the hosted-only marketing CTA, so it's no longer
+    # collected. Column retained (not dropped) to preserve any early values.
     category = models.CharField(
         _("category"),
         max_length=32,
         default=WaitlistCategory.UNKNOWN.value,
-        help_text=_(
-            "What the signup is waiting for (web_ui / cloud / either); UNKNOWN until they pick on the confirmation card"
-        ),
+        help_text=_("Deprecated: superseded by source_interests; no longer collected"),
+    )
+    # The not-yet-shipped sources they most want (optional MULTI-select vote on
+    # the confirmation card). A set, stored as a Postgres array of enum values;
+    # empty = no vote. Element values are validated app-side (the serializer), so
+    # the column stays choice-free. OTHER pairs with the free text below.
+    source_interests = ArrayField(
+        models.CharField(max_length=32),
+        default=list,
+        blank=True,
+        help_text=_("Most-wanted roadmap sources (linkedin / slack / ...); empty = no vote"),
+    )
+    source_interest_other = models.CharField(
+        _("source interest (other)"),
+        max_length=120,
+        blank=True,
+        default="",
+        help_text=_("Free text when 'other' is among source_interests"),
     )
     source = models.CharField(
         _("source"),

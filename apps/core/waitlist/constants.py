@@ -10,6 +10,10 @@ storing the string value ; these enums are the Python-side source of truth for
 validation and branching.
 """
 
-from openmagpie_schema.waitlist_enums import WaitlistCategory, WaitlistState
+from openmagpie_schema.waitlist_enums import (
+    WaitlistCategory,
+    WaitlistSourceInterest,
+    WaitlistState,
+)
 
-__all__ = ["WaitlistCategory", "WaitlistState"]
+__all__ = ["WaitlistCategory", "WaitlistSourceInterest", "WaitlistState"]

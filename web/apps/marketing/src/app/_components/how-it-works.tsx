@@ -25,7 +25,7 @@ export function HowItWorks({ band }: { band?: boolean }) {
       <div className="grid gap-10 lg:grid-cols-[1fr_1.5fr] lg:gap-16">
         <div className="reveal">
           <ConsoleLabel>How it works</ConsoleLabel>
-          <Heading>Describe what matters. It watches the rest.</Heading>
+          <Heading>Describe what matters. Magpie watches the rest.</Heading>
           <Lead className="mt-5 max-w-sm">
             Three steps from a feed to the threads worth your reply.
           </Lead>

@@ -11,7 +11,7 @@ from rest_framework.test import APIClient
 
 from mailer.constants import EmailState
 from mailer.models import OutboundEmail
-from waitlist.constants import WaitlistCategory, WaitlistState
+from waitlist.constants import WaitlistSourceInterest, WaitlistState
 from waitlist.models import WaitlistSignup
 
 _LOCMEM = {"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}}
@@ -29,8 +29,8 @@ class WaitlistSignupEndpointTests(TestCase):
         self.assertEqual(signup.email, "a@example.com")
         self.assertEqual(signup.state, WaitlistState.PENDING.value)
         self.assertEqual(signup.source, "hero")
-        # Category isn't asked on the email step, so it starts UNKNOWN.
-        self.assertEqual(signup.category, WaitlistCategory.UNKNOWN.value)
+        # The source vote isn't asked on the email step, so it starts empty.
+        self.assertEqual(signup.source_interests, [])
         self.assertIsNone(signup.invited_at)
         # A welcome email is queued (PENDING), keyed to the signup id.
         welcome = OutboundEmail.objects.get(template="waitlistWelcome")
@@ -56,40 +56,86 @@ class WaitlistSignupEndpointTests(TestCase):
         self.assertFalse(WaitlistSignup.objects.exists())
         self.assertFalse(OutboundEmail.objects.exists())
 
-    def test_category_second_post_records_pick_without_resending_welcome(self) -> None:
-        # Step 1: email only -> created, UNKNOWN, welcome queued once.
+    def test_vote_second_post_records_multiple_without_resending_welcome(self) -> None:
+        # Step 1: email only -> created, no vote, welcome queued once.
         self.client.post("/v1/waitlist", {"email": "a@example.com", "source": "hero"}, format="json")
-        # Step 2 (the confirmation card): same email + a real category pick.
+        # Step 2 (the confirmation card): same email + a multi-select vote.
         resp = self.client.post(
             "/v1/waitlist",
-            {"email": "a@example.com", "source": "hero", "category": "cloud"},
+            {"email": "a@example.com", "source": "hero", "source_interests": ["slack", "github"]},
             format="json",
         )
         self.assertEqual(resp.status_code, 200, resp.content)
         signup = WaitlistSignup.objects.get()
-        self.assertEqual(signup.category, WaitlistCategory.CLOUD.value)
-        # The second post updates in place — no duplicate row, no second welcome.
+        self.assertEqual(
+            signup.source_interests,
+            [WaitlistSourceInterest.SLACK.value, WaitlistSourceInterest.GITHUB.value],
+        )
+        # The second post updates in place: no duplicate row, no second welcome.
         self.assertEqual(WaitlistSignup.objects.count(), 1)
         self.assertEqual(OutboundEmail.objects.filter(template="waitlistWelcome").count(), 1)
 
-    def test_category_in_initial_post_is_persisted(self) -> None:
+    def test_vote_in_initial_post_is_persisted(self) -> None:
         self.client.post(
             "/v1/waitlist",
-            {"email": "a@example.com", "category": "web_ui"},
+            {"email": "a@example.com", "source_interests": ["linkedin"]},
             format="json",
         )
-        self.assertEqual(WaitlistSignup.objects.get().category, WaitlistCategory.WEB_UI.value)
+        self.assertEqual(
+            WaitlistSignup.objects.get().source_interests,
+            [WaitlistSourceInterest.LINKEDIN.value],
+        )
 
-    def test_unknown_category_never_clobbers_an_existing_pick(self) -> None:
-        self.client.post("/v1/waitlist", {"email": "a@example.com", "category": "either"}, format="json")
-        # A later email-only re-submit (UNKNOWN) must not wipe the recorded pick.
+    def test_empty_vote_never_clobbers_an_existing_vote(self) -> None:
+        self.client.post("/v1/waitlist", {"email": "a@example.com", "source_interests": ["github"]}, format="json")
+        # A later email-only re-submit (empty) must not wipe the recorded vote.
         self.client.post("/v1/waitlist", {"email": "a@example.com"}, format="json")
-        self.assertEqual(WaitlistSignup.objects.get().category, WaitlistCategory.EITHER.value)
+        self.assertEqual(
+            WaitlistSignup.objects.get().source_interests,
+            [WaitlistSourceInterest.GITHUB.value],
+        )
 
-    def test_invalid_category_is_rejected(self) -> None:
+    def test_votes_are_deduped(self) -> None:
+        self.client.post(
+            "/v1/waitlist",
+            {"email": "a@example.com", "source_interests": ["slack", "slack", "github"]},
+            format="json",
+        )
+        self.assertEqual(WaitlistSignup.objects.get().source_interests, ["slack", "github"])
+
+    def test_votes_are_canonically_ordered(self) -> None:
+        # Submitted out of enum order; stored in canonical (enum) order so the
+        # vote compares as a set (re-submits in any order are a no-op).
+        self.client.post(
+            "/v1/waitlist",
+            {"email": "a@example.com", "source_interests": ["github", "slack"]},
+            format="json",
+        )
+        self.assertEqual(WaitlistSignup.objects.get().source_interests, ["slack", "github"])
+
+    def test_other_keeps_free_text(self) -> None:
+        self.client.post(
+            "/v1/waitlist",
+            {"email": "a@example.com", "source_interests": ["slack", "other"], "source_interest_other": "Discord"},
+            format="json",
+        )
+        signup = WaitlistSignup.objects.get()
+        self.assertIn(WaitlistSourceInterest.OTHER.value, signup.source_interests)
+        self.assertEqual(signup.source_interest_other, "Discord")
+
+    def test_free_text_dropped_without_other(self) -> None:
+        # Free text only belongs with OTHER; a vote without it must not keep it.
+        self.client.post(
+            "/v1/waitlist",
+            {"email": "a@example.com", "source_interests": ["slack"], "source_interest_other": "Discord"},
+            format="json",
+        )
+        self.assertEqual(WaitlistSignup.objects.get().source_interest_other, "")
+
+    def test_invalid_source_in_vote_is_rejected(self) -> None:
         resp = self.client.post(
             "/v1/waitlist",
-            {"email": "a@example.com", "category": "bogus"},
+            {"email": "a@example.com", "source_interests": ["slack", "bogus"]},
             format="json",
         )
         self.assertEqual(resp.status_code, 400)
