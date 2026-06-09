@@ -210,6 +210,14 @@ class SeedQuickstartTests(TestCase):
             finally:
                 path.unlink()
 
+    def test_negative_days_raises_commanderror(self) -> None:
+        # A negative lookback is a future watermark (feeds/policy rejects it);
+        # surface a clean CommandError before creating anything.
+        with self.assertRaises(CommandError):
+            call_command("seed_quickstart", starter=STARTER, days=-1)
+        self.assertEqual(Feed.objects.count(), 0)
+        self.assertFalse(UserService.Global.email_exists("local@openmagpie.local"))
+
     @override_settings(IS_CLOUD=True)
     def test_gated_to_local(self) -> None:
         with self.assertRaises(CommandError):

@@ -42,7 +42,9 @@ The web UI does not show matches yet, so check the terminal or the CLI.
 
 ## Applying a starter by hand
 
-The YAML files double as `magpie feed/watch create -f` inputs:
+The YAML files double as `magpie feed/watch create -f` inputs. These are
+templates, not copy-paste-ready: the two edits below are required first (the
+`watch create` will reject the `REPLACE_WITH_FEED_ID` placeholder as written).
 
 ```
 magpie feed create -f examples/starters/selfhosted-opensource/feed.yaml

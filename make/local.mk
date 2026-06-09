@@ -76,7 +76,7 @@ local-seed: ## Seed an example feed + watch (e.g. make local-seed STARTER=devtoo
 	@if docker compose exec -T core python -c "import os,urllib.request; urllib.request.urlopen(os.environ.get('OLLAMA_URL','')+'/api/tags', timeout=3)" >/dev/null 2>&1; then \
 		echo "Ollama reachable. Scoring your backlog now: the semantic filter calls your LLM once per post, so this can take a minute. Progress, an ETA, and any matches stream below as they happen."; \
 		if $(MAKE) local-tick; then \
-			aid=$$($(MAKE) -s local-manage CMD="seed_quickstart --print-activity --starter=$(STARTER)" 2>/dev/null | tr -d '\r' | tail -1); \
+			aid=$$(docker compose exec -T core uv run --package openmagpie-core python apps/core/manage.py seed_quickstart --print-activity --starter=$(STARTER) 2>/dev/null | tr -d '\r' | tail -1); \
 			tail="$$([ -n "$$aid" ] && echo "See the matched-vs-filtered breakdown: magpie watch action activity $$aid (after magpie auth login)." || echo "Re-check anytime: magpie watch action activity <action_id> (ids are in the seed summary above).")"; \
 			echo "Tick done. Posts that cleared the threshold printed above, tagged with the starter's prefix (e.g. [oss starter]); a backlog can also score zero on the first pass. $$tail"; \
 		else \
