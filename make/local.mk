@@ -109,6 +109,11 @@ EMAIL_INTERVAL ?= 60
 
 up-jobs: ## Start poll/trigger/drain/digest/email as independent background tickers
 	@mkdir -p $(JOBS_DIR)
+	@# Pre-flight: a lock held BEFORE we start anything is suspicious (a prior
+	@# run's orphan or another machine), and the new tickers would skip every
+	@# pass until it clears. Warn, don't block (|| true), but DON'T hide stderr:
+	@# a failed check (container down, cache unreachable) should be visible.
+	@$(MAKE) --no-print-directory local-manage CMD="clear_job_locks --all --dry-run" || true
 	@$(MAKE) --no-print-directory _job-up NAME=poll    CMD=poll_due_feeds      INTERVAL=$(POLL_INTERVAL)
 	@$(MAKE) --no-print-directory _job-up NAME=trigger CMD=process_due_watches INTERVAL=$(TRIGGER_INTERVAL)
 	@$(MAKE) --no-print-directory _job-up NAME=drain   CMD=process_due_runs    INTERVAL=$(DRAIN_INTERVAL)
@@ -116,20 +121,25 @@ up-jobs: ## Start poll/trigger/drain/digest/email as independent background tick
 	@$(MAKE) --no-print-directory _job-up NAME=email   CMD=send_outbound_emails INTERVAL=$(EMAIL_INTERVAL)
 
 _job-up:
+	@# Print the command name (CMD) alongside the ticker name so the start
+	@# output maps to the job-lock names from `clear_job_locks` (e.g. the
+	@# `poll` ticker runs `poll_due_feeds`, whose lock is `feeds.poll_due_feeds`).
 	@if [ -f $(JOBS_DIR)/$(NAME).pid ] && kill -0 $$(cat $(JOBS_DIR)/$(NAME).pid) 2>/dev/null; then \
-		echo "$(NAME) already running (pid $$(cat $(JOBS_DIR)/$(NAME).pid))"; \
+		echo "$(NAME) ($(CMD)) already running (pid $$(cat $(JOBS_DIR)/$(NAME).pid))"; \
 	else \
 		nohup sh -c 'while true; do $(MAKE) local-manage CMD=$(CMD); sleep $(INTERVAL); done' \
 			>> $(JOBS_DIR)/$(NAME).log 2>&1 & echo $$! > $(JOBS_DIR)/$(NAME).pid; \
-		echo "$(NAME) started (pid $$(cat $(JOBS_DIR)/$(NAME).pid)) every $(INTERVAL)s -> $(JOBS_DIR)/$(NAME).log"; \
+		echo "$(NAME) ($(CMD)) started (pid $$(cat $(JOBS_DIR)/$(NAME).pid)) every $(INTERVAL)s -> $(JOBS_DIR)/$(NAME).log"; \
 	fi
 
-down-jobs: ## Stop the background tickers started by up-jobs
+down-jobs: ## Stop the background tickers started by up-jobs (and clear their job locks)
 	@for n in poll trigger drain digest email; do \
 		if [ -f $(JOBS_DIR)/$$n.pid ]; then \
 			kill $$(cat $(JOBS_DIR)/$$n.pid) 2>/dev/null; rm -f $(JOBS_DIR)/$$n.pid; echo "$$n stopped"; \
 		else echo "$$n not running"; fi; \
 	done
+	@echo "best-effort clearing job locks (an in-container pass may still be finishing; jobs are single-flight over idempotent work, so a brief overlap is harmless)..."
+	@$(MAKE) --no-print-directory local-manage CMD="clear_job_locks --all" || true
 
 local-web: ## Start (or restart) the Next.js dev container (app + marketing) and tail its logs
 	docker compose up -d web

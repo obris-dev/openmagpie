@@ -120,19 +120,31 @@ def path_chain_lock(path_id: str) -> AbstractContextManager[LockLease]:
     )
 
 
+# Cache-key prefix for `job_lock`. Shared with `clear_job_locks` so the ops
+# command deletes the exact key `job_lock` writes (one source of truth).
+JOB_LOCK_KEY_PREFIX = "job_lock:"
+
+
+def job_lock_key(name: str) -> str:
+    """The cache key `job_lock(name)` writes. Use this to clear it."""
+    return f"{JOB_LOCK_KEY_PREFIX}{name}"
+
+
 def job_lock(name: str) -> AbstractContextManager[LockLease]:
     """Single-flight a scheduled job (a management command) by name.
 
     Skip-if-held: yields True iff acquired ; a run that finds a prior pass
     still going gets False and should log + skip rather than pile up behind
-    it. Built on `named_lock`, so release rides the same owner-token
-    finally ; a normal exit, a handled exception, even SIGTERM
-    (SystemExit runs finally) all free it promptly. Only a hard SIGKILL /
-    power loss skips the finally ; `JOB_LOCK_TIMEOUT_SECONDS` (deliberately
-    a full day) is the failsafe that eventually frees a lock orphaned that
-    way, set long so a legitimately hours-long pass never expires it."""
+    it. Built on `named_lock`, so release rides the finally on a normal exit
+    or a handled exception, and on SIGTERM too WHEN it reaches the process
+    that installed the handler (SingleFlightCommand does). When SIGTERM
+    never reaches that process (a supervisor kills a wrapper, e.g. `make
+    down-jobs`) or on a raw SIGKILL / power loss, the finally can't run;
+    `clear_job_locks` is the manual release for those, and
+    `JOB_LOCK_TIMEOUT_SECONDS` (deliberately a full day, so a legitimately
+    hours-long pass never expires) is the eventual failsafe."""
     return named_lock(
-        name=f"job_lock:{name}",
+        name=job_lock_key(name),
         timeout=settings.JOB_LOCK_TIMEOUT_SECONDS,
     )
 

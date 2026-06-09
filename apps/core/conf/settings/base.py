@@ -297,8 +297,11 @@ DIGEST_MAX_BATCH_ITEMS = int(os.environ.get("DIGEST_MAX_BATCH_ITEMS", "500"))
 # synchronously and sequentially (each ~120s, no internal queue), so a
 # backlog makes ONE legit pass run for hours; a short TTL would expire
 # mid-pass and let a second drain in. A full day stays well past any real
-# pass, so the lock only ever frees one orphaned by a hard SIGKILL ; every
-# graceful exit (normal, exception, SIGTERM) releases via the finally.
+# pass. A normal exit, an exception, and a SIGTERM that REACHES the run all
+# release via the finally (SingleFlightCommand turns SIGTERM into a
+# SystemExit). A SIGTERM that doesn't reach it (a supervisor killing a
+# wrapper, e.g. `make down-jobs`) or a hard SIGKILL orphans the lock until
+# the TTL; `manage.py clear_job_locks` is the manual release for those.
 JOB_LOCK_TIMEOUT_SECONDS = int(os.environ.get("JOB_LOCK_TIMEOUT_SECONDS", "86400"))
 
 # Relevance engine defaults. ENGINE_DEFAULT_KIND selects which engine a
