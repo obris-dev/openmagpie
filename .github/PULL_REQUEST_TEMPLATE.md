@@ -10,7 +10,7 @@
 
 ## Testing
 
-<!-- What you ran and what passed: `make dev-check`, specific tests, manual checks.
+<!-- What you ran and what passed: `make local-check`, specific tests, manual checks.
      Call out anything not covered, or any known-unrelated failures. -->
 
 ## Notes

@@ -9,7 +9,7 @@ the first time.
 1. **Fork** the repo (external contributors) or create a branch (maintainers).
 2. Branch from `main` using the naming convention below.
 3. Make your change; keep it focused (one concern per PR).
-4. Run the checks locally (`make dev-check`, plus `make hooks` once so the
+4. Run the checks locally (`make local-check`, plus `make hooks` once so the
    pre-commit hooks run on every commit).
 5. Open a PR against `main`. CI (`lint` + `test`) must pass; `main` only
    takes changes through a PR.
@@ -57,13 +57,13 @@ history scannable and matches the branch types.
 
 ```bash
 make build            # build + start the stack (Django + Postgres + web)
-make dev-migrate      # migrate, create cache table, bootstrap the OAuth app
+make local-migrate      # migrate, create cache table, bootstrap the OAuth app
 make hooks            # install the pre-commit hooks (once)
 
-make dev-check        # the full local gate: lint + types + tests
+make local-check        # the full local gate: lint + types + tests
 ```
 
-`make dev-check` mirrors CI: `ruff` (lint + format), `ty` (types),
+`make local-check` mirrors CI: `ruff` (lint + format), `ty` (types),
 whitespace + file-length, `makemigrations --check`, and the Django test
 suite. See the [README](README.md) for the full dev loop and `make help`
 for every target.

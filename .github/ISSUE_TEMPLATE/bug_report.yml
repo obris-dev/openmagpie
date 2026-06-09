@@ -13,7 +13,7 @@ body:
       label: Steps to reproduce
       placeholder: |
         1. magpie feed create ...
-        2. make dev-tick
+        2. make local-tick
         3. ...
     validations:
       required: true

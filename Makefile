@@ -7,7 +7,7 @@
 DEPLOY_DIR ?= ../deployments
 APP_REPO ?= .
 
-include make/dev.mk
+include make/local.mk
 
 # All infra/prod commands from the private deployments repo become available
 # here when it's a sibling checkout — db-forward, render, release, deploy,

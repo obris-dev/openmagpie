@@ -57,7 +57,7 @@ watches/
   views.py                  # only if the app exposes HTTP
 ```
 
-Apps are created with `python manage.py startapp <name>` inside the container (`make dev-manage CMD="startapp <name>"`), then customized per these conventions.
+Apps are created with `python manage.py startapp <name>` inside the container (`make local-manage CMD="startapp <name>"`), then customized per these conventions.
 
 ## Models & data access
 
@@ -108,7 +108,7 @@ WatchDigestFlushOperation(window, now=now).run()  # emit one digest batch
 - All service functions, manager methods, helpers: fully type-annotated.
 - `django-stubs` is installed so ty resolves `.objects`, manager generics, and field descriptors. When something still trips ty, fix it properly: explicit `ClassVar[Manager[Self]]` annotation, `cast()` at the field boundary, or a small helper in `common/`. `# type: ignore` is a last resort with the specific rule name, used only when no principled fix exists.
 - Generic helpers use PEP 695 type parameters (`def load_typed[T: WatchActionConfigBase](...)`), not `TypeVar`.
-- Run `make dev-types` before declaring done. Don't reach for `# type: ignore`, `# noqa`, or workarounds to make checks pass; find the root cause.
+- Run `make local-types` before declaring done. Don't reach for `# type: ignore`, `# noqa`, or workarounds to make checks pass; find the root cause.
 
 ## Typed-blob pattern (Feed, WatchAction, WatchActionRun)
 
@@ -231,14 +231,14 @@ When persisting structured state in `django.core.cache`:
 - **`common.locks.job_lock`** (app-qualified key `<app>.<command>`, day-long TTL as a crash failsafe) backs `common.commands.SingleFlightCommand`: a scheduled command self-skips (logs) when a prior pass is still running, so plain cron is penalty-free.
 - **`common.locks.path_chain_lock` / `feed_set_lock`** serialize chain / source-set mutations on one entity. Acquire OUTSIDE the transaction.
 - **`select_for_update`** (not a cache lock) is used where the lock must compose with the caller's transaction (the digest window row).
-- `make up-jobs` / `down-jobs` run the background tickers (poll, trigger, drain, flush) with pid+log under `.jobs/` (gitignored). `make dev-tick` runs one pass of each stage now.
+- `make up-jobs` / `down-jobs` run the background tickers (poll, trigger, drain, flush) with pid+log under `.jobs/` (gitignored). `make local-tick` runs one pass of each stage now.
 
 ## Auth + identity
 
 ### Tokens
 
 - **Issued by `django-oauth-toolkit`.** We don't drive its grant flows. `auth_api.services.tokens.mint_token_pair_for_user(user)` is the one seam that creates an `AccessToken` + `RefreshToken` pair against the singleton `magpie-cli` `Application` (public client). Revocation goes through `revoke_access_token(token)` in the same module; deletes the access row + revokes its paired refresh.
-- **OAuth Application bootstrap**: `manage.py bootstrap_oauth_app` is idempotent and runs as part of `make dev-migrate`. Creates the `magpie-cli` Application; the client_id is irrelevant to our flow.
+- **OAuth Application bootstrap**: `manage.py bootstrap_oauth_app` is idempotent and runs as part of `make local-migrate`. Creates the `magpie-cli` Application; the client_id is irrelevant to our flow.
 
 ### One token model, two delivery mechanisms
 

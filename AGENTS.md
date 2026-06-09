@@ -76,12 +76,12 @@ Prefer OSS-aligned / community-governed tools over commercial-OSS hybrids with a
 make build              build images and start
 make up / down          start / stop stack
 make logs               tail everything
-make dev-migrate        run migrations
-make dev-makemigrations ARGS="<app> --name <descriptive_name>"
-make dev-test
-make dev-lint           ruff + whitespace/trailing-newline
-make dev-lint-fix       auto-fix
-make dev-types          ty
-make dev-check          lint + types + test
+make local-migrate        run migrations
+make local-makemigrations ARGS="<app> --name <descriptive_name>"
+make local-test
+make local-lint           ruff + whitespace/trailing-newline
+make local-lint-fix       auto-fix
+make local-types          ty
+make local-check          lint + types + test
 make help               full list
 ```

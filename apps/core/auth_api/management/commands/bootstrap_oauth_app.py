@@ -1,6 +1,6 @@
 """Create the singleton `Application` row used to mint tokens.
 
-Idempotent, safe to run on every `dev-migrate`. The Application's role
+Idempotent, safe to run on every `local-migrate`. The Application's role
 is storage only: our own /v1/auth/* views mint AccessToken / RefreshToken
 rows against it directly, and we DO NOT expose Toolkit's `/oauth/*` HTTP
 surface (see `core/conf/urls.py`). `authorization_grant_type` is set to

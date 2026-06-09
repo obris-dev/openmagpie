@@ -38,7 +38,7 @@ def get_cli_application() -> Application:
     """Return the singleton CLI `Application` row.
 
     Raises `Application.DoesNotExist` if not bootstrapped, callers should
-    have run `manage.py bootstrap_oauth_app` (or `make dev-migrate`) first.
+    have run `manage.py bootstrap_oauth_app` (or `make local-migrate`) first.
     """
     AppModel = get_application_model()
     return AppModel.objects.get(name=CLI_APPLICATION_NAME)

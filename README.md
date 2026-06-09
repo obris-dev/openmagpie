@@ -60,29 +60,29 @@ make quickstart      # create .env, build + wait for health, migrate, print next
 ```bash
 cp apps/core/.env.example apps/core/.env
 make build           # build and start Django + the web app
-make dev-migrate     # run migrations, create cache table, bootstrap the CLI OAuth app
+make local-migrate     # run migrations, create cache table, bootstrap the CLI OAuth app
 ```
 
 Then create an account in the browser (visit http://localhost:3001, you'll be signed in), or use the CLI:
 
 ```bash
-make dev-cli-sync                       # uv sync into the workspace .venv
-make dev-cli ARGS="auth login"          # opens browser device flow
+make local-cli-sync                       # uv sync into the workspace .venv
+make local-cli ARGS="auth login"          # opens browser device flow
 
-make dev-cli ARGS="feed create"         # opens $EDITOR on a feed template (sources + retention)
-make dev-cli ARGS="watch create"        # opens $EDITOR on a watch template (feeds + action chain)
-make dev-tick                           # poll + run the chain once now (vs waiting for the scheduler)
+make local-cli ARGS="feed create"         # opens $EDITOR on a feed template (sources + retention)
+make local-cli ARGS="watch create"        # opens $EDITOR on a watch template (feeds + action chain)
+make local-tick                           # poll + run the chain once now (vs waiting for the scheduler)
 
-make dev-cli ARGS="watch action activity <action_id>"   # per-state summary (+ --list for the run log)
+make local-cli ARGS="watch action activity <action_id>"   # per-state summary (+ --list for the run log)
 ```
 
-A watch's `actions:` chain typically starts with a `semantic_filter` (your natural-language criteria + threshold) followed by a `webhook` or `log` delivery. Pick a backfill window when you create the feed and the first `make dev-tick` scores real posts against your criteria immediately, with no wait for the scheduler.
+A watch's `actions:` chain typically starts with a `semantic_filter` (your natural-language criteria + threshold) followed by a `webhook` or `log` delivery. Pick a backfill window when you create the feed and the first `make local-tick` scores real posts against your criteria immediately, with no wait for the scheduler.
 
 Prefer a global `magpie`? `make install-cli` puts the dev CLI on your `PATH` (a snapshot of this checkout; re-run after a `git pull` to update), then `magpie auth login`.
 
 ### Running it continuously
 
-`make dev-tick` runs one pass by hand. For ongoing operation, start the background scheduler. The four pipeline stages each tick on their own cadence (poll feeds, trigger watches, drain runs, flush digests):
+`make local-tick` runs one pass by hand. For ongoing operation, start the background scheduler. The four pipeline stages each tick on their own cadence (poll feeds, trigger watches, drain runs, flush digests):
 
 ```bash
 make up-jobs                  # start the tickers (a pid + log per stage under .jobs/)
@@ -92,7 +92,7 @@ make down-jobs                # stop them
 
 Each stage is single-flight: a pass that outruns its interval self-skips the next tick, so loops never stack. Production scheduling is then just a plain cron entry per command on the same cadences, with no flock or singleton infrastructure. Override any cadence inline, e.g. `make up-jobs DRAIN_INTERVAL=30`.
 
-Run `make help` for the full target list (`make up` / `down`, `make logs`, `make dev-test`, `make dev-check`, and so on).
+Run `make help` for the full target list (`make up` / `down`, `make logs`, `make local-test`, `make local-check`, and so on).
 
 ## How it works
 
@@ -162,8 +162,8 @@ Delivery is **instant** (per item) or **digest** (a window of items batched into
 `item` is the feed item narrowed to the action's `include_fields`. Each item's `key` is `source:external_id`; delivery is at-least-once, so receivers dedup on it. Every call is recorded as a `WatchActionDelivery` you can inspect:
 
 ```bash
-make dev-cli ARGS="watch action deliveries <webhook_action_id>"   # the list: state / HTTP / host / items / attempt
-make dev-cli ARGS="watch action delivery <delivery_id>"           # one call in full, incl. the exact body sent
+make local-cli ARGS="watch action deliveries <webhook_action_id>"   # the list: state / HTTP / host / items / attempt
+make local-cli ARGS="watch action delivery <delivery_id>"           # one call in full, incl. the exact body sent
 ```
 
 See [AGENTS.md](AGENTS.md) for the design conventions (char pointers, typed-blob pattern, the trigger/drain/flush execution model).

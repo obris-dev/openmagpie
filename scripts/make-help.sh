@@ -1,6 +1,6 @@
 #!/bin/sh
 # Parses ## comments from Makefiles and prints grouped help output.
-# Usage: ./scripts/make-help.sh Makefile make/dev.mk ...
+# Usage: ./scripts/make-help.sh Makefile make/local.mk ...
 
 PURPLE='\033[35m'
 RESET='\033[0m'

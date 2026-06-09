@@ -23,7 +23,7 @@ magpie feed create           # opens $EDITOR on a feed template (sources + reten
 magpie watch create          # opens $EDITOR on a watch template (feeds + action chain)
 ```
 
-Create a feed of sources to watch, then a watch that subscribes to it and runs an action chain over each new item, typically a `semantic_filter` (your plain-English criteria) followed by a `webhook` or `log` delivery. Pick a backfill window when you create the feed and the first `make dev-tick` scores real posts against your criteria immediately.
+Create a feed of sources to watch, then a watch that subscribes to it and runs an action chain over each new item, typically a `semantic_filter` (your plain-English criteria) followed by a `webhook` or `log` delivery. Pick a backfill window when you create the feed and the first `make local-tick` scores real posts against your criteria immediately.
 
 ## Commands
 

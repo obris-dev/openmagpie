@@ -1,6 +1,6 @@
 import os
 
-# Seed dev-only defaults BEFORE importing base.py, so its `os.environ[...]`
+# Seed local-only defaults BEFORE importing base.py, so its `os.environ[...]`
 # reads resolve to localhost values when the env didn't set them. Keeps
 # base.py honest (no localhost fallbacks baked into prod settings) while
 # the dev loop still works out of the box.

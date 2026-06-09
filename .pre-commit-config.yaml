@@ -49,7 +49,7 @@ repos:
         name: ty type check (core + shared schema)
         # ty is a WHOLE-PROGRAM checker: a change in one file can break
         # types in another, so we run the same invocation as
-        # `make dev-types` (pass_filenames: false) instead of only the
+        # `make local-types` (pass_filenames: false) instead of only the
         # staged files. Keeps local + hook + CI in agreement.
         entry: uv run --no-sync ty check apps/core packages/openmagpie-schema
         language: system

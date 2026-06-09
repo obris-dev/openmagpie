@@ -1,9 +1,9 @@
-.PHONY: quickstart install-cli up build down logs logs-core logs-web dev-exec dev-manage dev-test dev-makemigrations dev-dbshell dev-migrate dev-bootstrap dev-tick up-jobs down-jobs _job-up dev-lint dev-lint-fix dev-types dev-check dev-web dev-web-reinstall dev-web-shell dev-cli-sync dev-cli hooks
+.PHONY: quickstart install-cli up build down logs logs-core logs-web local-exec local-manage local-test local-makemigrations local-dbshell local-migrate local-bootstrap local-tick up-jobs down-jobs _job-up local-lint local-lint-fix local-types local-check local-web local-web-reinstall local-web-shell local-cli-sync local-cli hooks
 
 quickstart: ## One command from a fresh clone: env + build (wait healthy) + migrate
 	@test -f apps/core/.env || { cp apps/core/.env.example apps/core/.env; echo "Created apps/core/.env from .env.example"; }
 	docker compose up --build -d --wait
-	$(MAKE) dev-migrate
+	$(MAKE) local-migrate
 	@echo ""
 	@echo "Ready. Next:"
 	@echo "  App:  http://localhost:3001  (create an account; you're signed in)"
@@ -40,35 +40,35 @@ logs-core: ## Tail Django logs
 logs-web: ## Tail Next.js web logs (app + marketing)
 	docker compose logs -f web
 
-dev-exec: ## Run a command in a container (e.g. make dev-exec SVC=core CMD="uv run ruff check .")
+local-exec: ## Run a command in a container (e.g. make local-exec SVC=core CMD="uv run ruff check .")
 	docker compose exec $(SVC) $(CMD)
 
-dev-manage: ## Run Django manage.py command (e.g. make dev-manage CMD=shell)
-	$(MAKE) dev-exec SVC=core CMD="uv run --package openmagpie-core python apps/core/manage.py $(CMD)"
+local-manage: ## Run Django manage.py command (e.g. make local-manage CMD=shell)
+	$(MAKE) local-exec SVC=core CMD="uv run --package openmagpie-core python apps/core/manage.py $(CMD)"
 
-dev-test: ## Run Django test suite
-	$(MAKE) dev-manage CMD=test
+local-test: ## Run Django test suite
+	$(MAKE) local-manage CMD=test
 
-dev-makemigrations: ## Generate Django migration files (e.g. make dev-makemigrations ARGS="myapp")
-	$(MAKE) dev-manage CMD="makemigrations $(ARGS)"
+local-makemigrations: ## Generate Django migration files (e.g. make local-makemigrations ARGS="myapp")
+	$(MAKE) local-manage CMD="makemigrations $(ARGS)"
 
-dev-dbshell: ## Open a psql shell on the Postgres db service
+local-dbshell: ## Open a psql shell on the Postgres db service
 	docker compose exec db psql -U openmagpie -d openmagpie
 
-dev-migrate: ## Run Django database migrations + ensure cache table exists + bootstrap OAuth Application
-	$(MAKE) dev-manage CMD=migrate
-	$(MAKE) dev-manage CMD=createcachetable
-	$(MAKE) dev-manage CMD=bootstrap_oauth_app
+local-migrate: ## Run Django database migrations + ensure cache table exists + bootstrap OAuth Application
+	$(MAKE) local-manage CMD=migrate
+	$(MAKE) local-manage CMD=createcachetable
+	$(MAKE) local-manage CMD=bootstrap_oauth_app
 
-dev-bootstrap: ## Alias for dev-migrate (first-run setup)
-	$(MAKE) dev-migrate
+local-bootstrap: ## Alias for local-migrate (first-run setup)
+	$(MAKE) local-migrate
 
-dev-tick: ## Run one pipeline pass: poll feeds -> trigger watches -> drain runs -> flush digests -> send email
-	$(MAKE) dev-manage CMD="poll_due_feeds"
-	$(MAKE) dev-manage CMD="process_due_watches"
-	$(MAKE) dev-manage CMD="process_due_runs"
-	$(MAKE) dev-manage CMD="process_due_digests"
-	$(MAKE) dev-manage CMD="send_outbound_emails"
+local-tick: ## Run one pipeline pass: poll feeds -> trigger watches -> drain runs -> flush digests -> send email
+	$(MAKE) local-manage CMD="poll_due_feeds"
+	$(MAKE) local-manage CMD="process_due_watches"
+	$(MAKE) local-manage CMD="process_due_runs"
+	$(MAKE) local-manage CMD="process_due_digests"
+	$(MAKE) local-manage CMD="send_outbound_emails"
 
 # Background tickers: each stage on its OWN cadence (they're decoupled ;
 # poll writes items, trigger enqueues runs, drain executes them). Each
@@ -96,7 +96,7 @@ _job-up:
 	@if [ -f $(JOBS_DIR)/$(NAME).pid ] && kill -0 $$(cat $(JOBS_DIR)/$(NAME).pid) 2>/dev/null; then \
 		echo "$(NAME) already running (pid $$(cat $(JOBS_DIR)/$(NAME).pid))"; \
 	else \
-		nohup sh -c 'while true; do $(MAKE) dev-manage CMD=$(CMD); sleep $(INTERVAL); done' \
+		nohup sh -c 'while true; do $(MAKE) local-manage CMD=$(CMD); sleep $(INTERVAL); done' \
 			>> $(JOBS_DIR)/$(NAME).log 2>&1 & echo $$! > $(JOBS_DIR)/$(NAME).pid; \
 		echo "$(NAME) started (pid $$(cat $(JOBS_DIR)/$(NAME).pid)) every $(INTERVAL)s -> $(JOBS_DIR)/$(NAME).log"; \
 	fi
@@ -108,41 +108,41 @@ down-jobs: ## Stop the background tickers started by up-jobs
 		else echo "$$n not running"; fi; \
 	done
 
-dev-web: ## Start (or restart) the Next.js dev container (app + marketing) and tail its logs
+local-web: ## Start (or restart) the Next.js dev container (app + marketing) and tail its logs
 	docker compose up -d web
 	docker compose logs -f web
 
-dev-web-reinstall: ## Recreate the web container so it re-runs pnpm install (after adding a web dependency), then tail logs
+local-web-reinstall: ## Recreate the web container so it re-runs pnpm install (after adding a web dependency), then tail logs
 	docker compose up -d --force-recreate web
 	docker compose logs -f web
 
-dev-web-shell: ## Open a shell in the web container
+local-web-shell: ## Open a shell in the web container
 	docker compose exec web sh
 
-dev-cli-sync: ## Sync the uv workspace (one root .venv for all members)
+local-cli-sync: ## Sync the uv workspace (one root .venv for all members)
 	uv sync
-	@echo "Run: make dev-cli ARGS=\"auth login\""
+	@echo "Run: make local-cli ARGS=\"auth login\""
 
-dev-cli: ## Run the magpie CLI via uv (e.g. make dev-cli ARGS="auth login")
+local-cli: ## Run the magpie CLI via uv (e.g. make local-cli ARGS="auth login")
 	uv run --package openmagpie-cli magpie $(ARGS)
 
-dev-lint: ## Run linters (ruff + whitespace/final-newline on tracked text files)
-	$(MAKE) dev-exec SVC=core CMD="uv run ruff check ."
-	$(MAKE) dev-exec SVC=core CMD="uv run ruff format --check ."
+local-lint: ## Run linters (ruff + whitespace/final-newline on tracked text files)
+	$(MAKE) local-exec SVC=core CMD="uv run ruff check ."
+	$(MAKE) local-exec SVC=core CMD="uv run ruff format --check ."
 	./scripts/check-whitespace.sh
 
-dev-lint-fix: ## Auto-fix lint issues
-	$(MAKE) dev-exec SVC=core CMD="uv run ruff check --fix ."
-	$(MAKE) dev-exec SVC=core CMD="uv run ruff format ."
+local-lint-fix: ## Auto-fix lint issues
+	$(MAKE) local-exec SVC=core CMD="uv run ruff check --fix ."
+	$(MAKE) local-exec SVC=core CMD="uv run ruff format ."
 	./scripts/check-whitespace.sh --fix
 
-dev-types: ## Run ty static type checker (core + shared schema pkg)
-	$(MAKE) dev-exec SVC=core CMD="uv run --package openmagpie-core ty check apps/core packages/openmagpie-schema"
+local-types: ## Run ty static type checker (core + shared schema pkg)
+	$(MAKE) local-exec SVC=core CMD="uv run --package openmagpie-core ty check apps/core packages/openmagpie-schema"
 
-dev-check: ## Run lint + types + tests (pre-commit habit)
-	$(MAKE) dev-lint
-	$(MAKE) dev-types
-	$(MAKE) dev-test
+local-check: ## Run lint + types + tests (pre-commit habit)
+	$(MAKE) local-lint
+	$(MAKE) local-types
+	$(MAKE) local-test
 
 hooks: ## Install git pre-commit hooks (.pre-commit-config.yaml)
 	uvx pre-commit install
