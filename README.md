@@ -27,7 +27,13 @@ OpenMagpie listens wherever communities are having those conversations.
 
 ## Quickstart
 
-Clone and run one command for your first real match. No account, no YAML to write:
+One command for your first real match (Docker required; it clones the repo and runs the quickstart for you):
+
+```bash
+curl -fsSL https://openmagpie.ai | sh
+```
+
+Prefer to clone first?
 
 ```bash
 git clone https://github.com/obris-dev/openmagpie.git
@@ -35,7 +41,7 @@ cd openmagpie
 ./scripts/quickstart/run.sh
 ```
 
-This seeds an example feed + watch (a couple of subreddits, a natural-language filter, a `log` delivery) and, once an Ollama is reachable, runs the pipeline once so the first matches print straight to the logs, tagged with the starter's prefix (e.g. `[oss starter]`). Matches show up in the terminal and the CLI activity log, not the web UI yet. Want a different example or a wider lookback? `STARTER=devtools DAYS=7 ./scripts/quickstart/seed.sh`. See [examples/README.md](examples/README.md) for the full list of starters.
+Either way it seeds an example feed + watch (a couple of subreddits, a natural-language filter, a `log` delivery) and, once an Ollama is reachable, runs the pipeline once so the first matches print straight to the logs, tagged with the starter's prefix (e.g. `[oss starter]`). Matches show up in the terminal and the CLI activity log, not the web UI yet. Want a different example or a wider lookback? `STARTER=devtools DAYS=7 ./scripts/quickstart/seed.sh`. See [examples/README.md](examples/README.md) for the full list of starters.
 
 ### Prereq: an Ollama instance
 
@@ -88,15 +94,6 @@ make down-jobs                # stop them
 Each stage is single-flight: a pass that outruns its interval self-skips the next tick, so loops never stack. Production scheduling is then just a plain cron entry per command on the same cadences, with no flock or singleton infrastructure. Override any cadence inline, e.g. `make up-jobs DRAIN_INTERVAL=30`.
 
 Run `make help` for the full target list (`make up` / `down`, `make logs`, `make local-test`, `make local-check`, and so on).
-
-## Why self-host it
-
-Social listening is a crowded market (Brand24, Mention, Octolens, Syften, and tools like OutX that pair monitoring with AI-drafted replies). They are all closed SaaS behind a paid plan, a trial, or a sales demo, and the few genuinely free options are basic mention notifiers, not full listening. OpenMagpie is the open, self-hostable exception: run it on your own box with your own model for the cost of the hardware.
-
-- **Open source.** Apache 2.0, the whole stack. Read it, fork it, and extend the connectors and engines yourself.
-- **Bring your own LLM.** Relevance is judged by an LLM you run (Ollama today), so your criteria and your matches never leave your infrastructure.
-- **Natural-language matching.** You describe what's relevant in natural language and the model scores each new post on meaning.
-- **Auditable.** Every poll, judgement, and delivery is a row you can inspect (`magpie watch action activity` / `deliveries`).
 
 ## How it works
 
@@ -171,6 +168,15 @@ make local-cli ARGS="watch action delivery <delivery_id>"           # one call i
 ```
 
 See [AGENTS.md](AGENTS.md) for the design conventions (char pointers, typed-blob pattern, the trigger/drain/flush execution model).
+
+## Why self-host it
+
+Social listening is a crowded market (Brand24, Mention, Octolens, Syften, and tools like OutX that pair monitoring with AI-drafted replies). They are all closed SaaS behind a paid plan, a trial, or a sales demo, and the few genuinely free options are basic mention notifiers, not full listening. OpenMagpie is the open, self-hostable exception: run it on your own box with your own model for the cost of the hardware.
+
+- **Open source.** Apache 2.0, the whole stack. Read it, fork it, and extend the connectors and engines yourself.
+- **Bring your own LLM.** Relevance is judged by an LLM you run (Ollama today), so your criteria and your matches never leave your infrastructure.
+- **Natural-language matching.** You describe what's relevant in natural language and the model scores each new post on meaning.
+- **Auditable.** Every poll, judgement, and delivery is a row you can inspect (`magpie watch action activity` / `deliveries`).
 
 ## What's shipped today
 

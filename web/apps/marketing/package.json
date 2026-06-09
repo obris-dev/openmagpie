@@ -2,8 +2,11 @@
   "name": "@magpie/marketing",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "scripts": {
     "dev": "next dev -p 3000",
+    "copy-installer": "cp \"$(git rev-parse --show-toplevel)/scripts/quickstart/bootstrap.sh\" public/install.sh",
+    "prebuild": "pnpm run copy-installer",
     "build": "next build",
     "start": "next start -p 3000",
     "lint": "next lint",
