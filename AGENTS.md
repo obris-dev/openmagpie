@@ -4,9 +4,9 @@ Conventions for AI coding agents (Claude Code, Codex, Cursor, etc.) and human co
 
 This file is cross-cutting only. Each top-level app owns its own conventions:
 
-- [apps/core/AGENTS.md](apps/core/AGENTS.md) — Django backend (models, services, auth, plugins)
-- [apps/cli/AGENTS.md](apps/cli/AGENTS.md) — `magpie` CLI (Typer + httpx + Pydantic)
-- [web/AGENTS.md](web/AGENTS.md) — pnpm workspace (Next.js + shared packages)
+- [apps/core/AGENTS.md](apps/core/AGENTS.md): Django backend (models, services, auth, plugins)
+- [apps/cli/AGENTS.md](apps/cli/AGENTS.md): `magpie` CLI (Typer + httpx + Pydantic)
+- [web/AGENTS.md](web/AGENTS.md): pnpm workspace (Next.js + shared packages)
 
 When working in `apps/core/`, `apps/cli/`, or `web/`, load the matching `AGENTS.md` alongside this one.
 
@@ -15,9 +15,9 @@ When working in `apps/core/`, `apps/cli/`, or `web/`, load the matching `AGENTS.
 An open-source semantic listener. Tell it what to listen for; it picks out what matters from any stream and learns over time.
 
 Three things stay pluggable across the codebase:
-- **Connectors** (Reddit, GitHub, GDocs, Slack, ...) — yield typed `SourcePayload` subclasses from each source
-- **Engines** (Ollama, future Anthropic/OpenAI/keyword) — BYO LLM that judges a `SourcePayload` for a semantic-filter action
-- **Action kinds** (semantic_filter, webhook, log, future keyword/Slack/email) — the steps a Watch runs over each feed item: filter, then deliver
+- **Connectors** (Reddit, GitHub, GDocs, Slack, ...): yield typed `SourcePayload` subclasses from each source
+- **Engines** (Ollama, future Anthropic/OpenAI/keyword): BYO LLM that judges a `SourcePayload` for a semantic-filter action
+- **Action kinds** (semantic_filter, webhook, log, future keyword/Slack/email): the steps a Watch runs over each feed item (filter, then deliver)
 
 The product is **only** a listener: watches, judges, learns, notifies. It does NOT auto-reply, post back to sources, run workflows, or generate reports. Scope test: if a feature isn't listening / learning / notifying, it's out.
 
@@ -48,6 +48,7 @@ pyproject.toml + uv.lock    uv workspace root (one lock for all members)
 - **No em dashes.** Use commas or periods. Applies to UI text, comments, docs.
 - **Convention docs describe what to do.** No justifications, no historical context, no "we chose X because of Y." Forward-looking constraints are fine; past-decision narratives are not.
 - **Branch names are `<type>/<kebab-slug>`.** Type is a Conventional-Commits prefix (`feat` | `fix` | `docs` | `refactor` | `test` | `chore` | `ci` | `perf` | `build` | `style` | `revert`); `main` is exempt. Enforced by `scripts/check-branch-name.sh` (pre-commit + CI). See [CONTRIBUTING.md](CONTRIBUTING.md) for the per-type meanings and the PR flow.
+- **PR descriptions follow `What` → `How` → `Testing` → `Notes`.** `What` is the change and why; `How` is the approach, grouped by area (Backend / Web / Docs / ...) when it spans several; `Testing` states what you ran and what passed; `Notes` is optional (caveats, follow-ups, out-of-scope). Scaffolded by [`.github/PULL_REQUEST_TEMPLATE.md`](.github/PULL_REQUEST_TEMPLATE.md).
 
 ## Stack
 
@@ -59,7 +60,7 @@ pyproject.toml + uv.lock    uv workspace root (one lock for all members)
 Deliberately deferred until concrete need:
 - **Redis / Celery / Celery-beat** when async or scheduled work shows up
 - **Garage** (S3-compatible blob storage; NOT MinIO) when we need blobs
-- **Django admin** — `manage.py shell` or custom commands for v0
+- **Django admin**: `manage.py shell` or custom commands for v0
 
 Do NOT proactively re-add deferred infra. Wait for a concrete need.
 

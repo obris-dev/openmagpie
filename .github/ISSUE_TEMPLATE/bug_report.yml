@@ -1,0 +1,42 @@
+name: Bug report
+description: Something isn't working as expected
+labels: ["bug"]
+body:
+  - type: textarea
+    attributes:
+      label: What happened?
+      description: What you did, what you expected, and what you got instead.
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. magpie feed create ...
+        2. make dev-tick
+        3. ...
+    validations:
+      required: true
+  - type: dropdown
+    attributes:
+      label: Area
+      options:
+        - Connector (Reddit/RSS)
+        - Engine (Ollama)
+        - Watches / actions
+        - Webhook delivery
+        - CLI
+        - Web UI
+        - Setup / running locally
+        - Other
+  - type: textarea
+    attributes:
+      label: Environment
+      placeholder: "OS, how you run it (docker compose), Ollama model, git SHA (`git rev-parse --short HEAD`)"
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Relevant logs
+      description: "From `make logs` or `.jobs/*.log`. Redact secrets."
+      render: shell
