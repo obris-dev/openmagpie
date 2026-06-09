@@ -224,7 +224,7 @@ export function WaitlistForm({ idPrefix = "wl" }: { idPrefix?: string }) {
         </form>
       ) : (
         <p className="mt-2.5 text-xs text-ink/60 dark:text-paper/60">
-          Thanks for the help! We&apos;ll be in touch.
+          Thanks for the input! We&apos;ll be in touch.
         </p>
       )}
     </div>
