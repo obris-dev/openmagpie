@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/sh
 #
 # Enforce the branch-name convention: <type>/<kebab-slug>, where <type> is a
 # Conventional-Commits prefix. Used by BOTH the pre-commit hook (validates the
@@ -15,17 +15,20 @@
 #   ./scripts/check-branch-name.sh [branch-name]
 # With no argument it reads the current branch from git.
 
-set -euo pipefail
+set -eu
 
 branch="${1:-$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo HEAD)}"
 
 # Detached HEAD (rebase in progress, CI checkout): nothing to validate.
-[[ "$branch" == "HEAD" || -z "$branch" ]] && exit 0
+if [ "$branch" = "HEAD" ] || [ -z "$branch" ]; then exit 0; fi
 # The default branch is exempt.
-[[ "$branch" == "main" ]] && exit 0
+if [ "$branch" = "main" ]; then exit 0; fi
 
+# POSIX sh has no `[[ =~ ]]`, so match the anchored regex with grep -E. grep
+# anchors per line, not whole-string like `[[ =~ ]]`, but a git refname can't
+# contain a newline (and the only other input is a dev's argv), so it's moot.
 pattern='^(feat|fix|docs|refactor|test|chore|ci|perf|build|style|revert)/[a-z0-9][a-z0-9._-]*$'
-if [[ "$branch" =~ $pattern ]]; then
+if printf '%s\n' "$branch" | grep -Eq "$pattern"; then
     exit 0
 fi
 

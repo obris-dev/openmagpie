@@ -11,18 +11,18 @@ Available starters:
 - `devtools`: r/devops + r/programming, listening for people hitting a problem
   a developer tool could solve, or asking for a tool recommendation.
 
-## Quickest path: seed it
+## Quickstart
 
 ```
-make quickstart        # env + build + migrate, then seeds and ticks
+./scripts/quickstart/run.sh    # check Docker, .env, build, migrate, seed, hooks
 ```
 
-`make quickstart` seeds the `selfhosted-opensource` starter into a local dev
-account and, if your Ollama is reachable, runs one tick so you see matches right
-away. Run a different starter or a wider lookback on demand:
+`run.sh` seeds the `selfhosted-opensource` starter into a local dev account and,
+if your Ollama is reachable, runs one tick so you see matches right away. Run a
+different starter or a wider lookback on demand:
 
 ```
-make local-seed STARTER=devtools DAYS=7
+STARTER=devtools DAYS=7 ./scripts/quickstart/seed.sh
 ```
 
 The seed creates an initial account, user, feed, and watch. It also sets a

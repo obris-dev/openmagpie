@@ -254,9 +254,7 @@ class Command(BaseCommand):
     ) -> None:
         self.stdout.write(f"Seeded as {email} ({account_name}). Account login: {email} / {password}")
         self.stdout.write(f"Feed {feed.id} ({len(sources)} sources, looking back {days}d). Watch {watch.id}.")
-        self.stdout.write(
-            "Matches print to the terminal when the chain runs (the starter's log lines), e.g. via `make local-tick`."
-        )
+        self.stdout.write("Matches print to the terminal when the pipeline runs (the starter's log lines).")
         if gate_action_id is not None:
             self.stdout.write(
                 f"Inspect matched vs filtered: `magpie watch action activity {gate_action_id}` (after `magpie auth login`)."

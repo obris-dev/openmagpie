@@ -1,6 +1,6 @@
 # OpenMagpie starter: developer-tooling listening.
 # Apply with the seed flow (it sets the first-tick lookback for you):
-#   make quickstart        (seeds + ticks)   or   make local-seed STARTER=devtools
+#   ./scripts/quickstart/run.sh   or   STARTER=devtools ./scripts/quickstart/seed.sh   (seed only)
 # Applying by hand with `magpie feed create -f` works too, but then YOU set a
 # past last_event_at on each source or the first tick only sees brand-new posts.
 # Full walkthrough: examples/README.md

@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/sh
 #
 # Fails if any tracked Python file exceeds LIMIT lines.
 #
@@ -15,7 +15,7 @@
 #
 # Exits non-zero with a per-file report when over the limit.
 
-set -euo pipefail
+set -eu
 
 cd "$(git rev-parse --show-toplevel)"
 
@@ -28,24 +28,30 @@ LIMIT=350
 # show up.
 EXEMPT_PATTERN='(^|/)(migrations|\.venv|conf/settings)/'
 
-violations=()
+# POSIX sh has no arrays, so accumulate violations into a newline-separated
+# string ($nl is a literal newline). The loop reads from a heredoc-of-command-
+# substitution rather than a `< <(...)` process substitution (a bashism) or a
+# pipe (which would run the loop in a subshell and lose `violations`).
+nl='
+'
+violations=""
 
 while IFS= read -r file; do
-    [[ -f "$file" ]] || continue
-    if [[ "$file" =~ $EXEMPT_PATTERN ]]; then
-        continue
-    fi
+    [ -f "$file" ] || continue
+    printf '%s\n' "$file" | grep -Eq "$EXEMPT_PATTERN" && continue
     lines=$(wc -l < "$file" | tr -d '[:space:]')
-    if (( lines > LIMIT )); then
+    if [ "$lines" -gt "$LIMIT" ]; then
         over=$(( lines - LIMIT ))
-        violations+=("$file: $lines lines (over by $over)")
+        violations="$violations  $file: $lines lines (over by $over)$nl"
     fi
-done < <(git ls-files '*.py')
+done <<EOF
+$(git ls-files '*.py')
+EOF
 
-if (( ${#violations[@]} > 0 )); then
+if [ -n "$violations" ]; then
     echo "File length: $LIMIT-line limit exceeded"
     echo
-    printf '  %s\n' "${violations[@]}"
+    printf '%s' "$violations"
     echo
     echo "To fix: split distinct concerns into their own modules."
     echo "If one concept legitimately spans more, convert the file into a"

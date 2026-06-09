@@ -29,7 +29,7 @@ apps/cli/                   magpie CLI (see apps/cli/AGENTS.md)
 packages/openmagpie-schema/ pure Pydantic models shared by core + cli
 web/                        pnpm workspace, Next.js (see web/AGENTS.md)
 make/                       Per-concern Makefile targets
-scripts/                    Helper scripts (lint, whitespace, make-help)
+scripts/                    quickstart installer (quickstart/{bootstrap,run,seed}.sh) + dev tooling (check-docker, hooks, lint/whitespace/branch checks, make-help)
 pyproject.toml + uv.lock    uv workspace root (one lock for all members)
 ```
 
@@ -46,6 +46,7 @@ pyproject.toml + uv.lock    uv workspace root (one lock for all members)
 
 - **State-machine values get a const object + derived type from the start.** No bare string literals in match arms or status checks. Python: `class Status(Enum): ...`. TypeScript: `const PHASE = {...} as const; type Phase = typeof PHASE[keyof typeof PHASE]`.
 - **No em dashes.** Use commas or periods. Applies to UI text, comments, docs.
+- **Shell scripts are POSIX `sh`.** `#!/bin/sh`, no bashisms (`[[ ]]`, `=~`, arrays, `local`, `set -o pipefail`, `${BASH_SOURCE}`, `< <(...)`). Everything in `scripts/` must pass `shellcheck -s sh` (enforced in pre-commit + CI).
 - **Convention docs describe what to do.** No justifications, no historical context, no "we chose X because of Y." Forward-looking constraints are fine; past-decision narratives are not.
 - **Branch names are `<type>/<kebab-slug>`.** Type is a Conventional-Commits prefix (`feat` | `fix` | `docs` | `refactor` | `test` | `chore` | `ci` | `perf` | `build` | `style` | `revert`); `main` is exempt. Enforced by `scripts/check-branch-name.sh` (pre-commit + CI). See [CONTRIBUTING.md](CONTRIBUTING.md) for the per-type meanings and the PR flow.
 - **PR descriptions follow `What` → `How` → `Testing` → `Notes`.** `What` is the change and why; `How` is the approach, grouped by area (Backend / Web / Docs / ...) when it spans several; `Testing` states what you ran and what passed; `Notes` is optional (caveats, follow-ups, out-of-scope). Scaffolded by [`.github/PULL_REQUEST_TEMPLATE.md`](.github/PULL_REQUEST_TEMPLATE.md).

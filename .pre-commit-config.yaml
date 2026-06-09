@@ -13,6 +13,17 @@ repos:
         args: [--fix]
       - id: ruff-format    # format
 
+  - repo: https://github.com/shellcheck-py/shellcheck-py
+    rev: v0.10.0.1
+    hooks:
+      # Everything in scripts/ is POSIX sh (the curl|sh installer plus, for
+      # uniformity, the dev tooling). `-s sh` lints as POSIX, so a future
+      # bashism ([[, arrays, local, set -o pipefail, $BASH_SOURCE) fails here.
+      # shellcheck-py ships the binary via pip (no Docker needed per commit).
+      - id: shellcheck
+        args: [-s, sh]
+        files: ^scripts/.*\.sh$
+
   - repo: local
     hooks:
       - id: check-branch-name

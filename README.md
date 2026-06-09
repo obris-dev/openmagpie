@@ -25,22 +25,17 @@ OpenMagpie listens wherever communities are having those conversations.
 - **Public discussion (today):** Reddit, Hacker News, and any RSS or Atom feed (news, blogs, Substack publications, and forums that publish feeds).
 - **Communities you're in (roadmap):** Slack workspaces and LinkedIn you already belong to, so you catch relevant threads in the groups where you participate, no admin or app install required.
 
-## Why self-host it
+## Quickstart
 
-Social listening is a crowded market (Brand24, Mention, Octolens, Syften, and tools like OutX that pair monitoring with AI-drafted replies). They are all closed SaaS behind a paid plan, a trial, or a sales demo, and the few genuinely free options are basic mention notifiers, not full listening. OpenMagpie is the open, self-hostable exception: run it on your own box with your own model for the cost of the hardware.
+Clone and run one command for your first real match. No account, no YAML to write:
 
-- **Open source.** Apache 2.0, the whole stack. Read it, fork it, and extend the connectors and engines yourself.
-- **Bring your own LLM.** Relevance is judged by an LLM you run (Ollama today), so your criteria and your matches never leave your infrastructure.
-- **Natural-language matching.** You describe what's relevant in natural language and the model scores each new post on meaning.
-- **Auditable.** Every poll, judgement, and delivery is a row you can inspect (`magpie watch action activity` / `deliveries`).
+```bash
+git clone https://github.com/obris-dev/openmagpie.git
+cd openmagpie
+./scripts/quickstart/run.sh
+```
 
-## Quick start
-
-Your first real match is a few steps away: clone the repo, point a feed at a subreddit, write a natural-language filter, and run it against live posts.
-
-### Try it instantly
-
-`make quickstart` seeds an example feed + watch into a local dev account (a couple of subreddits, a natural-language filter, a `log` delivery) and, with an Ollama up, runs one tick so the first matches print straight to the logs, tagged with the starter's prefix (e.g. `[oss starter]`). No account creation, no YAML to write. Want a different example or a wider lookback? `make local-seed STARTER=devtools DAYS=7`. Matches show up in the terminal and the CLI activity log, not the web UI yet. See [examples/README.md](examples/README.md) for the full list of starters.
+This seeds an example feed + watch (a couple of subreddits, a natural-language filter, a `log` delivery) and, once an Ollama is reachable, runs the pipeline once so the first matches print straight to the logs, tagged with the starter's prefix (e.g. `[oss starter]`). Matches show up in the terminal and the CLI activity log, not the web UI yet. Want a different example or a wider lookback? `STARTER=devtools DAYS=7 ./scripts/quickstart/seed.sh`. See [examples/README.md](examples/README.md) for the full list of starters.
 
 ### Prereq: an Ollama instance
 
@@ -51,21 +46,16 @@ OpenMagpie is BYO LLM; the dev stack doesn't bundle one. Point it at an Ollama y
 
 Set `OLLAMA_DEFAULT_MODEL` to the model you want to judge with. A 7B model judges in roughly 1 to 3 seconds on Apple Silicon or a recent NVIDIA GPU; CPU-only works but is slower.
 
-### Run the stack
+### Step by step
 
-```bash
-git clone git@github.com:obris-dev/openmagpie.git
-cd openmagpie
-make quickstart      # create .env, build + wait for health, migrate, seed + tick, print next steps
-```
-
-`make quickstart` is the one-shot path. The equivalent manual steps:
+`./scripts/quickstart/run.sh` (above) is the one-shot path: it checks Docker, creates `.env`, builds and waits for health, migrates, seeds, and installs git hooks. It's make-free, so a bare clone with just Docker can run it. The equivalent manual steps:
 
 ```bash
 cp apps/core/.env.example apps/core/.env
-make build           # build and start Django + the web app
-make local-migrate   # run migrations, create cache table, bootstrap the CLI OAuth app
-make local-seed      # seed an example feed + watch, then tick if Ollama is reachable
+make build                    # build and start Django + the web app
+make local-migrate            # run migrations, create cache table, bootstrap the CLI OAuth app
+./scripts/quickstart/seed.sh  # seed an example feed + watch, then tick if Ollama is reachable
+make hooks                    # install the pre-commit git hooks (best-effort; needs uv)
 ```
 
 Then create an account in the browser (visit http://localhost:3001, you'll be signed in), or use the CLI:
@@ -98,6 +88,15 @@ make down-jobs                # stop them
 Each stage is single-flight: a pass that outruns its interval self-skips the next tick, so loops never stack. Production scheduling is then just a plain cron entry per command on the same cadences, with no flock or singleton infrastructure. Override any cadence inline, e.g. `make up-jobs DRAIN_INTERVAL=30`.
 
 Run `make help` for the full target list (`make up` / `down`, `make logs`, `make local-test`, `make local-check`, and so on).
+
+## Why self-host it
+
+Social listening is a crowded market (Brand24, Mention, Octolens, Syften, and tools like OutX that pair monitoring with AI-drafted replies). They are all closed SaaS behind a paid plan, a trial, or a sales demo, and the few genuinely free options are basic mention notifiers, not full listening. OpenMagpie is the open, self-hostable exception: run it on your own box with your own model for the cost of the hardware.
+
+- **Open source.** Apache 2.0, the whole stack. Read it, fork it, and extend the connectors and engines yourself.
+- **Bring your own LLM.** Relevance is judged by an LLM you run (Ollama today), so your criteria and your matches never leave your infrastructure.
+- **Natural-language matching.** You describe what's relevant in natural language and the model scores each new post on meaning.
+- **Auditable.** Every poll, judgement, and delivery is a row you can inspect (`magpie watch action activity` / `deliveries`).
 
 ## How it works
 
@@ -219,7 +218,7 @@ packages/
   openmagpie-schema/          Pure Pydantic models shared by core + cli (configs, wire types, feed shapes)
 web/                          pnpm workspace: apps/{app,marketing,email-render} (Next.js) + packages/{ui,api-utils,auth,tailwind-config}
 make/                         Per-concern Makefile targets
-scripts/                      Helper scripts (whitespace check, make-help)
+scripts/                      quickstart installer (quickstart/{bootstrap,run,seed}.sh) + dev tooling (Docker preflight, git hooks, whitespace/branch/length checks, make-help)
 ```
 
 ## Documentation

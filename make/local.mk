@@ -1,25 +1,13 @@
-.PHONY: quickstart install-cli up build down logs logs-core logs-web local-exec local-manage local-test local-makemigrations local-dbshell local-migrate local-bootstrap local-seed local-tick up-jobs down-jobs _job-up local-lint local-lint-fix local-types local-check local-web local-web-reinstall local-web-shell local-cli-sync local-cli hooks
+.PHONY: install-cli up build down logs logs-core logs-web local-exec local-manage local-test local-makemigrations local-dbshell local-migrate local-tick up-jobs down-jobs _job-up local-lint local-lint-fix local-types local-check local-web local-web-reinstall local-web-shell local-cli-sync local-cli hooks
 
-# Quickstart seed knobs: which starter to seed and how far back the first tick
-# looks. Override per invocation: make local-seed STARTER=devtools DAYS=7
-STARTER ?= selfhosted-opensource
-DAYS ?= 3
-
-quickstart: ## One command from a fresh clone: env + build (wait healthy) + migrate + seed an example
-	@test -f apps/core/.env || { cp apps/core/.env.example apps/core/.env; echo "Created apps/core/.env from .env.example"; }
-	docker compose up --build -d --wait
-	$(MAKE) local-migrate
-	$(MAKE) local-seed
-	@echo ""
-	@echo "Ready. Next:"
-	@echo "  App:  http://localhost:3001  (create an account; you're signed in)"
-	@echo "  Site: http://localhost:3000  (marketing landing)"
-	@echo "  CLI:  make install-cli   then   magpie auth login"
-	@echo "  Seeded: an example feed + watch exist (login local@openmagpie.local). Run"
-	@echo "          make local-tick (once Ollama is up) to see [oss starter] matches in the logs."
-	@echo ""
-	@echo "Heads up: OpenMagpie is BYO-LLM. Point OLLAMA_URL in apps/core/.env at"
-	@echo "an Ollama you control (default host.docker.internal:11434)."
+# Getting started is the curl|sh installer (scripts/quickstart/bootstrap.sh) or,
+# in a clone, ./scripts/quickstart/run.sh. That orchestration lives in POSIX sh,
+# make-free, so make stays the dev-loop interface.
+#
+# These targets call scripts via `./scripts/...` (make runs in a git checkout
+# where the 100755 bit is intact). The quickstart scripts instead invoke each
+# other via `sh ./script`, which doesn't depend on +x surviving a fresh clone
+# or a tarball download.
 
 install-cli: ## Install the DEV magpie CLI on your PATH (snapshot of this checkout)
 	# NOT --editable: the cli depends on the openmagpie-schema workspace package,
@@ -34,6 +22,7 @@ up: ## Start local Docker dev environment
 	docker compose up -d
 
 build: ## Rebuild Docker images and start
+	@./scripts/check-docker.sh
 	docker compose up --build -d
 
 down: ## Stop local Docker dev environment
@@ -64,27 +53,10 @@ local-dbshell: ## Open a psql shell on the Postgres db service
 	docker compose exec db psql -U openmagpie -d openmagpie
 
 local-migrate: ## Run Django database migrations + ensure cache table exists + bootstrap OAuth Application
+	# scripts/quickstart/run.sh runs these same three commands (make-free); keep in sync.
 	$(MAKE) local-manage CMD=migrate
 	$(MAKE) local-manage CMD=createcachetable
 	$(MAKE) local-manage CMD=bootstrap_oauth_app
-
-local-bootstrap: ## Alias for local-migrate (first-run setup)
-	$(MAKE) local-migrate
-
-local-seed: ## Seed an example feed + watch (e.g. make local-seed STARTER=devtools DAYS=7), then tick if Ollama is reachable
-	$(MAKE) local-manage CMD="seed_quickstart --starter=$(STARTER) --days=$(DAYS)"
-	@if docker compose exec -T core python -c "import os,urllib.request; urllib.request.urlopen(os.environ.get('OLLAMA_URL','')+'/api/tags', timeout=3)" >/dev/null 2>&1; then \
-		echo "Ollama reachable. Scoring your backlog now: the semantic filter calls your LLM once per post, so this can take a minute. Progress, an ETA, and any matches stream below as they happen."; \
-		if $(MAKE) local-tick; then \
-			aid=$$(docker compose exec -T core uv run --package openmagpie-core python apps/core/manage.py seed_quickstart --print-activity --starter=$(STARTER) 2>/dev/null | tr -d '\r' | tail -1); \
-			tail="$$([ -n "$$aid" ] && echo "See the matched-vs-filtered breakdown: magpie watch action activity $$aid (after magpie auth login)." || echo "Re-check anytime: magpie watch action activity <action_id> (ids are in the seed summary above).")"; \
-			echo "Tick done. Posts that cleared the threshold printed above, tagged with the starter's prefix (e.g. [oss starter]); a backlog can also score zero on the first pass. $$tail"; \
-		else \
-			echo "Seeded, but a pipeline stage exited with an error (see the output above). Fix what it reports, then re-run: make local-tick"; \
-		fi; \
-	else \
-		echo "Seeded. Point OLLAMA_URL at a running Ollama, then run: make local-tick"; \
-	fi
 
 local-tick: ## Run one pipeline pass: poll feeds -> trigger watches -> drain runs -> flush digests -> send email
 	$(MAKE) local-manage CMD="poll_due_feeds"
@@ -177,5 +149,7 @@ local-check: ## Run lint + types + tests (pre-commit habit)
 	$(MAKE) local-types
 	$(MAKE) local-test
 
-hooks: ## Install git pre-commit hooks (.pre-commit-config.yaml)
-	uvx pre-commit install
+# Hidden (no ## so it stays out of `make help`): the quickstart installs hooks,
+# this is the fallback if it was skipped (e.g. uv wasn't present then).
+hooks:
+	@./scripts/hooks.sh

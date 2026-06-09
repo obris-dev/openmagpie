@@ -57,6 +57,13 @@ jobs:
         run: |
           ./scripts/check-whitespace.sh
           ./scripts/check-file-length.sh
+      # Everything in scripts/ is POSIX sh; -s sh fails on any bashism so the
+      # curl|sh installer (and the dev tooling) stays portable. shellcheck ships
+      # on GitHub's ubuntu runners today; install it if a future image drops it.
+      - name: shellcheck (scripts are POSIX sh)
+        run: |
+          command -v shellcheck >/dev/null || { sudo apt-get update && sudo apt-get install -y shellcheck; }
+          find scripts -name '*.sh' -print0 | xargs -0 -r shellcheck -s sh
       # Fail if a model change has no committed migration — compares models.py
       # against the migration files (the autodetector), no DB involved.
       # --check implies no-write on Django >=4.2, so no --dry-run needed.
