@@ -1,14 +1,22 @@
-.PHONY: quickstart install-cli up build down logs logs-core logs-web local-exec local-manage local-test local-makemigrations local-dbshell local-migrate local-bootstrap local-tick up-jobs down-jobs _job-up local-lint local-lint-fix local-types local-check local-web local-web-reinstall local-web-shell local-cli-sync local-cli hooks
+.PHONY: quickstart install-cli up build down logs logs-core logs-web local-exec local-manage local-test local-makemigrations local-dbshell local-migrate local-bootstrap local-seed local-tick up-jobs down-jobs _job-up local-lint local-lint-fix local-types local-check local-web local-web-reinstall local-web-shell local-cli-sync local-cli hooks
 
-quickstart: ## One command from a fresh clone: env + build (wait healthy) + migrate
+# Quickstart seed knobs: which starter to seed and how far back the first tick
+# looks. Override per invocation: make local-seed STARTER=devtools DAYS=7
+STARTER ?= selfhosted-opensource
+DAYS ?= 3
+
+quickstart: ## One command from a fresh clone: env + build (wait healthy) + migrate + seed an example
 	@test -f apps/core/.env || { cp apps/core/.env.example apps/core/.env; echo "Created apps/core/.env from .env.example"; }
 	docker compose up --build -d --wait
 	$(MAKE) local-migrate
+	$(MAKE) local-seed
 	@echo ""
 	@echo "Ready. Next:"
 	@echo "  App:  http://localhost:3001  (create an account; you're signed in)"
 	@echo "  Site: http://localhost:3000  (marketing landing)"
 	@echo "  CLI:  make install-cli   then   magpie auth login"
+	@echo "  Seeded: an example feed + watch exist (login local@openmagpie.local). Run"
+	@echo "          make local-tick (once Ollama is up) to see [starter] matches in the logs."
 	@echo ""
 	@echo "Heads up: OpenMagpie is BYO-LLM. Point OLLAMA_URL in apps/core/.env at"
 	@echo "an Ollama you control (default host.docker.internal:11434)."
@@ -62,6 +70,15 @@ local-migrate: ## Run Django database migrations + ensure cache table exists + b
 
 local-bootstrap: ## Alias for local-migrate (first-run setup)
 	$(MAKE) local-migrate
+
+local-seed: ## Seed an example feed + watch (e.g. make local-seed STARTER=devtools DAYS=7), then tick if Ollama is reachable
+	$(MAKE) local-manage CMD="seed_quickstart --starter=$(STARTER) --days=$(DAYS)"
+	@if docker compose exec -T core python -c "import os,urllib.request; urllib.request.urlopen(os.environ.get('OLLAMA_URL','')+'/api/tags', timeout=3)" >/dev/null 2>&1; then \
+		$(MAKE) local-tick; \
+		echo "Scored your backlog. The matches above are the [starter] log lines."; \
+	else \
+		echo "Seeded. Point OLLAMA_URL at a running Ollama, then run: make local-tick"; \
+	fi
 
 local-tick: ## Run one pipeline pass: poll feeds -> trigger watches -> drain runs -> flush digests -> send email
 	$(MAKE) local-manage CMD="poll_due_feeds"

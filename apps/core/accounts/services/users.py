@@ -25,6 +25,11 @@ class UserGlobal:
         return User.objects.filter(email__iexact=email).exists()
 
     @staticmethod
+    def get_by_email(email: str) -> User:
+        """Raises User.DoesNotExist if missing. Case-insensitive."""
+        return User.objects.get(email__iexact=email)
+
+    @staticmethod
     def get(id: str) -> User:
         """Raises User.DoesNotExist if missing."""
         return User.objects.get(id=id)

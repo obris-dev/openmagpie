@@ -2,7 +2,7 @@
 #
 # A watch subscribes to one or more feeds and runs an ordered chain of
 # actions over each new item. v1 chains start with a semantic_filter (an
-# LLM relevance gate) ; delivery actions (webhook, log) arrive later.
+# LLM relevance gate) followed by delivery actions (webhook, log).
 # Save and run:
 #   magpie watch create -f watch.yaml
 #

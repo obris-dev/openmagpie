@@ -1,0 +1,14 @@
+# OpenMagpie starter: self-hosted / open-source listening.
+# Apply with the seed flow (it sets the first-tick lookback for you):
+#   make quickstart        (seeds + ticks)   or   make local-seed
+# Applying by hand with `magpie feed create -f` works too, but then YOU set a
+# past last_event_at on each source or the first tick only sees brand-new posts.
+# Full walkthrough: examples/README.md
+name: "Self-hosted and open-source (starter)"
+kind: curated
+poll_interval_seconds: 300
+data:
+  retention_days: 30
+sources:
+  - spec: {kind: reddit_subreddit, subreddit: selfhosted}
+  - spec: {kind: reddit_subreddit, subreddit: opensource}

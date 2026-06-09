@@ -1,0 +1,22 @@
+# Companion watch for the self-hosted / open-source starter. See feed.yaml and
+# examples/README.md. The seed wires feed_ids to the created feed automatically;
+# hand-applying with `magpie watch create -f` needs the real feed id here.
+name: "OSS alternative seekers (starter)"
+is_active: true
+feed_ids:
+  - REPLACE_WITH_FEED_ID
+actions:
+  - kind: semantic_filter
+    config:
+      instructions: "Someone asking for an open-source or self-hostable alternative to a paid or SaaS tool."
+      threshold: 0.6
+  - kind: log
+    config:
+      prefix: "[starter]"
+  # Prefer a push over a log line? Uncomment and point at your notifier (ntfy, a
+  # relay, a Slack/Discord webhook, an openclaw-style instance). A webhook also
+  # records a delivery audit you can inspect with `magpie watch action deliveries`:
+  # - kind: webhook
+  #   config:
+  #     url: "https://your-notifier.example/hook"
+  #     method: POST

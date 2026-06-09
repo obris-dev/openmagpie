@@ -38,6 +38,10 @@ Social listening is a crowded market (Brand24, Mention, Octolens, Syften, and to
 
 Your first real match is a few steps away: clone the repo, point a feed at a subreddit, write a natural-language filter, and run it against live posts.
 
+### Try it instantly
+
+`make quickstart` seeds an example feed + watch into a local dev account (a couple of subreddits, a natural-language filter, a `log` delivery) and, with an Ollama up, runs one tick so the first `[starter]` matches print straight to the logs. No account creation, no YAML to write. Want a different example or a wider lookback? `make local-seed STARTER=devtools DAYS=7`. See [examples/README.md](examples/README.md) for the starters and where matches surface (the terminal and the CLI activity log; the web UI doesn't render matches yet).
+
 ### Prereq: an Ollama instance
 
 OpenMagpie is BYO LLM; the dev stack doesn't bundle one. Point it at an Ollama you control:

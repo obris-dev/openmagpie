@@ -19,6 +19,7 @@ dependencies = [
     "psycopg>=3.3",  # impl extra is env-specific: [binary] in dev, [c] in cloud
     "pydantic>=2.5",
     "python-dotenv>=1.1",
+    "pyyaml>=6.0",  # reads the examples/starters/*.yaml in seed_quickstart
     "ulid>=1.1",
 ]
 
