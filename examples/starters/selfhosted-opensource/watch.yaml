@@ -12,9 +12,9 @@ actions:
       threshold: 0.6
   - kind: log
     config:
-      prefix: "[starter]"
-  # Prefer a push over a log line? Uncomment and point at your notifier (ntfy, a
-  # relay, a Slack/Discord webhook, an openclaw-style instance). A webhook also
+      prefix: "[oss starter]"
+  # Prefer a push over a log line? Uncomment and point at your notifier (ntfy, or
+  # a relay like a Slack/Discord webhook or openclaw-style instance). A webhook also
   # records a delivery audit you can inspect with `magpie watch action deliveries`:
   # - kind: webhook
   #   config:

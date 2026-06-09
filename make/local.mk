@@ -16,7 +16,7 @@ quickstart: ## One command from a fresh clone: env + build (wait healthy) + migr
 	@echo "  Site: http://localhost:3000  (marketing landing)"
 	@echo "  CLI:  make install-cli   then   magpie auth login"
 	@echo "  Seeded: an example feed + watch exist (login local@openmagpie.local). Run"
-	@echo "          make local-tick (once Ollama is up) to see [starter] matches in the logs."
+	@echo "          make local-tick (once Ollama is up) to see [oss starter] matches in the logs."
 	@echo ""
 	@echo "Heads up: OpenMagpie is BYO-LLM. Point OLLAMA_URL in apps/core/.env at"
 	@echo "an Ollama you control (default host.docker.internal:11434)."
@@ -74,8 +74,14 @@ local-bootstrap: ## Alias for local-migrate (first-run setup)
 local-seed: ## Seed an example feed + watch (e.g. make local-seed STARTER=devtools DAYS=7), then tick if Ollama is reachable
 	$(MAKE) local-manage CMD="seed_quickstart --starter=$(STARTER) --days=$(DAYS)"
 	@if docker compose exec -T core python -c "import os,urllib.request; urllib.request.urlopen(os.environ.get('OLLAMA_URL','')+'/api/tags', timeout=3)" >/dev/null 2>&1; then \
-		$(MAKE) local-tick; \
-		echo "Scored your backlog. The matches above are the [starter] log lines."; \
+		echo "Ollama reachable. Scoring your backlog now: the semantic filter calls your LLM once per post, so this can take a minute. Progress, an ETA, and any matches stream below as they happen."; \
+		if $(MAKE) local-tick; then \
+			aid=$$($(MAKE) -s local-manage CMD="seed_quickstart --print-activity --starter=$(STARTER)" 2>/dev/null | tr -d '\r' | tail -1); \
+			tail="$$([ -n "$$aid" ] && echo "See the matched-vs-filtered breakdown: magpie watch action activity $$aid (after magpie auth login)." || echo "Re-check anytime: magpie watch action activity <action_id> (ids are in the seed summary above).")"; \
+			echo "Tick done. Posts that cleared the threshold printed above, tagged with the starter's prefix (e.g. [oss starter]); a backlog can also score zero on the first pass. $$tail"; \
+		else \
+			echo "Seeded, but a pipeline stage exited with an error (see the output above). Fix what it reports, then re-run: make local-tick"; \
+		fi; \
 	else \
 		echo "Seeded. Point OLLAMA_URL at a running Ollama, then run: make local-tick"; \
 	fi

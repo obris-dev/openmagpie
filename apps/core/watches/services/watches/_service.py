@@ -45,6 +45,11 @@ class WatchService:
         """Raises Watch.DoesNotExist if missing (or owned by another account)."""
         return Watch.objects.get(id=id, account_id=self.account_id)
 
+    def find_by_name(self, name: str, /) -> Watch | None:
+        """This account's watch with `name`, or None. Names aren't unique;
+        returns the oldest match (id order) for a stable result."""
+        return Watch.objects.filter(account_id=self.account_id, name=name).order_by("id").first()
+
     def list(self, *, after: str | None = None, limit: int = 50) -> builtins.list[Watch]:
         """This account's watches, newest first (by ULID pk). Cursor-
         paginated: `after=<id>` fetches rows older than that id."""

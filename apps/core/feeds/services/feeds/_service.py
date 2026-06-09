@@ -52,6 +52,11 @@ class FeedService:
         """Raises Feed.DoesNotExist if missing (or owned by another account)."""
         return Feed.objects.get(id=id, account_id=self.account_id)
 
+    def find_by_name(self, name: str, /) -> Feed | None:
+        """This account's feed with `name`, or None. Names aren't unique;
+        returns the oldest match (id order) for a stable result."""
+        return Feed.objects.filter(account_id=self.account_id, name=name).order_by("id").first()
+
     def existing_ids(self, ids: list[str], /) -> set[str]:
         """Of `ids`, the subset that are feeds in THIS account. One query;
         callers diff against the input to find unknown / cross-account ids

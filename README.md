@@ -40,7 +40,7 @@ Your first real match is a few steps away: clone the repo, point a feed at a sub
 
 ### Try it instantly
 
-`make quickstart` seeds an example feed + watch into a local dev account (a couple of subreddits, a natural-language filter, a `log` delivery) and, with an Ollama up, runs one tick so the first `[starter]` matches print straight to the logs. No account creation, no YAML to write. Want a different example or a wider lookback? `make local-seed STARTER=devtools DAYS=7`. See [examples/README.md](examples/README.md) for the starters and where matches surface (the terminal and the CLI activity log; the web UI doesn't render matches yet).
+`make quickstart` seeds an example feed + watch into a local dev account (a couple of subreddits, a natural-language filter, a `log` delivery) and, with an Ollama up, runs one tick so the first matches print straight to the logs, tagged with the starter's prefix (e.g. `[oss starter]`). No account creation, no YAML to write. Want a different example or a wider lookback? `make local-seed STARTER=devtools DAYS=7`. Matches show up in the terminal and the CLI activity log, not the web UI yet. See [examples/README.md](examples/README.md) for the full list of starters.
 
 ### Prereq: an Ollama instance
 
@@ -56,7 +56,7 @@ Set `OLLAMA_DEFAULT_MODEL` to the model you want to judge with. A 7B model judge
 ```bash
 git clone git@github.com:obris-dev/openmagpie.git
 cd openmagpie
-make quickstart      # create .env, build + wait for health, migrate, print next steps
+make quickstart      # create .env, build + wait for health, migrate, seed + tick, print next steps
 ```
 
 `make quickstart` is the one-shot path. The equivalent manual steps:
@@ -64,7 +64,8 @@ make quickstart      # create .env, build + wait for health, migrate, print next
 ```bash
 cp apps/core/.env.example apps/core/.env
 make build           # build and start Django + the web app
-make local-migrate     # run migrations, create cache table, bootstrap the CLI OAuth app
+make local-migrate   # run migrations, create cache table, bootstrap the CLI OAuth app
+make local-seed      # seed an example feed + watch, then tick if Ollama is reachable
 ```
 
 Then create an account in the browser (visit http://localhost:3001, you'll be signed in), or use the CLI:

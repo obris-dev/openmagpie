@@ -25,14 +25,16 @@ away. Run a different starter or a wider lookback on demand:
 make local-seed STARTER=devtools DAYS=7
 ```
 
-The seed creates the account, user, feed, and watch. It also sets each source's
-first-tick watermark to `now - DAYS` so the opening tick scores a backlog
-instead of only brand-new posts. The dev login is `local@openmagpie.local`.
+The seed creates an initial account, user, feed, and watch. It also sets a
+watermark on each source to backfill recent posts (the `now - DAYS` window)
+instead of waiting for brand-new ones to arrive. The dev login is
+`local@openmagpie.local`.
 
 ## Where matches show up
 
-- In the tick's terminal output: the `log` action writes a `[starter]` line per
-  match. Run a tick with `make local-tick` (poll, then trigger, drain, flush).
+- In the tick's terminal output: the `log` action writes one line per match,
+  tagged with the starter's prefix (e.g. `[oss starter]`, `[devtools starter]`).
+  Run a tick with `make local-tick` (poll, then trigger, drain, flush).
 - In the CLI activity log: `magpie watch action activity <action_id>` (run
   `magpie auth login` first).
 
@@ -50,8 +52,9 @@ magpie watch create -f examples/starters/selfhosted-opensource/watch.yaml
 The seed flow does two things for you that the hand path does not. When you
 apply by hand, do them yourself:
 
-- Set a past `last_event_at` on each source in `feed.yaml`. Without it the first
-  tick only sees brand-new posts, so there is nothing to score yet.
+- Set a past `last_event_at` on each source in `feed.yaml`. Without it the feed
+  only scores posts going forward, so to test your watch you would have to wait
+  for new posts to arrive at the source.
 - Put the real feed id into `feed_ids` in `watch.yaml`, replacing the
   `REPLACE_WITH_FEED_ID` placeholder. The feed id prints when you create the
   feed.
@@ -59,6 +62,7 @@ apply by hand, do them yourself:
 ## Upgrading to a push
 
 Each starter watch ends with a commented `webhook` action. Uncomment it and
-point `url` at your notifier (ntfy, a relay, a Slack or Discord webhook) to get
-pushed instead of (or alongside) the log line. A webhook also records a delivery
+point `url` at your notifier (ntfy, or a relay like a Slack/Discord webhook or
+openclaw-style instance) to get pushed instead of (or alongside) the log line. A
+webhook also records a delivery
 audit you can inspect with `magpie watch action deliveries`.

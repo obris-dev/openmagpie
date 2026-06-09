@@ -12,3 +12,17 @@ data:
 sources:
   - spec: {kind: reddit_subreddit, subreddit: selfhosted}
   - spec: {kind: reddit_subreddit, subreddit: opensource}
+
+# Backfill window, by hand (the seed flow sets this for you; skip it then).
+# Each source can carry a `last_event_at`: the point in time it starts reading
+# from. A past UTC timestamp pulls everything posted since then on the FIRST
+# tick (so you have posts to score right away); leave it off and the first tick
+# only sees posts that arrive AFTER you create the feed. It is a sibling key of
+# `spec` (same indent), not a field inside the spec map. A source with it set
+# looks exactly like this:
+#
+# sources:
+#   - spec: {kind: reddit_subreddit, subreddit: selfhosted}
+#     last_event_at: 2026-06-01T00:00:00Z   # read posts from 2026-06-01 up to now
+#   - spec: {kind: reddit_subreddit, subreddit: opensource}
+#     last_event_at: 2026-06-01T00:00:00Z
