@@ -19,7 +19,6 @@ from typing import Any
 import yaml
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError, CommandParser
-from django.db import transaction
 from django.utils import timezone
 from pydantic import ValidationError
 
@@ -99,17 +98,22 @@ class Command(BaseCommand):
         watermark = timezone.now() - timedelta(days=days)
         sources = [SourceInput(**s).model_copy(update={"last_event_at": watermark}) for s in feed_yaml["sources"]]
         actions = self._parse_actions(watch_yaml["actions"])
-        # One transaction so a watch failure can't leave an orphaned feed (and
-        # so the feed/watch pair stays consistent for the idempotency check).
-        with transaction.atomic():
-            feed = feed_svc.create(
-                user_id=user_id,
-                name=feed_yaml["name"],
-                kind=feed_yaml.get("kind", "curated"),
-                poll_interval_seconds=feed_yaml.get("poll_interval_seconds", 300),
-                data=feed_yaml.get("data", {}),
-                sources=sources,
-            )
+        # NB: do NOT wrap these two creates in one transaction.atomic().
+        # WatchService.create runs replace_chain (which takes path_chain_lock)
+        # OUTSIDE its own transaction on purpose; an outer atomic would re-nest
+        # that lock inside a transaction and release it before commit, which
+        # the chain-lock HARD RULE forbids (apps/core/AGENTS.md). To still avoid
+        # an orphaned feed, delete it by hand if the watch fails (the --reset /
+        # partial-seed path recovers it too, but this keeps a clean run clean).
+        feed = feed_svc.create(
+            user_id=user_id,
+            name=feed_yaml["name"],
+            kind=feed_yaml.get("kind", "curated"),
+            poll_interval_seconds=feed_yaml.get("poll_interval_seconds", 300),
+            data=feed_yaml.get("data", {}),
+            sources=sources,
+        )
+        try:
             watch = watch_svc.create(
                 user_id=user_id,
                 name=watch_yaml["name"],
@@ -117,6 +121,9 @@ class Command(BaseCommand):
                 feed_ids=[str(feed.id)],
                 actions=actions,
             )
+        except Exception:
+            feed_svc.delete(feed)
+            raise
 
         gate_action_id = self._gate_action_id(watch_svc.initial_actions(watch))
         self._report(feed, watch, sources, days, account_name, email, password, gate_action_id)
