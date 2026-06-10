@@ -65,7 +65,7 @@ def create(
 ) -> None:
     """Create a feed from a YAML config."""
     if file is None:
-        body_text = _edit_template_or_abort()
+        body_text = _open_editor_or_abort(FEED_TEMPLATE_YAML)
     elif file == "-":
         body_text = sys.stdin.read()
     else:
@@ -192,14 +192,6 @@ def _print_feeds(resp: FeedListResponse) -> None:
 
 
 # ── Helpers ────────────────────────────────────────────────────────────
-
-
-def _edit_template_or_abort() -> str:
-    edited = typer.edit(FEED_TEMPLATE_YAML, extension=".yaml")
-    if edited is None:
-        console.warn("Edit cancelled.")
-        raise typer.Exit(code=1) from None
-    return edited
 
 
 def _reject_if_unmodified_template(body_text: str) -> None:

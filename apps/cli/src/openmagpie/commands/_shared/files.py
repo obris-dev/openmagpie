@@ -3,6 +3,10 @@
 from __future__ import annotations
 
 import contextlib
+import os
+import shlex
+import subprocess
+import tempfile
 from pathlib import Path
 
 import typer
@@ -19,14 +23,27 @@ def _read_file_or_abort(path: str) -> str:
 
 
 def _open_editor_or_abort(seed: str) -> str:
-    """Open $EDITOR on `seed` (the current config for an edit). Aborts
-    if the editor returns nothing (quit without saving). Unchanged text
-    is allowed — re-applying the same config is a valid no-op edit."""
-    edited = typer.edit(seed, extension=".yaml")
-    if edited is None:
-        console.warn("Edit cancelled.")
-        raise typer.Exit(code=1) from None
-    return edited
+    """Open $EDITOR (then $VISUAL, then `vi`) on `seed` in a temp file and return
+    the edited text. Aborts cleanly if no editor can be launched, telling the user
+    to pass `-f <file>` instead. Unchanged text is allowed - re-applying the same
+    config is a valid no-op edit.
+
+    Implemented with stdlib rather than click/typer's `edit`: Typer vendored a
+    slim Click in 0.26 that dropped `edit`, and there is no standalone `click`."""
+    editor = os.environ.get("EDITOR") or os.environ.get("VISUAL") or "vi"
+    with tempfile.NamedTemporaryFile("w", suffix=".yaml", delete=False, encoding="utf-8") as fh:
+        fh.write(seed)
+        path = fh.name
+    try:
+        try:
+            subprocess.run([*shlex.split(editor), path], check=True)  # editor command from operator env
+        except (OSError, subprocess.CalledProcessError) as exc:
+            console.error(f"Couldn't open an editor ({editor}): {exc}. Pass the config with -f <file> instead.")
+            raise typer.Exit(code=1) from None
+        with open(path, encoding="utf-8") as fh:
+            return fh.read()
+    finally:
+        os.unlink(path)
 
 
 @contextlib.contextmanager
