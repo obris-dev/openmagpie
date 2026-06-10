@@ -32,7 +32,12 @@ from openmagpie_schema.watch_enums import (
 
 from .api import ActionScopedAPIView, WatchActionDeliveryNotFound, WatchSvcMixin
 from .models import WatchActionDelivery
-from .serializers import watch_action_delivery_view, watch_action_delivery_wire, watch_action_run_wire
+from .serializers import (
+    watch_action_delivery_view,
+    watch_action_delivery_wire,
+    watch_action_run_wire,
+    watch_action_wire,
+)
 
 
 def _window_bounds(window: WatchActivityWindow, now: datetime) -> tuple[datetime, datetime | None]:
@@ -118,7 +123,9 @@ class ActionRunsView(ActionScopedAPIView):
                 retrying=summ.retrying,
             )
         return Response(
-            WatchActionRunListResponse(items=items, next_cursor=next_cursor, summary=summary).model_dump(mode="json")
+            WatchActionRunListResponse(
+                items=items, next_cursor=next_cursor, action=watch_action_wire(action), summary=summary
+            ).model_dump(mode="json")
         )
 
 

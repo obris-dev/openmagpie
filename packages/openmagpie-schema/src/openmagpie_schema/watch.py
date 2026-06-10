@@ -224,6 +224,10 @@ class WatchActionRunListResponse(BaseModel):
 
     items: list[WatchActionRunWire] = Field(default_factory=list)
     next_cursor: str | None = None
+    # The action being audited (kind + config), so a reader sees WHAT the runs
+    # were judged against (e.g. a semantic_filter's instructions + threshold) as
+    # a header. Constant per page; the action row is already loaded server-side.
+    action: WatchActionWire | None = None
     # None means "this is a paged response" (no summary computed) — NOT "no
     # activity". The first page always carries a summary, all-zero if idle.
     summary: WatchActionRunSummary | None = None

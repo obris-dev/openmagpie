@@ -287,3 +287,36 @@ class ActionRunFeedItemTests(TestCase):
         pruned = by_item[pruned_id]
         self.assertIsNone(pruned["feed_item"])
         self.assertEqual(pruned["feed_item_id"], pruned_id)
+
+
+class ActionContextHeaderTests(TestCase):
+    """The runs response carries the action being audited (kind + config), so a
+    reader sees WHAT the runs were judged against (a semantic_filter's
+    instructions + threshold) as a header, even with no runs yet."""
+
+    def setUp(self) -> None:
+        self.user = SignupOperation(email="ctx@example.com", password="Str0ng-Passw0rd!").run()
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.user)
+        resp = self.client.post(
+            "/v1/watches",
+            {
+                "name": "w",
+                "feed_ids": [],
+                "actions": [
+                    {"kind": "semantic_filter", "config": {"instructions": "coach hires only", "threshold": 0.8}}
+                ],
+            },
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 201, resp.content)
+        self.action_id = resp.json()["actions"][0]["id"]
+
+    def test_response_carries_action_kind_and_config(self) -> None:
+        resp = self.client.get(f"/v1/actions/{self.action_id}/runs")
+        self.assertEqual(resp.status_code, 200, resp.content)
+        action = resp.json()["action"]
+        self.assertEqual(action["id"], self.action_id)
+        self.assertEqual(action["kind"], "semantic_filter")
+        self.assertEqual(action["config"]["instructions"], "coach hires only")
+        self.assertEqual(action["config"]["threshold"], 0.8)
