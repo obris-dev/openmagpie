@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import json
 import sys
+from importlib import resources
 
 import typer
 import yaml
@@ -29,7 +30,14 @@ from openmagpie_schema.feed import SourceInput, SourceSetPayload
 from ... import console
 from ...api.feed import SourceWire
 from ...context import app_ctx
-from .._shared import _check_format, _handle_api_errors, _print_detail, _read_file_or_abort
+from .._shared import (
+    _check_format,
+    _emit_collection,
+    _emit_detail,
+    _handle_api_errors,
+    _print_detail,
+    _read_file_or_abort,
+)
 from ._apps import source_app
 
 _SET_FILE_SHAPES = (
@@ -37,53 +45,10 @@ _SET_FILE_SHAPES = (
     "(produced by `magpie feed source export` or `magpie feed source template`)."
 )
 
-_SOURCES_TEMPLATE_YAML = """\
-# Source list for `magpie feed source set --feed <feed_id> -f file.yaml`.
-#
-# `set` REPLACES the feed's full source list: new rows are added,
-# missing ones are dropped, and rows that survive the diff keep their
-# per-source watermarks. Always run `set` with `--dry-run` first to
-# preview the {added, removed, persisted} counts before applying.
-#
-# `magpie feed source export --feed <feed_id>` emits exactly this shape,
-# so the round-trip is `export -> edit -> set` (or `template -> fill in
-# -> set` if you're starting from scratch).
-
-version: v1
-sources:
-  # RSS source: any feed URL feedparser can parse.
-  - spec:
-      kind: rss
-      url: https://example.com/feed.rss
-      name: Example                       # optional display label
-
-    # `meta` (optional): operator-supplied tags. Each entry is copied
-    # onto every FeedItem this source produces, so a downstream UI
-    # can filter ("show me items tagged `research`"). Free-form
-    # key/value; the server doesn't interpret it.
-    meta:
-      tag: research
-
-    # `field_map` (optional): per-source connector hints. Maps a
-    # canonical SourcePayload field (`content`, `external_id`, ...)
-    # to where the connector should read it from the upstream
-    # payload. Useful when a publisher puts the body in `summary`
-    # instead of `content`, or when an auto-generated `external_id`
-    # rotates and you want to dedupe by `link` instead. Per-key
-    # override of the feed's `default_field_map`; empty = inherit.
-    field_map:
-      content: summary
-
-    # `last_event_at` (optional): pin the starting watermark to a
-    # past datetime to backfill from that point. Omit to default to
-    # wall-clock now (live mode from this moment).
-    # last_event_at: "2026-05-28T00:00:00Z"
-
-  # Reddit subreddit source: the `/new` feed of one subreddit.
-  - spec:
-      kind: reddit_subreddit
-      subreddit: ClaudeAI
-"""
+# The commented starter file emitted by `feed source template`. Lives as a
+# resource (like feed_template.yaml / watch_template.yaml) so the verbose,
+# user-facing comments don't bloat this module.
+_SOURCES_TEMPLATE_YAML = resources.files("openmagpie").joinpath("sources_template.yaml").read_text(encoding="utf-8")
 
 
 def _parse_set_payload(text: str, source_path: str) -> list[SourceInput]:
@@ -137,9 +102,15 @@ _SOURCE_COLUMNS: list[console.Column[SourceWire]] = [
 @_handle_api_errors
 def list_(
     feed_id: str = typer.Option(..., "--feed", help="Feed id whose sources to list."),
+    jsonl: bool = typer.Option(False, "--jsonl", help="Emit one JSON object per source (NDJSON) instead of a table."),
+    output: str | None = typer.Option(None, "--output", "-o", help="Write to a file instead of stdout."),
 ) -> None:
     """List the sources attached to a feed."""
     sources = app_ctx().api.feed.list_sources(feed_id)
+    _emit_collection(items=sources, render_table=_print_sources, jsonl=jsonl, output=output)
+
+
+def _print_sources(sources: list[SourceWire]) -> None:
     console.header(f"{len(sources)} source(s)")
     if not console.table(sources, _SOURCE_COLUMNS):
         console.log("No sources on this feed yet.")
@@ -152,9 +123,15 @@ def list_(
 @_handle_api_errors
 def get(
     source_id: str = typer.Argument(..., help="Source id (from `magpie feed source list`)."),
+    jsonl: bool = typer.Option(False, "--jsonl", help="Emit the source as one JSON object instead of a field table."),
+    output: str | None = typer.Option(None, "--output", "-o", help="Write to a file instead of stdout."),
 ) -> None:
     """Show one source by its own ULID (the feed is resolved server-side)."""
     s = app_ctx().api.feed.get_source(source_id)
+    _emit_detail(render=lambda: _print_source_detail(s), json_obj=s.model_dump_json, jsonl=jsonl, output=output)
+
+
+def _print_source_detail(s: SourceWire) -> None:
     fields: list[tuple[str, str]] = [
         ("source", s.spec.display()),
         ("kind", s.spec.kind),

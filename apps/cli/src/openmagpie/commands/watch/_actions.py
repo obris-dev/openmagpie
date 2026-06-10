@@ -22,15 +22,23 @@ from openmagpie_schema.watch import WatchActionWire
 
 from ... import console
 from ...context import app_ctx
-from .._shared import _handle_api_errors, _read_file_or_abort
+from .._shared import _emit_collection, _handle_api_errors, _read_file_or_abort
 from ._apps import action_app
 
 
 @action_app.command("list")
 @_handle_api_errors
-def action_list(watch_id: str = typer.Argument(..., help="Watch id.")) -> None:
+def action_list(
+    watch_id: str = typer.Argument(..., help="Watch id."),
+    jsonl: bool = typer.Option(False, "--jsonl", help="Emit one JSON object per action (NDJSON) instead of a table."),
+    output: str | None = typer.Option(None, "--output", "-o", help="Write to a file instead of stdout."),
+) -> None:
     """List a watch's action chain, in rank order."""
     actions = app_ctx().api.watch.list_actions(watch_id)
+    _emit_collection(items=actions, render_table=_print_actions, jsonl=jsonl, output=output)
+
+
+def _print_actions(actions: list[WatchActionWire]) -> None:
     columns: list[console.Column[WatchActionWire]] = [
         console.Column("ID", lambda a: a.id),
         console.Column("RANK", lambda a: str(a.rank)),

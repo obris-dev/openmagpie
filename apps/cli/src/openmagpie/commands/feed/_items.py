@@ -77,6 +77,10 @@ def _print_items(resp: FeedItemListResponse) -> None:
 
 
 def _print_item_detail(i: FeedItemWire) -> None:
+    """Field table + the raw connector payload. The top-level `occurred` field is
+    canonical (rendered to seconds); the `data:` block re-emits the stored payload
+    verbatim, so its own `occurred_at` keeps the stored ISO string - the same
+    instant in a different surface form, not a second source of truth."""
     fields: list[tuple[str, str]] = [
         ("source", i.source_label or "-"),
         ("kind", i.source_kind),
