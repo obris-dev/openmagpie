@@ -17,7 +17,7 @@ _AUTH = f"/{API_VERSION}/auth"
 _FEEDS = f"/{API_VERSION}/feeds"
 _WATCHES = f"/{API_VERSION}/watches"
 _ACTIONS = f"/{API_VERSION}/actions"
-_DELIVERIES = f"/{API_VERSION}/deliveries"
+_ACTION_DELIVERIES = f"/{API_VERSION}/action-deliveries"
 _ENGINES = f"/{API_VERSION}/engines"
 
 
@@ -75,7 +75,10 @@ class watches:
 
 
 class actions:
-    """`/v1/actions/*` — per-action ops keyed on the action's own ULID."""
+    """`/v1/actions/*` — per-action ops keyed on the action's own ULID. The
+    audit LISTS are nested here (`activity` = the run log, `deliveries`); the
+    by-own-id detail of one run / delivery is parent-qualified (see `activity`
+    / `deliveries` below)."""
 
     @staticmethod
     def detail(action_id: str) -> str:
@@ -83,7 +86,7 @@ class actions:
 
     @staticmethod
     def runs(action_id: str) -> str:
-        return f"{_ACTIONS}/{action_id}/runs"
+        return f"{_ACTIONS}/{action_id}/activity"
 
     @staticmethod
     def deliveries(action_id: str) -> str:
@@ -91,11 +94,12 @@ class actions:
 
 
 class deliveries:
-    """`/v1/deliveries/*` — one delivery's detail by its own ULID."""
+    """`/v1/action-deliveries/*` — one delivery's detail by its own ULID
+    (a dependent record of its action, so the route is parent-qualified)."""
 
     @staticmethod
     def detail(delivery_id: str) -> str:
-        return f"{_DELIVERIES}/{delivery_id}"
+        return f"{_ACTION_DELIVERIES}/{delivery_id}"
 
 
 class engines:

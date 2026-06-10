@@ -25,6 +25,7 @@ from openmagpie_schema.watch import (
     WatchActionDeliveryView,
     WatchActionDeliveryWire,
     WatchActionInput,
+    WatchActionRunView,
     WatchActionRunWire,
     WatchActionWire,
     WatchMutationResponse,
@@ -183,6 +184,25 @@ def watch_action_run_wire(run: WatchActionRun) -> WatchActionRunWire:
         started_at=run.started_at,
         completed_at=run.completed_at,
         created_at=run.created_at,
+    )
+
+
+def watch_action_run_view(
+    run: WatchActionRun,
+    *,
+    feed_item: FeedItem | None = None,
+    feed: Feed | None = None,
+    action: WatchAction | None = None,
+) -> WatchActionRunView:
+    """One run's DETAIL shape (`GET /v1/action-activity/<id>`): the run wire plus
+    the joined item / feed / action it was judged against. Each is null when
+    absent (a pruned item/feed, a removed action), so the row still renders by
+    `run.feed_item_id`."""
+    return WatchActionRunView(
+        run=watch_action_run_wire(run),
+        feed_item=run_feed_item_wire(feed_item) if feed_item is not None else None,
+        feed=run_feed_wire(feed) if feed is not None else None,
+        action=watch_action_wire(action) if action is not None else None,
     )
 
 

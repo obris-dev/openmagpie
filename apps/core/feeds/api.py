@@ -72,6 +72,20 @@ class SourceNotFound(APIException):
         )
 
 
+class FeedItemNotFound(APIException):
+    """404 for a FeedItem absent from the caller's account (never existed,
+    pruned, or another account's). Opaque, like the others."""
+
+    status_code = status.HTTP_404_NOT_FOUND
+    default_code = "not_found"
+
+    def __init__(self, item_id: str) -> None:
+        super().__init__(
+            detail={"error": "not_found", "detail": f"no item {item_id}"},
+            code=self.default_code,
+        )
+
+
 class FeedSvcMixin:
     """Per-request `feed_svc` cached_property ; usable on any view that
     knows the account but doesn't have a feed-id in its URL."""

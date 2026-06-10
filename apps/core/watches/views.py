@@ -208,9 +208,16 @@ class ActionDetailView(ActionScopedAPIView):
     own (globally unique) id — account-scoped, the watch/chain derived from
     the action rather than passed in the URL.
 
+    GET    read this action's definition (kind + redacted config + summary)
     PUT    replace this action's config in place (same rank)
     DELETE remove the action and close the rank gap
     """
+
+    def get(self, request, action_id: str):
+        # `self.action` is the account-scoped row (404 via WatchActionNotFound).
+        # Review path for `magpie watch action get`: the definition only, not
+        # its runs/deliveries (those are the audit routes that hang off it).
+        return Response(watch_action_wire(self.action).model_dump(mode="json"))
 
     def put(self, request, action_id: str):
         body = request.data

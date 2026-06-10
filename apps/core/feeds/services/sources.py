@@ -170,6 +170,19 @@ class SourceService:
         deleted, _ = self._scoped(feed).filter(id=source_id).delete()
         return deleted
 
+    def get_by_id(self, source_id: str, /) -> Source:
+        """One source by its OWN id (account-scoped, no feed needed). Raises
+        `Source.DoesNotExist` on miss / another account's. Backs the by-own-id
+        detail route `/v1/feed-sources/<id>` ; the feed it belongs to is read off
+        the returned row, not supplied by the caller."""
+        return Source.objects.get(id=source_id, account_id=self.account_id)
+
+    def remove_by_id(self, source_id: str, /) -> int:
+        """Delete one source by its OWN id (account-scoped). Returns 0 if no row
+        matched (idempotent). Backs `DELETE /v1/feed-sources/<id>`."""
+        deleted, _ = Source.objects.filter(account_id=self.account_id, id=source_id).delete()
+        return deleted
+
     def set_sources(
         self,
         feed: Feed,

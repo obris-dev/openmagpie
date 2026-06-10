@@ -23,4 +23,9 @@ urlpatterns = [
         views.FeedSourceDetailView.as_view(),
         name="feed_source_detail",
     ),
+    api_path(
+        "<str:feed_id>/items",
+        views.FeedItemsView.as_view(),
+        name="feed_items",
+    ),
 ]

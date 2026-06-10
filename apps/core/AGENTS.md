@@ -199,6 +199,13 @@ For resources whose schema varies by `kind` (a `WatchAction` with `kind=semantic
 
 When list rows reference a related entity, **don't embed that entity on every row.** Put the rows' foreign keys on the rows and return the referenced entities once in a keyed side table on the envelope (`{id -> wire}`); the client joins by id in memory. Mirror this for each distinct related type (one map per type), and keep the side-table value models lean (display fields only). A referenced id with no entry (pruned / cross-account) is simply absent from its map, and the row still renders by its id. This both shrinks the payload when the relation is many-rows-to-few-entities (e.g. many runs backed by few feeds) and keeps rows pure ids so the wire shape stays stable as the row grows. Example: `ActionRunsView` returns `items` (run rows carrying `feed_item_id`) plus `feed_items {feed_item_id -> ...}` and `feeds {feed_id -> ...}`; batch-resolve each map with a service `get_many` (no N+1). Don't reach into opaque JSON blobs (`result`, `FeedItem.data`) to build query filters; project display fields out of them in the serializer instead.
 
+### Route naming
+
+- A first-class entity (a hub other resources are addressed relative to) is a bare collection: `/v1/feeds`, `/v1/watches`, `/v1/actions`. Address one by its own globally-unique ULID at the flat collection (`/v1/actions/<id>`), even when it is created under a parent (`POST /v1/watches/<id>/actions`).
+- A dependent record/component (no value apart from its parent) is parent-qualified, kebab-case, for its by-own-id detail route: `/v1/feed-items/<id>`, `/v1/feed-sources/<id>`, `/v1/action-activity/<id>`, `/v1/action-deliveries/<id>`.
+- A child LIST stays nested under the parent; the sub-collection segment is bare, since the parent id is already in the path: `/v1/feeds/<id>/items`, `/v1/actions/<id>/activity`.
+- Multi-word path segments are kebab-case (`feed-items`, never `feed_items` or `feeditems`).
+
 ### URL surface
 
 ```
@@ -206,13 +213,19 @@ When list rows reference a related entity, **don't embed that entity on every ro
 
 /v1/feeds                                          GET/POST   feeds in account
 /v1/feeds/<id>                                     GET/PUT/DELETE
-/v1/feeds/<id>/sources ...                         curated source set
+/v1/feeds/<id>/sources                             GET/PUT    source set (list / replace)
+/v1/feeds/<id>/items                               GET        item log (cursor)
+/v1/feed-sources/<id>                              GET/DELETE one source by own id
+/v1/feed-items/<id>                                GET        one item by own id
 
 /v1/watches                                        GET/POST   watches in account
 /v1/watches/<id>                                   GET/PUT/DELETE
 /v1/watches/<id>/actions                           POST       add an action (rank insert or append)
-/v1/watches/<id>/actions/<action_id>               PUT/DELETE set-config-in-place / remove
-/v1/watches/<id>/actions/<action_id>/runs          GET        run audit log (cursor, ?state=)
+/v1/actions/<id>                                   GET/PUT/DELETE  one action by own id
+/v1/actions/<id>/activity                          GET        run audit log ("activity", cursor, ?state=)
+/v1/actions/<id>/deliveries                        GET        delivery audit log (cursor, ?state=)
+/v1/action-activity/<id>                           GET        one run by own id
+/v1/action-deliveries/<id>                         GET        one delivery by own id
 
 /v1/engines                                        GET        registered engines + reachability
 /healthz                                           GET        DB + cache pings (public)

@@ -271,3 +271,14 @@ class FeedItemService:
         return builtins.list(
             FeedItem.objects.filter(account_id=self.account_id, feed_id=feed.id).order_by("-id")[:limit]
         )
+
+    def list_for_feed(self, feed: Feed, /, *, after: str | None = None, limit: int = 50) -> builtins.list[FeedItem]:
+        """This account's items for one feed, newest-first (ULID pk),
+        cursor-paginated for the audit CLI (`feed item list --feed`). Like
+        `list_recent_items` but with an `after` cursor: pass `after=<id>` to
+        fetch rows whose id is strictly less (older). Scoped by (account, feed)."""
+        self._assert_scope(str(feed.account_id), "feed")
+        qs = FeedItem.objects.filter(account_id=self.account_id, feed_id=feed.id)
+        if after:
+            qs = qs.filter(id__lt=after)
+        return builtins.list(qs.order_by("-id")[:limit])

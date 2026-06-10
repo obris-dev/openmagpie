@@ -174,7 +174,7 @@ class RunFeed(BaseModel):
 
 
 class WatchActionRunWire(BaseModel):
-    """One WatchActionRun on the wire (`GET /v1/actions/<action_id>/runs`).
+    """One WatchActionRun on the wire (`GET /v1/actions/<action_id>/activity`).
 
     The stateful audit row of one action executing against one item. Pure ids +
     run state: the judged item is in the response's `feed_items` map (key
@@ -229,7 +229,7 @@ class WatchActionRunSummary(BaseModel):
 
 
 class WatchActionRunListResponse(BaseModel):
-    """`GET /v1/actions/<action_id>/runs` envelope. Cursor-paginated by ULID
+    """`GET /v1/actions/<action_id>/activity` envelope. Cursor-paginated by ULID
     pk, newest-first. `?after=<id>` for the next page; `next_cursor` null
     when the page wasn't full. Filter by `?state=` (a WatchActionRunState
     value). `summary` (the full per-state breakdown) is present on the
@@ -250,6 +250,20 @@ class WatchActionRunListResponse(BaseModel):
     # None means "this is a paged response" (no summary computed) — NOT "no
     # activity". The first page always carries a summary, all-zero if idle.
     summary: WatchActionRunSummary | None = None
+
+
+class WatchActionRunView(BaseModel):
+    """`GET /v1/action-activity/<id>` — one run ("activity entry") in full, with
+    the joined item / feed / action so a reader sees WHAT it judged and under
+    WHICH action without a second call. The list returns the same join as keyed
+    side tables; the detail inlines the one item + feed it needs. `feed_item` /
+    `feed` are null when the item has been pruned by retention (the run still
+    renders by `run.feed_item_id`); `action` is null only if it was removed."""
+
+    run: WatchActionRunWire
+    feed_item: RunFeedItem | None = None
+    feed: RunFeed | None = None
+    action: WatchActionWire | None = None
 
 
 # ── Delivery (outbound HTTP call audit read path) ─────────────────────────
@@ -283,7 +297,7 @@ class WatchActionDeliveryWire(BaseModel):
 
 
 class WatchActionDeliveryView(WatchActionDeliveryWire):
-    """`GET /v1/deliveries/<delivery_id>`, the detail: the list row plus the
+    """`GET /v1/action-deliveries/<delivery_id>`, the detail: the list row plus the
     exact `request_payload` we sent (a WebhookPayload dump), stored
     point-in-time. Opaque here ; headers are NEVER included (auth tokens). Kept
     off the list wire so a list call doesn't ship every batch body."""

@@ -108,7 +108,9 @@ def _feed_summary(feed: Feed) -> FeedConfigSummary:
         return _EMPTY_SUMMARY
 
 
-def _feed_item_wire(item: FeedItem) -> FeedItemWire:
+def feed_item_wire(item: FeedItem) -> FeedItemWire:
+    """One FeedItem's wire row. Used inline by `feed_view`'s recent-item list and
+    by the item audit views (`/v1/feeds/<id>/items`, `/v1/feed-items/<id>`)."""
     return FeedItemWire(
         id=str(item.id),
         source_kind=str(item.source_kind),
@@ -165,7 +167,7 @@ def feed_view(feed: Feed, *, recent_items: list[FeedItem] | None = None) -> Feed
     return FeedView(
         **feed_wire(feed).model_dump(),
         summary=_feed_summary(feed),
-        recent_items=[_feed_item_wire(i) for i in items],
+        recent_items=[feed_item_wire(i) for i in items],
         sources=[source_wire(s) for s in sources_qs],
         source_count=len(sources_qs),
     )
