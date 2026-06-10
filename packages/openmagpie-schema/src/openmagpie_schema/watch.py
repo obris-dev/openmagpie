@@ -154,8 +154,8 @@ class RunFeedItem(BaseModel):
     SourcePayload dump where both fields live on the base). `source_label` is the
     operator-visible source string. `feed_id` keys into the response's `feeds`
     map. NOT embedded on each run row: returned once per item in the response's
-    `items` map (items are ~1:1 with runs, but the run row stays pure ids and the
-    shape matches `action` / `feeds`)."""
+    `feed_items` map (items are ~1:1 with runs, but the run row stays pure ids and
+    the shape matches `action` / `feeds`)."""
 
     title: str = ""
     url: str = ""
@@ -177,8 +177,8 @@ class WatchActionRunWire(BaseModel):
     """One WatchActionRun on the wire (`GET /v1/actions/<action_id>/runs`).
 
     The stateful audit row of one action executing against one item. Pure ids +
-    run state: the judged item is in the response's `items` map (key
-    `feed_item_id`), the feed in `feeds` (key `items[feed_item_id].feed_id`).
+    run state: the judged item is in the response's `feed_items` map (key
+    `feed_item_id`), the feed in `feeds` (key `feed_items[feed_item_id].feed_id`).
     `result` is the kind-specific output blob (opaque; render common keys
     best-effort). `state` is the `WatchActionRunState` value. Datetimes real;
     renderer encodes."""
