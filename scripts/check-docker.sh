@@ -1,14 +1,16 @@
 #!/bin/sh
 #
-# Preflight for the Docker-based make targets (build) and the quickstart:
-# verify Docker + the Compose plugin are installed and the daemon is running,
-# with friendly OS-specific guidance instead of make's raw
-# "docker: No such file or directory" when Docker is absent.
+# Preflight for `make build`: verify Docker + the Compose plugin are installed
+# and the daemon is running, with friendly OS-specific guidance instead of
+# make's raw "docker: No such file or directory" when Docker is absent.
 #
-# POSIX sh: it's on the quickstart installer path (run.sh calls it), so it must
-# run wherever `curl ... | sh` does. Guide-only: it never installs or changes
-# anything, just points at the official docs and exits non-zero so the caller
-# stops cleanly.
+# The quickstart no longer calls this directly; it uses the aggregate gate
+# scripts/quickstart/preflight.sh (the same Docker checks plus uv, reported all
+# at once). This stays as the make-side guard and a standalone safety net.
+#
+# POSIX sh (the scripts/ shellcheck gate). Guide-only: it never installs or
+# changes anything, just points at the official docs and exits non-zero so the
+# caller stops cleanly.
 set -eu
 
 os="$(uname -s)"

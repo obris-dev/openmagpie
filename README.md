@@ -10,7 +10,17 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-blue.svg" alt="License"></a>
 </p>
 
+<p align="center">
+  <b><a href="https://www.openmagpie.ai/">openmagpie.ai</a></b> |
+  <a href="#quickstart">Quickstart</a> |
+  <a href="apps/cli/README.md">CLI reference</a> |
+  <a href="CHANGELOG.md">Changelog</a>
+</p>
+
 ---
+
+> [!TIP]
+> **CLI not for you?** A UI / hosted version is on the way. Star the repo for updates, or join the waitlist at [openmagpie.ai](https://www.openmagpie.ai/).
 
 ## What it does
 
@@ -27,10 +37,16 @@ OpenMagpie listens wherever communities are having those conversations.
 
 ## Quickstart
 
-One command for your first real match (Docker required; it clones the repo and runs the quickstart for you):
+One command for your first real match (needs Docker and uv; it clones the repo and runs the quickstart for you):
 
 ```bash
 curl -fsSL https://openmagpie.ai | sh
+```
+
+Prefer to not generate seed data? `SKIP_DATA_SEED=1` brings up the stack without sample data:
+
+```bash
+curl -fsSL https://openmagpie.ai | SKIP_DATA_SEED=1 sh
 ```
 
 Prefer to clone first?
@@ -52,34 +68,20 @@ OpenMagpie is BYO LLM; the dev stack doesn't bundle one. Point it at an Ollama y
 
 Set `OLLAMA_DEFAULT_MODEL` to the model you want to judge with. A 7B model judges in roughly 1 to 3 seconds on Apple Silicon or a recent NVIDIA GPU; CPU-only works but is slower.
 
-### Step by step
+### Use it
 
-`./scripts/quickstart/run.sh` (above) is the one-shot path: it checks Docker, creates `.env`, builds and waits for health, migrates, seeds, and installs git hooks. It's make-free, so a bare clone with just Docker can run it. The equivalent manual steps:
-
-```bash
-cp apps/core/.env.example apps/core/.env
-make build                    # build and start Django + the web app
-make local-migrate            # run migrations, create cache table, bootstrap the CLI OAuth app
-./scripts/quickstart/seed.sh  # seed an example feed + watch, then tick if Ollama is reachable
-make hooks                    # install the pre-commit git hooks (best-effort; needs uv)
-```
-
-Then create an account in the browser (visit http://localhost:3001, you'll be signed in), or use the CLI:
+The quickstart already built and seeded everything and put the `magpie` CLI on your `PATH`. Drive it from there:
 
 ```bash
-make local-cli-sync                       # uv sync into the workspace .venv
-make local-cli ARGS="auth login"          # opens browser device flow
-
-make local-cli ARGS="feed create"         # opens $EDITOR on a feed template (sources + retention)
-make local-cli ARGS="watch create"        # opens $EDITOR on a watch template (feeds + action chain)
-make local-tick                           # poll + run the chain once now (vs waiting for the scheduler)
-
-make local-cli ARGS="watch action activity <action_id>"   # per-state summary (+ --list for the run log)
+magpie auth login                            # browser device flow
+magpie feed create                           # opens $EDITOR on a feed template (sources + retention)
+magpie watch create                          # opens $EDITOR on a watch template (feeds + action chain)
+magpie watch action activity <action_id>     # matched-vs-gated breakdown for a filter
 ```
 
 A watch's `actions:` chain typically starts with a `semantic_filter` (your natural-language criteria + threshold) followed by a `webhook` or `log` delivery. Pick a backfill window when you create the feed and the first `make local-tick` scores real posts against your criteria immediately, with no wait for the scheduler.
 
-Prefer a global `magpie`? `make install-cli` puts the dev CLI on your `PATH` (a snapshot of this checkout; re-run after a `git pull` to update), then `magpie auth login`.
+Full command list: the [magpie CLI reference](apps/cli/README.md). The dev loop runs through `make`: see [make/README.md](make/README.md) or `make help`.
 
 ### Running it continuously
 
@@ -232,6 +234,7 @@ scripts/                      quickstart installer (quickstart/{bootstrap,run,se
 - [CONTRIBUTING.md](CONTRIBUTING.md): contribution flow, branch naming, running the checks.
 - [CHANGELOG.md](CHANGELOG.md): notable changes per release.
 - [magpie CLI reference](apps/cli/README.md): install + the full command list.
+- [make/README.md](make/README.md): the important dev `make` commands (`make help` for the full list).
 - [AGENTS.md](AGENTS.md): cross-cutting design conventions, plus per-area notes: [apps/core](apps/core/AGENTS.md) · [apps/cli](apps/cli/AGENTS.md) · [web](web/AGENTS.md).
 
 ## License

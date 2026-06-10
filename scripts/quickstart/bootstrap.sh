@@ -8,14 +8,14 @@
 # migrate, seed an example feed + watch, install git hooks). Local development
 # only; OpenMagpie is BYO-LLM, so run.sh points at an Ollama you control.
 #
-# POSIX sh (no bashisms), like the rest of the installer path (run.sh, seed.sh,
-# and the scripts/check-docker.sh + scripts/hooks.sh that run.sh calls), so the
-# whole `curl ... | sh` flow is bash-free and runs on any box. The remaining
-# scripts/*.sh are dev tooling (make / pre-commit / CI only) and stay bash.
+# POSIX sh (no bashisms), like every scripts/*.sh (shellcheck -s sh enforces it
+# in pre-commit + CI), so the whole `curl ... | sh` flow is bash-free.
 #
-# Guide-only prerequisites: it checks for git + Docker and, if either is
-# missing, prints how to install it and exits. It never modifies your system.
-# (make is NOT needed for the quickstart, only for the dev loop afterwards.)
+# Pre-clone, this checks only for git (needed to fetch the repo). The full
+# prerequisites checklist (supported OS, Docker + Compose, uv) runs right after
+# the clone, in scripts/quickstart/preflight.sh, so there's one styled checklist
+# instead of two. Guide-only: it never installs anything; missing tools get
+# install instructions. (make is NOT needed for the quickstart.)
 #
 # Env overrides. When piping, prefix the `sh`, NOT the `curl` (the assignment
 # binds to the command it precedes), e.g.:
@@ -24,8 +24,10 @@
 #                      directory; prompts when run interactively)
 #   OPENMAGPIE_BRANCH  branch or tag to check out (default: main)
 #   OPENMAGPIE_SSH=1   clone over SSH instead of HTTPS
-# STARTER / DAYS pass through to the seed as well (they're inherited down to
-# seed.sh): curl -fsSL https://openmagpie.ai | STARTER=devtools DAYS=7 sh
+# STARTER / DAYS / SKIP_DATA_SEED pass through to the seed as well (inherited
+# down to seed.sh), e.g. STARTER=devtools DAYS=7 sh:
+#   STARTER / DAYS     which example starter to seed + its backfill window
+#   SKIP_DATA_SEED=1   create the account only, no example feed/watch
 set -eu
 
 readonly REPO_HTTPS="https://github.com/obris-dev/openmagpie.git"
@@ -50,69 +52,6 @@ fail() { printf '\n%s\n\n' "  ${RED}x $1${NC}" >&2; exit 1; }
 
 OS=$(uname -s)  # assign then mark readonly separately (don't mask $()'s status)
 readonly OS
-
-docker_guide() {
-    case "$OS" in
-        Darwin)
-            info "macOS: install Docker Desktop -> https://docs.docker.com/desktop/install/mac-install/"
-            info "       (or: brew install --cask docker), then launch it so the daemon runs." ;;
-        Linux)
-            info "Linux: install Docker Engine + the Compose plugin -> https://docs.docker.com/engine/install/" ;;
-        *)
-            info "See https://docs.docker.com/get-docker/" ;;
-    esac
-}
-
-require_cmd() {
-    # require_cmd <command> <human label> <macOS hint> <Linux hint>
-    command -v "$1" >/dev/null 2>&1 && { ok "$2"; return; }
-    case "$OS" in
-        Darwin) info "$3" ;;
-        Linux)  info "$4" ;;
-    esac
-    fail "$2 is required"
-}
-
-preflight() {
-    step "Checking prerequisites"
-
-    case "$OS" in
-        Darwin | Linux)
-            ok "OS: $OS" ;;
-        *)
-            info "OpenMagpie's quickstart supports macOS and Linux."
-            info "On Windows, run it inside WSL2 (a Linux shell): https://learn.microsoft.com/windows/wsl/install"
-            fail "unsupported OS: $OS" ;;
-    esac
-
-    require_cmd git "git" \
-        "Install git: xcode-select --install (or via Homebrew)" \
-        "Install git, e.g. sudo apt-get install -y git"
-    # make is NOT required here: the quickstart itself is make-free
-    # (scripts/quickstart/run.sh). make is the dev-loop interface afterwards.
-
-    # Same checks (and order) as scripts/check-docker.sh, which run.sh uses
-    # post-clone; we can't call it here since the repo isn't cloned yet. Keep
-    # the checks in sync (the guidance wording is allowed to differ).
-    if ! command -v docker >/dev/null 2>&1; then
-        docker_guide
-        fail "Docker is required"
-    fi
-    if ! docker compose version >/dev/null 2>&1; then
-        info "Docker is installed but the Compose plugin ('docker compose') is missing."
-        docker_guide
-        fail "the Docker Compose plugin is required"
-    fi
-    if ! docker info >/dev/null 2>&1; then
-        case "$OS" in
-            Darwin) info "Docker is installed but its daemon isn't running. Launch Docker Desktop and wait for it to start." ;;
-            Linux)  info "Docker is installed but its daemon isn't running. Start it: sudo systemctl start docker" ;;
-        esac
-        fail "the Docker daemon is not running"
-    fi
-    ok "Docker + Compose (daemon running)"
-    echo ""
-}
 
 resolve_target_dir() {
     # Default to a named subdir of the CURRENT directory (not $HOME, and not
@@ -151,6 +90,17 @@ resolve_target_dir() {
 
 fetch_repo() {
     step "Fetching OpenMagpie"
+    # git is the one tool we must have BEFORE the repo (and its preflight.sh)
+    # exist, so it's checked here, at its point of use, rather than in the
+    # post-clone preflight. The full prerequisites checklist runs after the clone.
+    if ! command -v git >/dev/null 2>&1; then
+        case "$OS" in
+            Darwin) info "Install git: xcode-select --install (or via Homebrew)" ;;
+            Linux)  info "Install git, e.g. sudo apt-get install -y git" ;;
+            *)      info "Install git: https://git-scm.com/downloads" ;;
+        esac
+        fail "git is required to fetch OpenMagpie"
+    fi
     url="$REPO_HTTPS"  # no `local` (undefined in POSIX sh)
     [ -n "${OPENMAGPIE_SSH:-}" ] && url="$REPO_SSH"
 
@@ -159,6 +109,20 @@ fetch_repo() {
         git -C "$OPENMAGPIE_DIR" fetch --quiet origin "$OPENMAGPIE_BRANCH" || fail "git fetch failed"
         git -C "$OPENMAGPIE_DIR" checkout --quiet "$OPENMAGPIE_BRANCH" || fail "git checkout $OPENMAGPIE_BRANCH failed"
         git -C "$OPENMAGPIE_DIR" pull --quiet --ff-only origin "$OPENMAGPIE_BRANCH" || warn "could not fast-forward; using the local checkout as-is"
+    elif [ -d "$OPENMAGPIE_DIR" ] && [ -n "$(ls -A "$OPENMAGPIE_DIR" 2>/dev/null)" ]; then
+        # Non-empty but not a git checkout: the leftover of an interrupted or
+        # failed prior attempt. `git clone` would only fail here with a cryptic
+        # "already exists and is not empty", so bail with a path out instead. (An
+        # absent or empty dir falls through to a clean clone below.) A prior run
+        # may have started containers + a pgdata volume under this dir's compose
+        # project, so tear those down before removing the dir, or the re-clone
+        # silently reattaches the old volume.
+        info "$OPENMAGPIE_DIR already exists and isn't a clean OpenMagpie checkout"
+        info "(likely a previous attempt that didn't finish). Clean up, then re-run:"
+        info "  cd \"$OPENMAGPIE_DIR\" && docker compose down -v   # if a prior run started the stack"
+        info "  rm -rf \"$OPENMAGPIE_DIR\"                          # remove the leftover checkout"
+        info "Or set OPENMAGPIE_DIR to a fresh path."
+        fail "target directory is not empty"
     else
         info "Cloning into $OPENMAGPIE_DIR"
         # Fail loudly on a bad branch rather than silently cloning the default
@@ -177,15 +141,22 @@ main() {
     step "OpenMagpie quickstart"
     info "https://openmagpie.ai"
     echo ""
-    preflight
     resolve_target_dir
     fetch_repo
+    cd "$OPENMAGPIE_DIR"
+    # Repo's here now: run the full prerequisites checklist from it (one shared
+    # implementation with the clone-first path), then tell run.sh it's done so it
+    # doesn't repeat the checklist. `sh <script>` (not `./<script>`) so the
+    # handoff doesn't depend on the +x bit surviving the clone.
+    sh ./scripts/quickstart/preflight.sh bootstrap
+    # Tell run.sh the checklist already ran. PID-scoped to our $$: the exec below
+    # preserves the PID, so run.sh sees OPENMAGPIE_PREFLIGHTED == its own $$. A
+    # value that leaks into some later shell carries a different pid and won't
+    # match, so run.sh re-checks instead of trusting a stale ambient var.
+    export OPENMAGPIE_PREFLIGHTED=$$
     step "Running the quickstart (build -> migrate -> seed an example)"
     echo ""
-    cd "$OPENMAGPIE_DIR"
-    # `sh <script>` (not `./<script>`) so the handoff doesn't depend on the +x
-    # bit surviving the clone or on shebang resolution. run.sh resolves its own
-    # location from $0 regardless.
+    # run.sh resolves its own location from $0 regardless of cwd.
     exec sh ./scripts/quickstart/run.sh
 }
 

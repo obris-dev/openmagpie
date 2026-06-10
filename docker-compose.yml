@@ -19,21 +19,51 @@ services:
       retries: 10
       start_period: 10s
 
-  core:
-    # Context = repo root: the uv workspace's single lock + every
-    # member pyproject live there. Dockerfile is the core member's.
-    build:
+  # One-shot pre-start setup for core, run once per `up` and gated before core
+  # serves (core depends_on it: service_completed_successfully). Today it just
+  # ensures the DB-backed cache table (openmagpie_cache) that /healthz round-
+  # trips; it's the home for anything else that must exist before core serves.
+  # Kept OUT of core's command so rolling/restarting core alone doesn't re-run
+  # it, and OUT of migrations: createcachetable is idempotent and NOT a schema
+  # migration, so it's safe on every `up` without auto-applying model changes
+  # the dev isn't ready for (those stay explicit: `make local-migrate` / the
+  # quickstart). Local compose only; assumes DatabaseCache, the local backend.
+  # Defines the shared build + image (YAML-anchored) that core reuses, so the two
+  # can't silently drift apart and resolve to one image (Compose builds it once,
+  # or on older versions rebuilds it fully cached).
+  core-setup:
+    # Build context = repo root: the uv workspace's single lock + every member
+    # pyproject live there; Dockerfile is the core member's.
+    build: &core_build
       context: .
       dockerfile: apps/core/Dockerfile
+    image: &core_image openmagpie-core
+    command: uv run --package openmagpie-core python apps/core/manage.py createcachetable
+    env_file: ./apps/core/.env
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - .:/app
+      - /app/.venv
+
+  core:
+    # Reuse the core-setup build + image (the anchors above) so the image is
+    # built once. Pre-start setup lives in core-setup, not in this command, so
+    # restarting/rolling core alone doesn't re-run it.
+    build: *core_build
+    image: *core_image
     command: uv run --package openmagpie-core python apps/core/manage.py runserver 0.0.0.0:8000
     ports:
       - "8000:8000"
     env_file: ./apps/core/.env
     depends_on:
-      # Only start once Postgres accepts connections, so the first migrate /
-      # boot doesn't race the db coming up.
-      db:
-        condition: service_healthy
+      # core-setup creates the DB-backed cache table /healthz round-trips, so
+      # core can't go healthy (and `up --wait` deadlocks) until it completes.
+      # Waiting on it also means Postgres is up by the time core starts (it
+      # gates on db: service_healthy in turn).
+      core-setup:
+        condition: service_completed_successfully
     volumes:
       # Bind the whole workspace for hot-reload (canonical uv pattern);
       # anonymous volume keeps the root .venv the image built.

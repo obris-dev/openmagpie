@@ -102,12 +102,17 @@ class Command(SingleFlightCommand):
         total_due = WatchActionRunService.Global.count_due(now=now)
         # First paint: announce the work + count immediately, BEFORE the
         # first (potentially slow) run, so the operator isn't staring at a
-        # blank terminal wondering if it hung. Just the count (the standard
-        # "collected N items" opener) ; the cadence isn't narrated, the
-        # checkpoints speak for themselves.
+        # blank terminal wondering if it hung. A pass can be far slower than the
+        # rest of the quickstart, so set that expectation (and the ~1-minute
+        # checkpoint cadence) here, so the quiet gap before the first "[n/total]"
+        # reads as expected, not hung. ("~minute" mirrors _CHECKPOINT_SECONDS=60.)
         if not quiet:
             if total_due:
-                logger.info("Draining %d due run%s…", total_due, "s" if total_due != 1 else "")
+                logger.info(
+                    "Draining %d due run%s… You'll see progress every ~minute.",
+                    total_due,
+                    "s" if total_due != 1 else "",
+                )
             else:
                 logger.info("No runs due.")
         t_start = time.monotonic()

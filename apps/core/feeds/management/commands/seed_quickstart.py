@@ -53,6 +53,11 @@ class Command(BaseCommand):
         )
         parser.add_argument("--reset", action="store_true", help="Delete the existing seeded feed + watch and rebuild")
         parser.add_argument(
+            "--skip-data",
+            action="store_true",
+            help="Create the local account but no example feed/watch (start from an empty workspace).",
+        )
+        parser.add_argument(
             "--print-activity",
             action="store_true",
             help="Print the seeded watch's semantic_filter action id (for `watch action activity`) and exit; no seeding.",
@@ -81,6 +86,16 @@ class Command(BaseCommand):
             raise CommandError(f"--days must be >= 0 (got {days})")
 
         user_id, account_id, account_name, email, password = self._get_or_create_account()
+
+        if options["skip_data"]:
+            # Account only: bring up a workspace to explore, with no seeded
+            # feed/watch. The account get-or-create above is the whole job.
+            self.stdout.write(f"Account ready ({account_name}). Account login: {email} / {password}")
+            self.stdout.write(
+                "No example data seeded (--skip-data). Create one with `magpie feed create` / `magpie watch create`."
+            )
+            return
+
         feed_yaml, watch_yaml = self._load_starter(starter)
 
         feed_svc = FeedService(account_id=account_id)
@@ -215,7 +230,7 @@ class Command(BaseCommand):
     @staticmethod
     def _gate_action_id(actions: list[Any]) -> str | None:
         # The chain's semantic_filter (the gate); its activity is the
-        # matched-vs-filtered breakdown a first user wants. None if absent.
+        # matched vs gated breakdown a first user wants. None if absent.
         return next((str(a.id) for a in actions if str(a.kind) == WatchActionKind.SEMANTIC_FILTER), None)
 
     @staticmethod
@@ -257,7 +272,7 @@ class Command(BaseCommand):
         self.stdout.write("Matches print to the terminal when the pipeline runs (the starter's log lines).")
         if gate_action_id is not None:
             self.stdout.write(
-                f"Inspect matched vs filtered: `magpie watch action activity {gate_action_id}` (after `magpie auth login`)."
+                f"Inspect matched vs gated: `magpie watch action activity {gate_action_id}` (after `magpie auth login`)."
             )
         else:
             self.stdout.write(

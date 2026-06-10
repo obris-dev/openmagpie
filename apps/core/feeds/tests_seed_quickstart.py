@@ -58,6 +58,20 @@ class SeedQuickstartTests(TestCase):
         watches = WatchService(account_id=account_id).list(limit=200)
         self.assertEqual(len(watches), 1)
 
+    def test_skip_data_creates_account_only(self) -> None:
+        # --skip-data brings up the account (so the user can sign in and explore)
+        # but seeds no example feed/watch.
+        out = io.StringIO()
+        call_command("seed_quickstart", skip_data=True, stdout=out)
+
+        self.assertTrue(UserService.Global.email_exists("local@openmagpie.local"))
+        account_id = self._account_id()
+        self.assertEqual(AccountService.Global.get(account_id).name, "Local workspace")
+        self.assertEqual(Feed.objects.count(), 0)
+        self.assertEqual(Watch.objects.count(), 0)
+        # Login creds are surfaced so the caller can echo them in its summary.
+        self.assertIn("local@openmagpie.local", out.getvalue())
+
     def test_watch_wired_to_feed_with_validated_chain(self) -> None:
         call_command("seed_quickstart", starter=STARTER, days=3)
         account_id = self._account_id()

@@ -1,4 +1,4 @@
-.PHONY: install-cli up build down logs logs-core logs-web local-exec local-manage local-test local-makemigrations local-dbshell local-migrate local-tick up-jobs down-jobs _job-up local-lint local-lint-fix local-types local-check local-web local-web-reinstall local-web-shell local-cli-sync local-cli hooks
+.PHONY: install-local-cli up build down logs logs-core logs-web local-exec local-manage local-test local-makemigrations local-dbshell local-migrate local-tick up-jobs down-jobs _job-up local-lint local-lint-fix local-types local-check local-web local-web-reinstall local-web-shell local-cli-sync local-cli hooks
 
 # Getting started is the curl|sh installer (scripts/quickstart/bootstrap.sh) or,
 # in a clone, ./scripts/quickstart/run.sh. That orchestration lives in POSIX sh,
@@ -9,14 +9,11 @@
 # other via `sh ./script`, which doesn't depend on +x surviving a fresh clone
 # or a tarball download.
 
-install-cli: ## Install the DEV magpie CLI on your PATH (snapshot of this checkout)
-	# NOT --editable: the cli depends on the openmagpie-schema workspace package,
-	# and an editable tool install lets a stale schema copy shadow the live one
-	# (ModuleNotFoundError on newer submodules). Non-editable builds a CURRENT
-	# schema wheel from the workspace. It's a SNAPSHOT, not live: re-run after a
-	# git pull to update. --reinstall makes re-running idempotent.
-	uv tool install --reinstall ./apps/cli
-	@echo "Installed the dev CLI (snapshot of this checkout; re-run after a pull). Try: magpie auth login"
+install-local-cli: ## Install the local magpie CLI on your PATH (snapshot of this checkout)
+	# Logic lives in scripts/install-local-cli.sh (POSIX sh) so the quickstart
+	# can install the CLI without make ; this target is the dev-loop alias. The
+	# script needs uv (and prints how to get it if missing).
+	@./scripts/install-local-cli.sh
 
 up: ## Start local Docker dev environment
 	docker compose up -d
@@ -53,7 +50,10 @@ local-dbshell: ## Open a psql shell on the Postgres db service
 	docker compose exec db psql -U openmagpie -d openmagpie
 
 local-migrate: ## Run Django database migrations + ensure cache table exists + bootstrap OAuth Application
-	# scripts/quickstart/run.sh runs these same three commands (make-free); keep in sync.
+	# The full manual DB setup / re-run (e.g. after `makemigrations`). The
+	# quickstart (scripts/quickstart/run.sh) runs migrate + bootstrap once, and
+	# the core-setup compose one-shot runs createcachetable before core serves
+	# (for /healthz); keep these three in sync with those.
 	$(MAKE) local-manage CMD=migrate
 	$(MAKE) local-manage CMD=createcachetable
 	$(MAKE) local-manage CMD=bootstrap_oauth_app

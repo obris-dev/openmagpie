@@ -13,43 +13,109 @@ set -eu
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$ROOT"
 
+# Shared helpers (manage(), is_truthy()). Sourced after cd so the relative path
+# resolves; keeps the truthy SKIP_DATA_SEED parse + manage() in one place.
+# shellcheck source=scripts/quickstart/_lib.sh
+. ./scripts/quickstart/_lib.sh
+
 # Invoke siblings via `sh <script>` (not `./<script>`) for the same reason the
 # bootstrap does: don't depend on the +x bit surviving the clone / a tarball.
-sh ./scripts/check-docker.sh
+#
+# Preflight up front: check every tool this run needs and, if one is missing,
+# stop with the full list rather than dying mid-build. Skip it ONLY when the
+# curl|sh bootstrap already ran it: bootstrap exports OPENMAGPIE_PREFLIGHTED=$$
+# and exec's us, and exec preserves the PID, so the value equals our own $$. A
+# value leaked into some later shell carries a DIFFERENT pid and won't match, so
+# we re-run rather than trust an ambient env var. (Supersedes check-docker.sh on
+# the quickstart path; that one still guards `make build`.)
+if [ "${OPENMAGPIE_PREFLIGHTED:-}" != "$$" ]; then
+    sh ./scripts/quickstart/preflight.sh run
+fi
 
 if [ ! -f apps/core/.env ]; then
     cp apps/core/.env.example apps/core/.env
     echo "Created apps/core/.env from .env.example"
 fi
 
+# The core-setup one-shot runs createcachetable before core serves (see
+# docker-compose.yml), so core's /healthz is green on a fresh DB and `--wait`
+# returns with the stack up.
 docker compose up --build -d --wait
 
-# Mirrors the manage commands `make local-migrate` runs. --noinput because we
-# exec with stdin closed/at-EOF (the curl|sh pipe), so a prompt can't be
-# answered; migrate is non-interactive in practice, but be explicit.
-manage() { docker compose exec -T core uv run --package openmagpie-core python apps/core/manage.py "$@"; }
+# The model tables + CLI OAuth app the quickstart needs. Explicit and one-time
+# here (not auto-run on every `up`), so the dev loop controls when migrations
+# apply via `make local-migrate`. --noinput: stdin is closed under curl|sh.
+# (manage() comes from _lib.sh, sourced above.)
 manage migrate --noinput
-manage createcachetable
 manage bootstrap_oauth_app
 
-sh ./scripts/quickstart/seed.sh
+# Install the local `magpie` CLI so the next-steps below are copy-paste runnable.
+# It's our own small, removable tool and the only way to get `magpie` today, so
+# the quickstart installs it (best-effort). Needs uv; if uv is missing the script
+# prints how to get it and we carry on (the stack is already up). Not make.
+sh ./scripts/install-local-cli.sh || true
+
 # Hooks are a best-effort nicety; a pre-commit failure must not abort the
-# quickstart after the stack is already up (the user still wants "Ready. Next").
+# quickstart after the stack is already up.
 sh ./scripts/hooks.sh || true
 
-cat <<'EOF'
+# Seed + score the backlog LAST among the work, so any matches stream right
+# before the summary. OPENMAGPIE_QUICKSTART tells seed.sh to defer its breakdown
+# hint to the consolidated summary below (so it isn't printed twice).
+OPENMAGPIE_QUICKSTART=1 sh ./scripts/quickstart/seed.sh
 
-Ready. Next:
-  App:        http://localhost:3001  (create an account; you're signed in)
-  Marketing:  http://localhost:3000
-  CLI:        make install-cli   then   magpie auth login
-  Dev:        the dev loop runs through make (see `make help`); install make if you don't have it.
+# Final summary, printed LAST so the CLI commands + login don't scroll off behind
+# the build/seed output. creds use the same env + defaults as the seed (source of
+# truth: apps/core/feeds/management/commands/seed_quickstart.py).
+# Normalize the email like the seed does (it stores .strip().lower()), so a
+# custom SEED_EMAIL prints the value you'd actually log in with. Password is
+# kept verbatim (case-sensitive).
+seed_email="$(printf '%s' "${SEED_EMAIL:-local@openmagpie.local}" | tr '[:upper:]' '[:lower:]' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+seed_password="${SEED_PASSWORD:-openmagpie-local}"
+# Color the copy-paste bits (CLI commands + login creds) when stdout is a
+# terminal; headers/labels stay plain. printf for the escapes (echo mangles them).
+if [ -t 1 ]; then
+    KEY=$(printf '\033[1;36m'); GREEN=$(printf '\033[1;32m'); OFF=$(printf '\033[0m')
+else
+    KEY=''; GREEN=''; OFF=''
+fi
 
-The web (App + Marketing) builds on first boot, so give those URLs a minute if
-they don't load right away.
+# Next step depends on whether example data was seeded. Account-only mode
+# (SKIP_DATA_SEED truthy, via is_truthy from _lib.sh) has no watch to inspect, so
+# point at creating one instead.
+if is_truthy "${SKIP_DATA_SEED:-}"; then
+    next_block="Create your first feed and watch with the magpie CLI:
+  ${KEY}magpie auth login${OFF}
+  ${KEY}magpie feed create${OFF}
+  ${KEY}magpie watch create${OFF}"
+else
+    # --starter so a STARTER override resolves the right watch (same env + default
+    # as seed.sh); without it the lookup misses the seeded watch and prints a dead
+    # <action_id>. Read-only, no side effects.
+    aid="$(manage seed_quickstart --print-activity --starter="${STARTER:-selfhosted-opensource}" 2>/dev/null | tr -d '\r' | tail -1)" || aid=""
+    [ -n "$aid" ] || aid="<action_id>"
+    next_block="Inspect the matched vs gated breakdown with the magpie CLI:
+  ${KEY}magpie auth login${OFF}
+  ${KEY}magpie watch action activity ${aid}${OFF}"
+fi
 
-Heads up: OpenMagpie is BYO-LLM. Point OLLAMA_URL in apps/core/.env at an
-Ollama you control. The default (http://host.docker.internal:11434) reaches
-Ollama on your own machine; host.docker.internal is how the container talks to
-your host. For a remote box, set OLLAMA_URL to its address.
+cat <<EOF
+
+${GREEN}Ready. Your local OpenMagpie is up.${OFF}
+
+${next_block}
+
+Login using:
+  Email:     ${KEY}${seed_email}${OFF}
+  Password:  ${KEY}${seed_password}${OFF}
+
+Run the pipeline: ${KEY}make local-tick${OFF} (once) or ${KEY}make up-jobs${OFF} (background).
+More in the README ("Running it continuously") and \`make help\`.
 EOF
+
+# The magpie lines above assume the best-effort CLI install landed. A missing uv
+# would've stopped at preflight, so the only way here without it is a CLI build
+# failure (uv present); point back at the installer then. uv -> ~/.local/bin.
+if ! command -v magpie >/dev/null 2>&1 && [ ! -x "$HOME/.local/bin/magpie" ]; then
+    printf '%s\n' "(\`magpie\` not found? re-run ./scripts/install-local-cli.sh)"
+fi
