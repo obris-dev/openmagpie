@@ -55,13 +55,17 @@ Short flags are decided once here, not per command. A flag gets a short only whe
 | flag | short | note |
 |---|---|---|
 | `--file` | `-f` | reserved for file / config input, everywhere |
-| `--watch` | `-w` | scope |
+| `--output` | `-o` | reserved for the output-file destination (write to a file instead of stdout), everywhere; already live on `feed`/`watch` create + `feed source` export. NOT a format selector |
+| `--watch` | `-w` | scope (config commands; observability is action-scoped only, see below) |
 | `--action` | `-a` | scope |
-| `--state` | `-s` | filter |
+| `--state` | `-s` | filter, on subcommands |
+| `--server` | `-s` | global, root callback only (passed before the subcommand). Typer scopes it apart from the subcommand `--state`, so there is no parse clash, but don't mint a third `-s` |
 | `--feed` | none | no good short once `-f` is files; only on `feed source` ops, where the noun already reads |
 | `--after` | none | cursor, rarely hand-typed; `-a` is `--action` |
 
-Observability `list`/`get` commands take a uniform `-o json|jsonl`. On a TTY the human view pages through `$PAGER` (`less`) so scroll / page-back / search replace manual `--after` (no bespoke `n`/`p` keys: `less` is what users already know); `-o jsonl` streams one object per row to stdout, auto-paginating the cursor, so exports never buffer. `--follow` polls the newest rows and emits new ones live (dedupe by id, Ctrl-C stops). No bespoke `--format`: `-o jsonl | jq` owns custom shaping.
+Observability `list`/`get` default to the human table, paged through `$PAGER` (`less`) on a TTY so scroll / page-back / search replace manual `--after` (no bespoke `n`/`p` keys: `less` is what users already know). `--jsonl` instead streams one object per row to stdout, auto-paginating the cursor, so exports never buffer and `--jsonl | jq` owns custom shaping (no bespoke `--format`). `-o`/`--output` only chooses *where* that output goes (a file instead of stdout, the reserved meaning above), never *what format*. `--follow` polls the newest rows and emits new ones live (dedupe by id, Ctrl-C stops).
+
+Today `activity` and `delivery` are **action-scoped only** (`--action` / `-a`): the runs and deliveries endpoints are addressed by the action's own id in the path, with no watch-level rollup or `?watch=` filter. A watch-scoped observability view (`--watch` on `activity` / `delivery`) needs a new aggregate endpoint and is deferred to Phase 2; until then `-w` is a scope flag for the config commands (`watch action list --watch`) only.
 
 Some current commands predate this and do not follow it yet; they are being migrated. New commands MUST follow the rule above.
 
