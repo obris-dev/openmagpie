@@ -43,6 +43,12 @@ and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2
   JSON with `--jsonl`. The run audit now shows each item's title + feed name
   (joined server-side) and, for `semantic_filter` actions, the filter score and
   reason.
+- New read commands for reviewing definitions: `magpie watch action get
+  <action_id>` shows one action's kind + config (it was only addable / settable /
+  removable before). A feed's items move to a read-only `feed item` sub-noun
+  (`list --feed <id>`, `get <item_id>`; no create / edit / delete), replacing
+  `magpie feed view`: `feed get` now shows the feed's definition and `feed item
+  list` its content stream, so the two no longer read as synonyms.
 - The webhook payload is now one self-describing shape for both instant and
   digest delivery:
   `{watch: {id, name}, action_id, delivery, window, items: [{key, source: {label, kind}, item}]}`

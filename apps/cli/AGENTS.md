@@ -40,8 +40,8 @@ cli/src/openmagpie/
 
 The command tree splits by how data is used, not by ORM containment.
 
-- **Config you build nests** (it has real containment): `feed` + `feed source`, `watch` + `watch action`.
-- **Observability you query is flat and top-level**, filter-first, addressed by a scope flag, never walked through its parents: `activity`, `delivery`.
+- **What one parent OWNS nests** (real containment): `feed` + `feed source` + `feed item`, `watch` + `watch action`. This holds whether the child is operator-authored config (`source`, `action`) or server-produced content (`item`, read-only: `list` / `get`, no create / edit / delete). It is a part of exactly one feed/watch, so you address it under that parent.
+- **Observability you query is flat and top-level**, filter-first, addressed by a scope flag, never walked through its parents: `activity`, `delivery`. These are run/delivery audit that spans an action over time (not part of the action's definition), so they stand on their own rather than nesting under `watch action`.
 
 Argument rule, uniform across every noun:
 

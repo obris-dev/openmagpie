@@ -235,7 +235,7 @@ scripts/                      quickstart installer (quickstart/{bootstrap,run,se
 - [CHANGELOG.md](CHANGELOG.md): notable changes per release.
 - [magpie CLI reference](apps/cli/README.md): install + the full command list.
 - [make/README.md](make/README.md): the important dev `make` commands (`make help` for the full list).
-- [AGENTS.md](AGENTS.md): cross-cutting design conventions, plus per-area notes: [apps/core](apps/core/AGENTS.md) · [apps/cli](apps/cli/AGENTS.md) · [web](web/AGENTS.md).
+- [AGENTS.md](AGENTS.md): cross-cutting design conventions, plus per-area notes: [apps/core](apps/core/AGENTS.md), [apps/cli](apps/cli/AGENTS.md), [web](web/AGENTS.md).
 
 ## License
 
