@@ -6,6 +6,7 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 
 from auth_api.operations.signup import SignupOperation
+from feeds.models import FeedItem
 from watches.models import WatchAction, WatchActionDelivery, WatchActionRun
 
 
@@ -231,3 +232,58 @@ class ActionDeliveriesRouteTests(TestCase):
 
     def test_unknown_delivery_is_404(self) -> None:
         self.assertEqual(self.client.get(f"/v1/deliveries/{ulid.ulid()}").status_code, 404)
+
+
+class ActionRunFeedItemTests(TestCase):
+    """The runs log joins the judged feed item (title / url / source_label),
+    batched; a pruned item leaves `feed_item` null but keeps `feed_item_id` so
+    the row still renders."""
+
+    def setUp(self) -> None:
+        self.user = SignupOperation(email="runitem@example.com", password="Str0ng-Passw0rd!").run()
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.user)
+        resp = self.client.post(
+            "/v1/watches",
+            {"name": "w", "feed_ids": [], "actions": [{"kind": "log", "config": {"prefix": "[A]"}}]},
+            format="json",
+        )
+        self.action_id = resp.json()["actions"][0]["id"]
+        self.account_id = WatchAction.objects.get(id=self.action_id).account_id
+
+    def _run(self, feed_item_id: str) -> None:
+        WatchActionRun.objects.create(
+            account_id=self.account_id,
+            watch_id=ulid.ulid(),
+            action_id=self.action_id,
+            feed_item_id=feed_item_id,
+            state="succeeded",
+            scheduled_at=timezone.now(),
+            completed_at=timezone.now(),
+        )
+
+    def test_run_carries_item_fields_and_tolerates_pruned(self) -> None:
+        item = FeedItem.objects.create(
+            account_id=self.account_id,
+            feed_id=ulid.ulid(),
+            source_kind="rss",
+            external_id="ext-1",
+            source_label="Example U",
+            data={"title": "Coach hired", "url": "https://x.test/a", "kind": "rss"},
+        )
+        self._run(str(item.id))  # item present
+        pruned_id = ulid.ulid()
+        self._run(pruned_id)  # item absent (pruned)
+
+        resp = self.client.get(f"/v1/actions/{self.action_id}/runs")
+        self.assertEqual(resp.status_code, 200, resp.content)
+        by_item = {r["feed_item_id"]: r for r in resp.json()["items"]}
+
+        present = by_item[str(item.id)]["feed_item"]
+        self.assertEqual(present["title"], "Coach hired")
+        self.assertEqual(present["url"], "https://x.test/a")
+        self.assertEqual(present["source_label"], "Example U")
+
+        pruned = by_item[pruned_id]
+        self.assertIsNone(pruned["feed_item"])
+        self.assertEqual(pruned["feed_item_id"], pruned_id)

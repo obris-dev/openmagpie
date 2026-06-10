@@ -17,6 +17,7 @@ from rest_framework.response import Response
 
 from accounts.api import AccountScopedAPIView
 from common.api_params import parse_limit
+from feeds.services import FeedItemService
 from openmagpie_schema.watch import (
     WatchActionDeliveryListResponse,
     WatchActionRunListResponse,
@@ -96,7 +97,11 @@ class ActionRunsView(ActionScopedAPIView):
         after = request.query_params.get("after") or None
         runs = self.run_svc.list_for_action(str(action.id), after=after, limit=limit, state=state)
         next_cursor = str(runs[-1].id) if len(runs) == limit else None
-        items = [watch_action_run_wire(r) for r in runs]
+        # Batch-fetch the judged feed items for this page so each row can show the
+        # item title/url without an N+1; a pruned item is simply absent from the
+        # map and the wire falls back to feed_item_id.
+        feed_items = FeedItemService(account_id=request.account_id).get_many([str(r.feed_item_id) for r in runs])
+        items = [watch_action_run_wire(r, feed_items.get(str(r.feed_item_id))) for r in runs]
         # Summary on the first page only (skipped while paging) — keeps a
         # deep-paging call a pure row fetch.
         summary = None

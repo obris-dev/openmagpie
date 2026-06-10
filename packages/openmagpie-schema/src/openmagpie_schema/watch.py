@@ -147,18 +147,33 @@ class WatchInput(BaseModel):
 # ── ActionRun (audit log read path) ───────────────────────────────────────
 
 
+class RunFeedItem(BaseModel):
+    """The feed item a run was judged against, narrowed for the audit log.
+
+    `title` / `url` come from the connector payload (`FeedItem.data`, a
+    SourcePayload dump where both fields live on the base). `source_label` is the
+    operator-visible source string. Null on the run wire when the item has been
+    pruned by retention, so the row still renders by `feed_item_id`."""
+
+    title: str = ""
+    url: str = ""
+    source_label: str = ""
+
+
 class WatchActionRunWire(BaseModel):
     """One WatchActionRun on the wire (`GET /v1/actions/<action_id>/runs`).
 
     The stateful audit row of one action executing against one item.
     `result` is the kind-specific output blob (opaque; render common keys
-    best-effort). `state` is the `WatchActionRunState` value. Datetimes
-    real; renderer encodes."""
+    best-effort). `state` is the `WatchActionRunState` value. `feed_item` is the
+    judged item narrowed for display (null when pruned). Datetimes real; renderer
+    encodes."""
 
     id: str
     watch_id: str
     action_id: str
     feed_item_id: str
+    feed_item: RunFeedItem | None = None
     state: WatchActionRunState
     result: ResultBlob = Field(default_factory=dict)
     error: str = ""

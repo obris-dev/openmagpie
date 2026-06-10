@@ -17,8 +17,10 @@ from pydantic import ValidationError as PydanticValidationError
 from rest_framework import serializers
 
 from common.pydantic_errors import pydantic_errors_to_drf
+from feeds.models import FeedItem
 from feeds.services import FeedService
 from openmagpie_schema.watch import (
+    RunFeedItem,
     WatchActionDeliveryView,
     WatchActionDeliveryWire,
     WatchActionInput,
@@ -141,14 +143,29 @@ def watch_action_wire(action: WatchAction) -> WatchActionWire:
     )
 
 
-def watch_action_run_wire(run: WatchActionRun) -> WatchActionRunWire:
+def _run_feed_item(item: FeedItem | None) -> RunFeedItem | None:
+    """Narrow a FeedItem to the audit row's display fields; None when the item is
+    gone (pruned by retention)."""
+    if item is None:
+        return None
+    data = item.data or {}
+    return RunFeedItem(
+        title=str(data.get("title", "")),
+        url=str(data.get("url", "")),
+        source_label=str(item.source_label),
+    )
+
+
+def watch_action_run_wire(run: WatchActionRun, feed_item: FeedItem | None = None) -> WatchActionRunWire:
     """One run's wire shape (the audit-log row). `state` coerces to the
-    WatchActionRunState enum; `result` is the opaque kind-specific blob."""
+    WatchActionRunState enum; `result` is the opaque kind-specific blob;
+    `feed_item` is the judged item (pass it in batched to avoid an N+1)."""
     return WatchActionRunWire(
         id=str(run.id),
         watch_id=str(run.watch_id),
         action_id=str(run.action_id),
         feed_item_id=str(run.feed_item_id),
+        feed_item=_run_feed_item(feed_item),
         state=WatchActionRunState(run.state),
         result=run.result or {},
         error=run.error,
