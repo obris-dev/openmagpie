@@ -35,10 +35,13 @@ and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2
   `--action <id>`, REPLACE the buried `magpie watch action activity` /
   `deliveries` / `delivery`. The overloaded `activity` (summary AND run log) is
   split into `activity summary` vs `activity list`. A feed's source set moves
-  under a `feed source` sub-noun (`list` / `set` / `export --feed`, `remove` /
+  under a `feed source` sub-noun (`list` / `set` / `export --feed`, `delete` /
   `get <source_id>`, `template`), replacing the `feed *-sources` verbs;
   `watch action list` / `add` take `--watch <id>` instead of a positional. A
   bare positional is now always the resource's own id; a scope is a named flag.
+  `delete` is the single destructive verb across every noun (the child-only
+  `remove` is gone; `feed source` / `watch action` use `delete` like `feed` /
+  `watch`).
   Observability views render a human table by default and emit newline-delimited
   JSON with `--jsonl`. The run audit now shows each item's title + feed name
   (joined server-side) and, for `semantic_filter` actions, the filter score and

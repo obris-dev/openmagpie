@@ -47,8 +47,9 @@ Argument rule, uniform across every noun:
 
 - **A bare positional is the resource's OWN id.** It never changes meaning between verbs under one noun.
 - **A scope flag appears only when the command has no own id to act on** (`list` / `add` / bulk `set`). See the short-flag map below.
-- **Own-id mutations (`get` / `edit` / `remove`) take only the own id and confirm against the parent the server resolves** (e.g. `feed source remove <source_id>` prints "remove X from feed Y?"). The parent is a guard, never an id you have to look up first.
-- A scope flag is also forced when a resource is not addressable by its own id in the data layer. `WatchAction` is id-addressable, so `watch action remove <action_id>` needs no scope; `Source` is currently feed-scoped. Prefer adding id-only resolution over forcing the caller to supply a scope id.
+- **Own-id mutations (`get` / `edit` / `delete`) take only the own id and confirm against the parent the server resolves** (e.g. `feed source delete <source_id>` prints "delete source X from feed Y?"). The parent is a guard, never an id you have to look up first.
+- **`delete` is the single destructive verb on every noun** (`feed` / `watch` / `feed source` / `watch action`). There is no `remove`: a child belongs to exactly one parent and isn't detachable, so removing it from the set IS deleting its row. One verb, predictable for humans and LLM callers.
+- A scope flag is also forced when a resource is not addressable by its own id in the data layer. `WatchAction` is id-addressable, so `watch action delete <action_id>` needs no scope; `Source` is currently feed-scoped. Prefer adding id-only resolution over forcing the caller to supply a scope id.
 
 Short flags are decided once here, not per command. A flag gets a short only when it is unambiguous and frequently typed; long-only is fine, and inventing a short for symmetry is not.
 
