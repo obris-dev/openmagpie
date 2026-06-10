@@ -47,7 +47,7 @@ Argument rule, uniform across every noun:
 
 - **A bare positional is the resource's OWN id.** It never changes meaning between verbs under one noun.
 - **A scope flag appears only when the command has no own id to act on** (`list` / `add` / bulk `set`). See the short-flag map below.
-- **Own-id mutations (`get` / `edit` / `delete`) take only the own id and confirm against the parent the server resolves** (e.g. `feed source delete <source_id>` prints "delete source X from feed Y?"). The parent is a guard, never an id you have to look up first.
+- **Own-id mutations (`get` / `edit` / `delete`) take only the own id; the server resolves the parent and guards account scope** (e.g. `feed source delete <source_id>` deletes by id, with the server confirming the source belongs to a feed you own). The confirm prompt names the resolved resource itself, not its parent, when the wire carries no parent label (e.g. `SourceWire` has no feed name). The parent is a guard, never an id you have to look up first.
 - **`delete` is the single destructive verb on every noun** (`feed` / `watch` / `feed source` / `watch action`). There is no `remove`: a child belongs to exactly one parent and isn't detachable, so removing it from the set IS deleting its row. One verb, predictable for humans and LLM callers.
 - A scope flag is also forced when a resource is not addressable by its own id in the data layer. `WatchAction` is id-addressable, so `watch action delete <action_id>` needs no scope; `Source` is currently feed-scoped. Prefer adding id-only resolution over forcing the caller to supply a scope id.
 
@@ -65,7 +65,7 @@ Short flags are decided once here, not per command. A flag gets a short only whe
 | `--rank` | `-r` | insert position, `watch action add` only |
 | `--dry-run` | `-n` | preview-only, on the create / edit / set mutations |
 | `--yes` | `-y` | skip the confirm prompt; required when stdin is not a TTY so a pipe can't silently mutate |
-| `--feed` | none | no good short once `-f` is files; only on `feed source` ops, where the noun already reads |
+| `--feed` | none | no good short once `-f` is files; only on `feed source` / `feed item` ops, where the noun already reads |
 | `--after` | none | cursor, rarely hand-typed; `-a` is `--action` |
 | `--window` | none | the `summary` preset; long-only (`-w` is `--watch`) |
 | `--format` | none | config-doc output serialization (`yaml`/`json`) on the `template` / `export` commands. NOT the observability format selector (that is `--jsonl`, a data-row stream, not a document) |

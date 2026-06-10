@@ -1,20 +1,18 @@
-"""`magpie feed <source-verb>` commands: list / remove / set / export / template-sources.
+"""`magpie feed source <verb>`: the feed's source set (what it polls).
 
-Companion to `_crud.py`; adds the source verbs to the same `feed_app`
-Typer so `magpie feed --help` shows everything in one place.
+A source is operator-authored config and a dependent component of exactly one
+feed, so it nests under `feed source` (containment), addressed by its OWN id for
+single-row ops (`get` / `delete`) and by `--feed` for collection ops (`list` /
+`set` / `export`). `delete` is the single destructive verb (there is no
+`remove`): a source belongs to one feed and isn't detachable, so dropping it
+from the set IS deleting its row.
 
-Bulk write is `set-sources` (the shape an external scrape script
-naturally produces); `template-sources` emits a starter file so a
-new user sees what shape set-sources expects without reading code.
-`remove-source <source_id>` is the one single-row mutation that survives ;
-it identifies the source by its own id (the server resolves the feed), no
-bespoke per-kind flags.
-
-`add-source` was considered and dropped: the flag UX (`--kind`,
-`--url`, `--meta key=value` ...) is bespoke per source kind and
-scales badly past one or two rows. The create-time path is
-`feed create -f feed.yaml` with an inline `sources:` block; ongoing
-mutation is `export-sources -> edit -> set-sources`.
+Bulk write is `set` (the shape an external scrape script naturally produces);
+`template` emits a starter file so a new user sees what `set` expects without
+reading code. `add` was considered and dropped: the flag UX (`--kind`, `--url`,
+`--meta key=value` ...) is bespoke per source kind and scales badly past a row
+or two. The create-time path is `feed create -f feed.yaml` with an inline
+`sources:` block; ongoing mutation is `export -> edit -> set`.
 """
 
 from __future__ import annotations
@@ -31,26 +29,25 @@ from openmagpie_schema.feed import SourceInput, SourceSetPayload
 from ... import console
 from ...api.feed import SourceWire
 from ...context import app_ctx
-from .._shared import _check_format, _handle_api_errors, _read_file_or_abort
-from ._apps import feed_app
+from .._shared import _check_format, _handle_api_errors, _print_detail, _read_file_or_abort
+from ._apps import source_app
 
 _SET_FILE_SHAPES = (
     'JSON or YAML matching `{"version": "v1", "sources": [{spec, meta, field_map}]}` '
-    "(produced by `magpie feed export-sources` or `magpie feed template-sources`)."
+    "(produced by `magpie feed source export` or `magpie feed source template`)."
 )
 
 _SOURCES_TEMPLATE_YAML = """\
-# Source list for `magpie feed set-sources <feed_id> -f file.yaml`.
+# Source list for `magpie feed source set --feed <feed_id> -f file.yaml`.
 #
-# `set-sources` REPLACES the feed's full source list: new rows are
-# added, missing ones are dropped, and rows that survive the diff
-# keep their per-source watermarks. Always run `set-sources` with
-# `--dry-run` first to preview the {added, removed, persisted} counts
-# before applying.
+# `set` REPLACES the feed's full source list: new rows are added,
+# missing ones are dropped, and rows that survive the diff keep their
+# per-source watermarks. Always run `set` with `--dry-run` first to
+# preview the {added, removed, persisted} counts before applying.
 #
-# `magpie feed export-sources <feed_id>` emits exactly this shape, so
-# the round-trip is `export -> edit -> set-sources` (or `template-sources
-# -> fill in -> set-sources` if you're starting from scratch).
+# `magpie feed source export --feed <feed_id>` emits exactly this shape,
+# so the round-trip is `export -> edit -> set` (or `template -> fill in
+# -> set` if you're starting from scratch).
 
 version: v1
 sources:
@@ -90,7 +87,7 @@ sources:
 
 
 def _parse_set_payload(text: str, source_path: str) -> list[SourceInput]:
-    """Parse a set-sources file into typed `SourceInput` rows.
+    """Parse a `feed source set` file into typed `SourceInput` rows.
 
     Accepts either the documented `{version, sources: [...]}` envelope
     (`SourceSetPayload`) or a bare list ; operators hand-rolling a JSON
@@ -121,7 +118,7 @@ def _parse_set_payload(text: str, source_path: str) -> list[SourceInput]:
     raise typer.Exit(code=1)
 
 
-# ── list ───────────────────────────────────────────────────────────────
+# ── list (by --feed) ───────────────────────────────────────────────────
 
 
 # SourceWire.spec is the typed SourceSpec union (a Pydantic model instance),
@@ -130,15 +127,17 @@ _SOURCE_COLUMNS: list[console.Column[SourceWire]] = [
     console.Column("ID", lambda s: s.id),
     console.Column("SOURCE", lambda s: s.spec.display()),
     console.Column("KIND", lambda s: s.spec.kind),
-    console.Column("LAST EVENT", lambda s: str(s.last_event_at)),
+    console.Column("LAST EVENT", lambda s: str(s.last_event_at) if s.last_event_at else "-"),
     console.Column("META", lambda s: str(s.meta) if s.meta else "-"),
     console.Column("FIELD MAP", lambda s: str(s.field_map) if s.field_map else "-"),
 ]
 
 
-@feed_app.command("list-sources")
+@source_app.command("list")
 @_handle_api_errors
-def list_sources(feed_id: str = typer.Argument(..., help="Feed id.")) -> None:
+def list_(
+    feed_id: str = typer.Option(..., "--feed", help="Feed id whose sources to list."),
+) -> None:
     """List the sources attached to a feed."""
     sources = app_ctx().api.feed.list_sources(feed_id)
     console.header(f"{len(sources)} source(s)")
@@ -146,20 +145,57 @@ def list_sources(feed_id: str = typer.Argument(..., help="Feed id.")) -> None:
         console.log("No sources on this feed yet.")
 
 
-# ── remove (single, by id) ─────────────────────────────────────────────
+# ── get (single, by own id) ────────────────────────────────────────────
 
 
-@feed_app.command("remove-source")
+@source_app.command("get")
 @_handle_api_errors
-def remove_source(
-    source_id: str = typer.Argument(..., help="Source id (copy from `list-sources`)."),
+def get(
+    source_id: str = typer.Argument(..., help="Source id (from `magpie feed source list`)."),
 ) -> None:
-    """Remove one source by its own ULID (the feed is resolved server-side)."""
-    app_ctx().api.feed.remove_source(source_id)
-    console.success(f"Removed source {source_id}")
+    """Show one source by its own ULID (the feed is resolved server-side)."""
+    s = app_ctx().api.feed.get_source(source_id)
+    fields: list[tuple[str, str]] = [
+        ("source", s.spec.display()),
+        ("kind", s.spec.kind),
+        ("last event", str(s.last_event_at) if s.last_event_at else "-"),
+        ("created", str(s.created_at) if s.created_at else "-"),
+        ("meta", str(s.meta) if s.meta else "-"),
+        ("field map", str(s.field_map) if s.field_map else "-"),
+    ]
+    _print_detail(f"source {s.id}", fields)
 
 
-# ── template (starter file for set-sources) ────────────────────────────
+# ── delete (single, by own id) ─────────────────────────────────────────
+
+
+@source_app.command("delete")
+@_handle_api_errors
+def delete(
+    source_id: str = typer.Argument(..., help="Source id (from `magpie feed source list`)."),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt. Required for piped input."),
+) -> None:
+    """Delete one source by its own ULID (the feed is resolved server-side).
+
+    Destructive: the source and its polling watermark are removed. SourceWire
+    carries no feed name, so the confirm names the source itself ; the server
+    still resolves and guards the parent feed."""
+    api = app_ctx().api.feed
+    s = api.get_source(source_id)  # resolve first so the confirm names what goes
+    label = f"{s.spec.display()} ({source_id})"
+    if not yes:
+        if not sys.stdin.isatty():
+            console.warn(f"Piped input: can't prompt. Re-run with --yes to delete source {label}.")
+            raise typer.Exit(code=1)
+        console.error(f"Delete source {label}? This drops its polling watermark and cannot be undone.")
+        if not typer.confirm("Delete?"):
+            console.warn("Aborted.")
+            raise typer.Exit(code=1)
+    api.delete_source(source_id)
+    console.success(f"Deleted source {label}")
+
+
+# ── template (starter file for set) ────────────────────────────────────
 
 
 def _write_text(text: str, output: str | None, *, what: str) -> None:
@@ -178,12 +214,11 @@ def _write_text(text: str, output: str | None, *, what: str) -> None:
     console.success(f"Wrote {what} to {output}")
 
 
-@feed_app.command("template-sources")
-def template_sources(
+@source_app.command("template")
+def template(
     format: str = typer.Option(
         "yaml",
         "--format",
-        "-F",
         case_sensitive=False,
         help="Output format: `yaml` (commented; default) or `json` (structural; no comments).",
     ),
@@ -191,30 +226,30 @@ def template_sources(
 ) -> None:
     """Emit a starter sources file to stdout.
 
-    Pipe to a file (`magpie feed template-sources > sources.yaml`),
-    edit, then run `magpie feed set-sources <feed_id> -f sources.yaml
-    --dry-run` to preview the diff before applying. The yaml template
-    carries inline comments; json output is the same structure with
-    comments stripped (for a scripted consumer)."""
+    Pipe to a file (`magpie feed source template > sources.yaml`), edit, then
+    run `magpie feed source set --feed <feed_id> -f sources.yaml --dry-run` to
+    preview the diff before applying. The yaml template carries inline comments;
+    json output is the same structure with comments stripped (for a scripted
+    consumer)."""
     fmt = _check_format(format)
     text = _SOURCES_TEMPLATE_YAML if fmt == "yaml" else json.dumps(yaml.safe_load(_SOURCES_TEMPLATE_YAML), indent=2)
     _write_text(text, output, what="template")
 
 
-# ── set (replace whole list) ───────────────────────────────────────────
+# ── set (replace whole list, by --feed) ────────────────────────────────
 
 
-@feed_app.command("set-sources")
+@source_app.command("set")
 @_handle_api_errors
-def set_sources(
-    feed_id: str = typer.Argument(..., help="Feed id."),
+def set_(
+    feed_id: str = typer.Option(..., "--feed", help="Feed id whose source list to replace."),
     file: str = typer.Option(
         ...,
         "--file",
         "-f",
         help=(
             "JSON/YAML file with the new sources list "
-            "(produced by `magpie feed template-sources` or `export-sources`); "
+            "(produced by `magpie feed source template` or `export`); "
             "`-` for stdin."
         ),
     ),
@@ -224,8 +259,8 @@ def set_sources(
     ),
 ) -> None:
     """Replace the feed's full source list (additive + drops missing
-    + preserves watermarks on persisted rows). Run `magpie feed
-    template-sources` to see the file shape.
+    + preserves watermarks on persisted rows). Run `magpie feed source
+    template` to see the file shape.
 
     When the diff would REMOVE rows, the command pauses for an
     interactive `y/N` confirmation (the dropped rows take their
@@ -269,28 +304,27 @@ def set_sources(
     )
 
 
-# ── export ─────────────────────────────────────────────────────────────
+# ── export (by --feed) ─────────────────────────────────────────────────
 
 
-@feed_app.command("export-sources")
+@source_app.command("export")
 @_handle_api_errors
-def export_sources(
-    feed_id: str = typer.Argument(..., help="Feed id."),
+def export(
+    feed_id: str = typer.Option(..., "--feed", help="Feed id whose sources to dump."),
     output: str | None = typer.Option(None, "--output", "-o", help="Write to a file instead of stdout."),
     format: str = typer.Option(
         "json",
         "--format",
-        "-F",
         case_sensitive=False,
         help="Output format: `json` (default; what scrape scripts naturally emit) or `yaml` (human-editable).",
     ),
 ) -> None:
-    """Dump the feed's sources in `set-sources`-compatible form.
+    """Dump the feed's sources in `set`-compatible form.
 
-    Includes each source's `last_event_at` so a downstream
-    `set-sources` round-trip preserves watermarks (without it the
-    new rows on a spec-changed re-import would cold-start to
-    wall-clock now and lose the operator's backfill history)."""
+    Includes each source's `last_event_at` so a downstream `feed source set`
+    round-trip preserves watermarks (without it the new rows on a spec-changed
+    re-import would cold-start to wall-clock now and lose the operator's
+    backfill history)."""
     fmt = _check_format(format)
     sources = app_ctx().api.feed.list_sources(feed_id)
     payload = SourceSetPayload(

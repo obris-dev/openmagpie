@@ -17,6 +17,7 @@ _AUTH = f"/{API_VERSION}/auth"
 _FEEDS = f"/{API_VERSION}/feeds"
 _WATCHES = f"/{API_VERSION}/watches"
 _FEED_SOURCES = f"/{API_VERSION}/feed-sources"
+_FEED_ITEMS = f"/{API_VERSION}/feed-items"
 _ACTIONS = f"/{API_VERSION}/actions"
 _ACTION_ACTIVITY = f"/{API_VERSION}/action-activity"
 _ACTION_DELIVERIES = f"/{API_VERSION}/action-deliveries"
@@ -54,6 +55,12 @@ class feeds:
     def sources(feed_id: str) -> str:
         return f"{_FEEDS}/{feed_id}/sources"
 
+    @staticmethod
+    def items(feed_id: str) -> str:
+        # The feed-scoped item log (newest-first, cursor-paginated); the by-own-id
+        # detail of one item is parent-qualified (see `feed_items` below).
+        return f"{_FEEDS}/{feed_id}/items"
+
 
 class feed_sources:
     """`/v1/feed-sources/<id>` — one source by its own ULID (a dependent record
@@ -62,6 +69,15 @@ class feed_sources:
     @staticmethod
     def detail(source_id: str) -> str:
         return f"{_FEED_SOURCES}/{source_id}"
+
+
+class feed_items:
+    """`/v1/feed-items/<id>`: one feed item by its own ULID (a dependent record
+    of its feed; the LIST is `/v1/feeds/<id>/items`). Read-only."""
+
+    @staticmethod
+    def detail(item_id: str) -> str:
+        return f"{_FEED_ITEMS}/{item_id}"
 
 
 class watches:

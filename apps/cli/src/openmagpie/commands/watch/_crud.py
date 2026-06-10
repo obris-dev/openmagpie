@@ -40,7 +40,6 @@ def template(
     format: str = typer.Option(
         "yaml",
         "--format",
-        "-F",
         case_sensitive=False,
         help="Output format: `yaml` (commented; default) or `json` (structural; no comments).",
     ),

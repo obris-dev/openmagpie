@@ -23,6 +23,13 @@ from feeds.models import Feed, FeedItem
 from feeds.services.polling import FeedPollOperation
 from feeds.services.sources import _hash_spec
 from openmagpie_schema.configs import RedditSubredditSourceSpec, RssSourceSpec
+from openmagpie_schema.feed import (
+    FeedItemData,
+    FeedItemPayload,
+    FeedItemWire,
+    NewRedditPostPayload,
+    RssEntryPayload,
+)
 
 
 class PollHeartbeatTests(TestCase):
@@ -194,3 +201,39 @@ class FeedItemAndSourceRouteTests(TestCase):
         self.assertEqual(other.delete(f"/v1/feed-sources/{source_id}").status_code, 404)
         # the owner's source is untouched by the other account's failed delete
         self.assertEqual(self.client.get(f"/v1/feed-sources/{source_id}").status_code, 200)
+
+
+class FeedItemPayloadUnionTests(SimpleTestCase):
+    """`FeedItemWire.data` parses the connector payload dump into the typed
+    `FeedItemData` union: a known `kind` resolves to its variant (typed
+    connector fields), an unknown or kind-less dump falls to the permissive
+    base so a newer connector / older row can't break the read."""
+
+    def _data(self, payload: dict) -> FeedItemData:
+        wire = FeedItemWire.model_validate(
+            {"id": str(ulid.ulid()), "source_kind": "x", "external_id": "e", "data": payload}
+        )
+        return wire.data
+
+    def test_known_reddit_kind_resolves_to_typed_variant(self) -> None:
+        data = self._data({"kind": "new_post", "subreddit": "ClaudeAI", "permalink": "/r/x/1", "title": "T"})
+        assert isinstance(data, NewRedditPostPayload)  # narrows the union for the typed reads below
+        self.assertEqual(data.subreddit, "ClaudeAI")
+        self.assertEqual(data.title, "T")
+
+    def test_known_rss_kind_resolves_to_typed_variant(self) -> None:
+        data = self._data({"kind": "rss_entry", "categories": ["a", "b"], "feed_url": "https://f.test"})
+        assert isinstance(data, RssEntryPayload)  # narrows the union for the typed read below
+        self.assertEqual(data.categories, ["a", "b"])
+
+    def test_unknown_kind_falls_to_base_keeping_extras(self) -> None:
+        data = self._data({"kind": "github_issue", "repo": "o/r", "title": "T"})
+        self.assertIs(type(data), FeedItemPayload)
+        self.assertEqual((data.model_extra or {}).get("repo"), "o/r")
+        self.assertEqual(data.title, "T")
+
+    def test_kindless_dump_falls_to_base_not_first_variant(self) -> None:
+        # The subtle invariant: variants REQUIRE their `kind` literal, so a
+        # kind-less dict can't greedily match the first union member; it lands
+        # on the base instead of becoming a (wrong) RssEntryPayload.
+        self.assertIs(type(self._data({"title": "T"})), FeedItemPayload)

@@ -1,9 +1,10 @@
-"""`magpie feed` verbs: template, create, list, get, view, edit, delete.
+"""`magpie feed` verbs: template, create, list, get, edit, delete.
 
 A Feed is the curated set of sources the server polls; its items are the
-"sort by new and go" surface (`feed view`) and what Watches subscribe to.
+"sort by new and go" surface (`feed item list`) and what Watches subscribe to.
 YAML is the on-disk format. `create` and `edit` share the validate ->
-preview -> confirm -> apply flow. Source-list verbs live in `_sources.py`.
+preview -> confirm -> apply flow. The source set lives under `feed source`
+(`_sources.py`), the item log under `feed item` (`_items.py`).
 """
 
 from __future__ import annotations
@@ -12,8 +13,6 @@ import sys
 
 import typer
 import yaml
-
-from openmagpie_schema.feed import FeedItemWire
 
 from ... import console
 from ...api.feed import FeedEnvelope, FeedMutationResponse, FeedView, FeedWire
@@ -29,7 +28,6 @@ from .._shared import (
 )
 from ._apps import FEED_TEMPLATE_YAML, feed_app
 
-_DEFAULT_VIEW_LIMIT = 25
 _DEFAULT_LIST_LIMIT = 50
 
 
@@ -41,7 +39,6 @@ def template(
     format: str = typer.Option(
         "yaml",
         "--format",
-        "-F",
         case_sensitive=False,
         help="Output format: `yaml` (commented; default) or `json` (structural; no comments).",
     ),
@@ -76,7 +73,7 @@ def create(
     _run_mutation(app_ctx(), body, feed_id=None, dry_run=dry_run, yes=yes)
 
 
-# ── Get / View / Edit / Delete (single feed) ───────────────────────────
+# ── Get / Edit / Delete (single feed) ───────────────────────────────────
 
 
 @feed_app.command("get")
@@ -85,26 +82,6 @@ def get(feed_id: str = typer.Argument(..., help="Feed id.")) -> None:
     """Show one feed's config in the caller's account."""
     detail = app_ctx().api.feed.get(feed_id)
     _print_feed(detail, f"Feed {detail.id}  [{console.active_or_paused(detail.is_active)}]")
-
-
-@feed_app.command("view")
-@_handle_api_errors
-def view(
-    feed_id: str = typer.Argument(..., help="Feed id."),
-    limit: int = typer.Option(_DEFAULT_VIEW_LIMIT, "--limit", "-l", help="Max items to show."),
-) -> None:
-    """Sort by new and go: the feed's recent items, newest first."""
-    detail = app_ctx().api.feed.get(feed_id, limit=limit)
-    if not detail.recent_items:
-        console.log("No items yet.")
-        return
-    console.header(f"{detail.name} ; {len(detail.recent_items)} recent item(s)")
-    columns: list[console.Column[FeedItemWire]] = [
-        console.Column("SOURCE", lambda i: i.source_label),
-        console.Column("TITLE", lambda i: str((i.data or {}).get("title") or i.external_id)[:80]),
-        console.Column("EXTERNAL ID", lambda i: i.external_id),
-    ]
-    console.table(detail.recent_items, columns)
 
 
 @feed_app.command("edit")
@@ -119,7 +96,7 @@ def edit(
 ) -> None:
     """Full-replace edit of one feed's config (retention + default_field_map).
     `kind` is server-immutable. Source list mutations go through the
-    dedicated verbs (`magpie feed set-sources` / `remove-source`); the
+    dedicated verbs (`magpie feed source set` / `delete`); the
     edit YAML deliberately covers only feed-level knobs."""
     ac = app_ctx()
     detail = ac.api.feed.get(feed_id)
@@ -268,11 +245,14 @@ def _edit_seed(detail: FeedView) -> FeedEnvelope:
     rendered to $EDITOR would then carry a `sources:` block that the
     server's PUT path silently discards (FeedService.update reads
     only name / poll_interval_seconds / data). Explicit pop is the
-    right shape: source list changes go through `set-sources` /
-    `remove-source`, and the operator should never see an editable
+    right shape: source list changes go through `feed source set` /
+    `delete`, and the operator should never see an editable
     sources block here."""
     body = detail.model_dump()
-    # Pop server-managed / read-only / sub-resource fields.
+    # Pop the non-config fields so the seed is editable knobs only: `sources`
+    # (see above; edited via `feed source set`/`delete`) and the read-only /
+    # server-computed projections source_count / summary / recent_items (the
+    # item log, read via `feed item list`).
     for key in ("sources", "source_count", "recent_items", "summary"):
         body.pop(key, None)
     return FeedEnvelope.model_validate(body)
@@ -281,7 +261,7 @@ def _edit_seed(detail: FeedView) -> FeedEnvelope:
 def _sources_value(obj: FeedMutationResponse | FeedView) -> str:
     """The `sources` cell: `(count) name, name, ...`. The table renderer
     truncates the long list to the column cap (a 1093-source feed shows the
-    count + a peek, not the whole roster) ; the full list is `feed sources`.
+    count + a peek, not the whole roster) ; the full list is `feed source list`.
     `(count)` alone when rows aren't echoed (e.g. the create dry-run, which
     reports the would-be count without materializing Source rows)."""
     if obj.source_count == 0:
