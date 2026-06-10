@@ -1,10 +1,11 @@
 """`magpie watch action ...` verbs: surgical single-action chain ops.
 
 The complement to the whole-watch YAML on `watch create`/`edit`: inspect, add,
-replace, or drop one action without round-tripping the full config. `list`/`add`
-take `--watch` (no action id yet); `get`/`set`/`delete` take the action's own id.
-All wrap the server's `/v1/watches/<id>/actions` (chain list/add) and
-`/v1/actions/<id>` (per-action get/set/delete) endpoints.
+edit, or drop one action without round-tripping the full config. `list`/`add`
+take `--watch` (no action id yet); `get`/`edit`/`delete` take the action's own
+id. `template` emits the starter file `add`/`edit` consume. All wrap the server's
+`/v1/watches/<id>/actions` (chain list/add) and `/v1/actions/<id>` (per-action
+get/edit/delete) endpoints.
 
 The run / delivery AUDIT for an action is not here: it lives under the flat
 `magpie activity` and `magpie delivery` nouns (observability is queried, not
@@ -24,8 +25,17 @@ from openmagpie_schema.watch import WatchActionWire
 
 from ... import console
 from ...context import app_ctx
-from .._shared import _emit_collection, _emit_detail, _handle_api_errors, _print_detail, _read_file_or_abort
-from ._apps import action_app
+from .._shared import (
+    _check_format,
+    _emit_collection,
+    _emit_detail,
+    _emit_doc,
+    _handle_api_errors,
+    _open_editor_or_abort,
+    _print_detail,
+    _read_file_or_abort,
+)
+from ._apps import WATCH_ACTION_TEMPLATE_YAML, action_app
 
 
 @action_app.command("list")
@@ -76,36 +86,70 @@ def _print_action_detail(a: WatchActionWire) -> None:
     console.log(json.dumps(a.config, indent=2, sort_keys=True))
 
 
+@action_app.command("template")
+def action_template(
+    format: str = typer.Option(
+        "yaml",
+        "--format",
+        case_sensitive=False,
+        help="Output format: `yaml` (commented; default) or `json` (structural; no comments).",
+    ),
+    output: str | None = typer.Option(None, "--output", "-o", help="Write to a file instead of stdout."),
+) -> None:
+    """Emit a starter single-action file (the `{kind, config}` shape `add` / `edit` consume)."""
+    fmt = _check_format(format)
+    _emit_doc(WATCH_ACTION_TEMPLATE_YAML, format=fmt, output=output)
+
+
 @action_app.command("add")
 @_handle_api_errors
 def action_add(
     watch_id: str = typer.Option(..., "--watch", "-w", help="Watch id whose chain to add to."),
-    file: str = typer.Option(..., "--file", "-f", help="YAML/JSON action config ('-' for stdin)."),
+    file: str | None = typer.Option(
+        None, "--file", "-f", help="YAML/JSON action ('-' for stdin). Omit to fill in a template in $EDITOR."
+    ),
     rank: int | None = typer.Option(None, "--rank", "-r", help="Insert position (0-based). Appends when omitted."),
 ) -> None:
-    """Add one action to a watch's chain from a config file.
+    """Add one action to a watch's chain.
 
-    The file is one action: `{kind: <kind>, config: {...}}` ; the same
-    shape as an entry in a watch template's `actions:` list."""
-    text = sys.stdin.read() if file == "-" else _read_file_or_abort(file)
+    One action: `{kind: <kind>, config: {...}}` (the same shape as an entry in a
+    watch template's `actions:` list, or `magpie watch action template`). Omit
+    `-f` to fill in the template in $EDITOR."""
+    if file is None:
+        text = _open_editor_or_abort(WATCH_ACTION_TEMPLATE_YAML)
+    elif file == "-":
+        text = sys.stdin.read()
+    else:
+        text = _read_file_or_abort(file)
     kind, config = _parse_action_or_abort(text)
     created = app_ctx().api.watch.add_action(watch_id, kind, config, rank=rank)
     console.success(f"Added {created.kind} at rank {created.rank} ({created.id})")
 
 
-@action_app.command("set")
+@action_app.command("edit")
 @_handle_api_errors
-def action_set(
-    action_id: str = typer.Argument(..., help="Action id (from `watch action list`)."),
-    file: str = typer.Option(..., "--file", "-f", help="YAML/JSON action config ('-' for stdin)."),
+def action_edit(
+    action_id: str = typer.Argument(..., help="Action id (from `magpie watch action list`)."),
+    file: str | None = typer.Option(
+        None, "--file", "-f", help="YAML/JSON action ('-' for stdin). Omit to edit the current config in $EDITOR."
+    ),
 ) -> None:
     """Replace one action's config in place (same position in the chain).
 
-    The file is one action: `{kind: <kind>, config: {...}}` ; `kind` may
-    differ from the current one to swap the node's kind."""
-    text = sys.stdin.read() if file == "-" else _read_file_or_abort(file)
+    One action: `{kind: <kind>, config: {...}}` ; `kind` may differ from the
+    current one to swap the node's kind. Omit `-f` to edit the action's current
+    config in $EDITOR (a masked secret left in place is preserved server-side)."""
+    api = app_ctx().api.watch
+    if file is None:
+        current = api.get_action(action_id)
+        seed = yaml.safe_dump({"kind": current.kind, "config": current.config}, sort_keys=False)
+        text = _open_editor_or_abort(seed)
+    elif file == "-":
+        text = sys.stdin.read()
+    else:
+        text = _read_file_or_abort(file)
     kind, config = _parse_action_or_abort(text)
-    updated = app_ctx().api.watch.set_action(action_id, kind, config)
+    updated = api.edit_action(action_id, kind, config)
     console.success(f"Updated action {updated.id} ({updated.kind}, rank {updated.rank})")
 
 

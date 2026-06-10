@@ -46,7 +46,7 @@ The command tree splits by how data is used, not by ORM containment.
 Argument rule, uniform across every noun:
 
 - **A bare positional is the resource's OWN id.** It never changes meaning between verbs under one noun.
-- **A scope flag appears only when the command has no own id to act on** (`list` / `add` / bulk `set`). See the short-flag map below.
+- **A scope flag appears only when the command has no own id to act on** (`list` / `add` / bulk `set`). See the short-flag map below. (`set` = declaratively replace a whole COLLECTION by scope, e.g. `feed source set --feed`; it is NOT the single-resource mutation, which is `edit` by own id. Don't name a one-resource edit `set`.)
 - **Own-id mutations (`get` / `edit` / `delete`) take only the own id; the server resolves the parent and guards account scope** (e.g. `feed source delete <source_id>` deletes by id, with the server confirming the source belongs to a feed you own). The confirm prompt names the resolved resource itself, not its parent, when the wire carries no parent label (e.g. `SourceWire` has no feed name). The parent is a guard, never an id you have to look up first.
 - **`delete` is the single destructive verb on every noun** (`feed` / `watch` / `feed source` / `watch action`). There is no `remove`: a child belongs to exactly one parent and isn't detachable, so removing it from the set IS deleting its row. One verb, predictable for humans and LLM callers.
 - A scope flag is also forced when a resource is not addressable by its own id in the data layer. `WatchAction` is id-addressable, so `watch action delete <action_id>` needs no scope; `Source` is currently feed-scoped. Prefer adding id-only resolution over forcing the caller to supply a scope id.

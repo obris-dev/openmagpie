@@ -92,7 +92,7 @@ class WatchApi:
         raw = self._http.post(routes.watches.actions(watch_id), json_body=body)
         return WatchActionWire.model_validate(raw)
 
-    def set_action(self, action_id: str, kind: str, config: dict[str, Any]) -> WatchActionWire:
+    def edit_action(self, action_id: str, kind: str, config: dict[str, Any]) -> WatchActionWire:
         raw = self._http.put(routes.actions.detail(action_id), json_body={"kind": kind, "config": config})
         return WatchActionWire.model_validate(raw)
 
