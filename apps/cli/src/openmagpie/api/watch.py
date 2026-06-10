@@ -77,6 +77,12 @@ class WatchApi:
         items = (raw or {}).get("items") or []
         return [WatchActionWire.model_validate(it) for it in items]
 
+    def get_action(self, action_id: str) -> WatchActionWire:
+        """GET one action's definition (kind + redacted config + summary) by its
+        own id; the watch/chain is resolved server-side, not in the path."""
+        raw = self._http.get(routes.actions.detail(action_id))
+        return WatchActionWire.model_validate(raw)
+
     def add_action(
         self, watch_id: str, kind: str, config: dict[str, Any], *, rank: int | None = None
     ) -> WatchActionWire:
@@ -90,5 +96,5 @@ class WatchApi:
         raw = self._http.put(routes.actions.detail(action_id), json_body={"kind": kind, "config": config})
         return WatchActionWire.model_validate(raw)
 
-    def remove_action(self, action_id: str) -> None:
+    def delete_action(self, action_id: str) -> None:
         self._http.delete(routes.actions.detail(action_id))

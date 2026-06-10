@@ -107,7 +107,7 @@ def edit(
     yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt. Required for piped input."),
 ) -> None:
     """Full-replace edit of one watch (name, active, feeds, action chain).
-    For a single-action tweak, `magpie watch action add/remove` is the
+    For a single-action tweak, `magpie watch action add/set/delete` is the
     surgical alternative."""
     ac = app_ctx()
     detail = ac.api.watch.get(watch_id)
