@@ -142,7 +142,7 @@ def delete(
         if not sys.stdin.isatty():
             console.warn(f"Piped input: can't prompt. Re-run with --yes to delete {detail.name} ({detail.id}).")
             raise typer.Exit(code=1)
-        console.error(f"Delete feed {detail.name} ({detail.id})? This cannot be undone.")
+        console.warn(f"Delete feed {detail.name} ({detail.id})? This cannot be undone.")
         if not typer.confirm("Delete?"):
             console.warn("Aborted.")
             raise typer.Exit(code=1)

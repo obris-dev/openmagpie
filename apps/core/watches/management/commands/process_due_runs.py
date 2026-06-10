@@ -13,7 +13,7 @@ logger = logging.getLogger("watches")
 
 # Stable display order for state breakdowns: the run-state lifecycle order
 # (succeeded first), derived from the enum so it can't drift and matches
-# `watch action activity`. An unknown state sorts last.
+# `magpie activity summary`. An unknown state sorts last.
 _STATE_ORDER = {s.value: i for i, s in enumerate(WatchActionRunState)}
 
 # Seconds between progress checkpoints (the cadence when neither --verbose
@@ -145,7 +145,7 @@ class Command(SingleFlightCommand):
             if quiet:
                 continue
             if verbose:
-                # `action=` so an operator can pivot to `watch action activity`.
+                # `action=` so an operator can pivot to `magpie activity list --action`.
                 logger.info(
                     "%s run=%s action=%s: %s", _progress(processed, total_due, t_start), run.id, run.action_id, detail
                 )

@@ -62,7 +62,7 @@ sh ./scripts/install-local-cli.sh || true
 sh ./scripts/hooks.sh || true
 
 # Seed + score the backlog LAST among the work, so any matches stream right
-# before the summary. OPENMAGPIE_QUICKSTART tells seed.sh to defer its breakdown
+# before the summary. OPENMAGPIE_QUICKSTART tells seed.sh to defer its activity
 # hint to the consolidated summary below (so it isn't printed twice).
 OPENMAGPIE_QUICKSTART=1 sh ./scripts/quickstart/seed.sh
 
@@ -96,9 +96,10 @@ else
     # <action_id>. Read-only, no side effects.
     aid="$(manage seed_quickstart --print-activity --starter="${STARTER:-selfhosted-opensource}" 2>/dev/null | tr -d '\r' | tail -1)" || aid=""
     [ -n "$aid" ] || aid="<action_id>"
-    next_block="Inspect the matched vs gated breakdown with the magpie CLI:
+    next_block="See the filter, then what it matched, with the magpie CLI:
   ${KEY}magpie auth login${OFF}
-  ${KEY}magpie watch action activity ${aid}${OFF}"
+  ${KEY}magpie watch action get ${aid}${OFF}
+  ${KEY}magpie activity list --action ${aid}${OFF}"
 fi
 
 cat <<EOF

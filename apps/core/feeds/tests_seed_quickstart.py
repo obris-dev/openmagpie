@@ -93,7 +93,7 @@ class SeedQuickstartTests(TestCase):
 
     def test_print_activity_outputs_gate_action_id(self) -> None:
         # --print-activity prints (only) the seeded semantic_filter action id so
-        # `make local-seed` can echo a paste-ready `watch action activity` after
+        # `make local-seed` can echo a paste-ready `activity list --action` after
         # the tick. No seeding side effects: counts are unchanged.
         call_command("seed_quickstart", starter=STARTER, days=3)
         account_id = self._account_id()

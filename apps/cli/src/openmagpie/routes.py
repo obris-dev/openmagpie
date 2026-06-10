@@ -92,7 +92,7 @@ class watches:
     @staticmethod
     def actions(watch_id: str) -> str:
         # Chain-level list/add stay watch-scoped (no action id yet). Per-action
-        # ops (edit/remove/runs) live under `routes.actions`, keyed on the
+        # ops (get/edit/delete/runs) live under `routes.actions`, keyed on the
         # action's own id.
         return f"{_WATCHES}/{watch_id}/actions"
 

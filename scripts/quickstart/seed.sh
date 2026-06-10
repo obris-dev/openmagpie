@@ -46,7 +46,7 @@ if docker compose exec -T core python -c "import os,urllib.request; urllib.reque
     if manage poll_due_feeds && manage process_due_watches && manage process_due_runs && manage process_due_digests; then
         tick_msg="Tick done. Posts that cleared the threshold printed above, tagged with the starter's prefix (e.g. [oss starter]); a backlog can also score zero on the first pass."
         # The quickstart (run.sh) prints its own consolidated next-steps with the
-        # breakdown command + login, so it sets OPENMAGPIE_QUICKSTART to suppress
+        # activity command + login, so it sets OPENMAGPIE_QUICKSTART to suppress
         # this hint and avoid saying it twice; a standalone re-seed still shows it.
         if [ -z "${OPENMAGPIE_QUICKSTART:-}" ]; then
             # No pipefail under POSIX sh, so a print-activity hiccup just yields an
@@ -54,9 +54,9 @@ if docker compose exec -T core python -c "import os,urllib.request; urllib.reque
             # the `|| aid=""` is a harmless guard for any other capture failure.
             aid="$(manage seed_quickstart --print-activity --starter="$STARTER" 2>/dev/null | tr -d '\r' | tail -1)" || aid=""
             if [ -n "$aid" ]; then
-                tick_msg="$tick_msg See the matched vs gated breakdown: magpie watch action activity $aid (after magpie auth login)."
+                tick_msg="$tick_msg See the filter: magpie watch action get $aid ; what it matched: magpie activity list --action $aid (after magpie auth login)."
             else
-                tick_msg="$tick_msg Re-check anytime: magpie watch action activity <action_id> (ids are in the seed summary above)."
+                tick_msg="$tick_msg Re-check anytime: magpie activity list --action <action_id> (ids are in the seed summary above)."
             fi
         fi
         echo "$tick_msg"
