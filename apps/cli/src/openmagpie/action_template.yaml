@@ -1,0 +1,18 @@
+# A single watch action: `{kind, config}`. Author it for:
+#   magpie watch action add  --watch <watch_id> -f action.yaml   # new action
+#   magpie watch action edit  <action_id>       -f action.yaml   # replace one
+# Or run either with no -f to fill in this template (add) / edit the
+# action's current config (edit) in $EDITOR.
+#
+# `kind` selects the action type; `config` is its kind-specific settings.
+# A chain's first action is typically a semantic_filter (an LLM relevance
+# gate that STOPS the chain when an item scores below `threshold`); delivery
+# actions (log, webhook) follow. Each kind has its own `config` shape; the
+# semantic_filter below is the common starting point (see `magpie watch
+# template` for a full chain, or `magpie watch action get <id>` for a live one).
+
+kind: semantic_filter
+config:
+  instructions: posts about an interesting new open-source LLM release
+  threshold: 0.7   # pass when relevance >= this (0.0 < threshold <= 1.0)
+  # engine: {kind: "", model: ""}   # optional; empty = server default
