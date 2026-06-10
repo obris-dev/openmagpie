@@ -1,6 +1,6 @@
 """Per-action audit read views: the run log and the delivery log.
 
-Both addressed by the action's own ULID (`/v1/actions/<action_id>/runs` and
+Both addressed by the action's own ULID (`/v1/actions/<action_id>/activity` and
 `.../deliveries`), newest-first + cursor-paginated, account-scoped. Split from
 `views.py` (the watch/action CRUD) to keep each module under the length cap and
 focused: this file is read-only audit, that one is mutation.
@@ -17,6 +17,8 @@ from rest_framework.response import Response
 
 from accounts.api import AccountScopedAPIView
 from common.api_params import parse_limit
+from feeds.models import Feed, FeedItem
+from feeds.services import FeedItemService, FeedService
 from openmagpie_schema.watch import (
     WatchActionDeliveryListResponse,
     WatchActionRunListResponse,
@@ -29,9 +31,22 @@ from openmagpie_schema.watch_enums import (
     choices,
 )
 
-from .api import ActionScopedAPIView, WatchActionDeliveryNotFound, WatchSvcMixin
-from .models import WatchActionDelivery
-from .serializers import watch_action_delivery_view, watch_action_delivery_wire, watch_action_run_wire
+from .api import (
+    ActionScopedAPIView,
+    WatchActionDeliveryNotFound,
+    WatchActionRunNotFound,
+    WatchSvcMixin,
+)
+from .models import WatchAction, WatchActionDelivery, WatchActionRun
+from .serializers import (
+    run_feed_item_wire,
+    run_feed_wire,
+    watch_action_delivery_view,
+    watch_action_delivery_wire,
+    watch_action_run_view,
+    watch_action_run_wire,
+    watch_action_wire,
+)
 
 
 def _window_bounds(window: WatchActivityWindow, now: datetime) -> tuple[datetime, datetime | None]:
@@ -70,10 +85,10 @@ def _validate_state(raw: str | None, enum: type[StrEnum]) -> Response | None:
 
 
 class ActionRunsView(ActionScopedAPIView):
-    """GET /v1/actions/<action_id>/runs: the action's run log, newest-first,
-    cursor-paginated. `?state=` filters by run state. Account scoping is the
-    isolation (the action, and its runs, belong to the caller's account), so
-    no watch id is needed in the query."""
+    """GET /v1/actions/<action_id>/activity: the action's run log ("activity"),
+    newest-first, cursor-paginated. `?state=` filters by run state. Account
+    scoping is the isolation (the action, and its runs, belong to the caller's
+    account), so no watch id is needed in the query."""
 
     def get(self, request, action_id: str):
         action = self.action  # 404 if absent from this account
@@ -97,6 +112,14 @@ class ActionRunsView(ActionScopedAPIView):
         runs = self.run_svc.list_for_action(str(action.id), after=after, limit=limit, state=state)
         next_cursor = str(runs[-1].id) if len(runs) == limit else None
         items = [watch_action_run_wire(r) for r in runs]
+        # Side tables the rows key into (no embedding): the judged feed items for
+        # this page by id, then the (few) feeds backing them by id. Two batched
+        # fetches, no N+1; a pruned item / feed is simply absent from its map and
+        # the row renders by id.
+        feed_items = FeedItemService(account_id=request.account_id).get_many([str(r.feed_item_id) for r in runs])
+        feed_items_map = {fid: run_feed_item_wire(item) for fid, item in feed_items.items()}
+        feeds = FeedService(account_id=request.account_id).get_many({str(item.feed_id) for item in feed_items.values()})
+        feeds_map = {fid: run_feed_wire(feed) for fid, feed in feeds.items()}
         # Summary on the first page only (skipped while paging) — keeps a
         # deep-paging call a pure row fetch.
         summary = None
@@ -113,7 +136,14 @@ class ActionRunsView(ActionScopedAPIView):
                 retrying=summ.retrying,
             )
         return Response(
-            WatchActionRunListResponse(items=items, next_cursor=next_cursor, summary=summary).model_dump(mode="json")
+            WatchActionRunListResponse(
+                items=items,
+                next_cursor=next_cursor,
+                action=watch_action_wire(action),
+                feed_items=feed_items_map,
+                feeds=feeds_map,
+                summary=summary,
+            ).model_dump(mode="json")
         )
 
 
@@ -141,8 +171,8 @@ class ActionDeliveriesView(ActionScopedAPIView):
 
 
 class ActionDeliveryDetailView(WatchSvcMixin, AccountScopedAPIView):
-    """GET /v1/deliveries/<delivery_id>: one delivery in full, including the
-    exact request_payload that was sent. Addressed by the delivery's own
+    """GET /v1/action-deliveries/<delivery_id>: one delivery in full, including
+    the exact request_payload that was sent. Addressed by the delivery's own
     (globally unique) ULID, account-scoped ; the list (lean rows) lives under
     the action at /v1/actions/<id>/deliveries."""
 
@@ -152,3 +182,36 @@ class ActionDeliveryDetailView(WatchSvcMixin, AccountScopedAPIView):
         except WatchActionDelivery.DoesNotExist as exc:
             raise WatchActionDeliveryNotFound(delivery_id) from exc
         return Response(watch_action_delivery_view(delivery).model_dump(mode="json"))
+
+
+class ActionActivityDetailView(WatchSvcMixin, AccountScopedAPIView):
+    """GET /v1/action-activity/<activity_id>: one run ("activity entry") in full,
+    with the item it judged, that item's feed, and the action it ran, joined for
+    the reader. Addressed by the run's own (globally unique) ULID, account-scoped ;
+    the list (lean rows) lives under the action at /v1/actions/<id>/activity."""
+
+    def get(self, request, activity_id: str):
+        try:
+            run = self.run_svc.get(activity_id)
+        except WatchActionRun.DoesNotExist as exc:
+            raise WatchActionRunNotFound(activity_id) from exc
+        # Join the judged item, its feed, and the action, each best-effort: a
+        # pruned item (and thus its feed) is simply absent, as is a removed
+        # action. The run row always renders by its own ids regardless.
+        try:
+            feed_item: FeedItem | None = FeedItemService(account_id=request.account_id).get(str(run.feed_item_id))
+        except FeedItem.DoesNotExist:
+            feed_item = None
+        feed: Feed | None = None
+        if feed_item is not None:
+            try:
+                feed = FeedService(account_id=request.account_id).get(str(feed_item.feed_id))
+            except Feed.DoesNotExist:
+                feed = None
+        try:
+            action: WatchAction | None = self.action_svc.get(str(run.action_id))
+        except WatchAction.DoesNotExist:
+            action = None
+        return Response(
+            watch_action_run_view(run, feed_item=feed_item, feed=feed, action=action).model_dump(mode="json")
+        )

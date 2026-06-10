@@ -6,13 +6,16 @@ small enough to read top-to-bottom on its own.
 """
 
 import builtins
+import itertools
 import logging
+from collections.abc import Iterable
 from datetime import datetime, timedelta
 from functools import cached_property
 from typing import TYPE_CHECKING, Any
 
 from django.db import transaction
 
+from common.db import ID_IN_CHUNK
 from feeds.models import Feed, FeedItem
 from feeds.policy import PolicyError, enforce_policy
 from feeds.registry import load_config, parse_config, validate_config
@@ -62,6 +65,20 @@ class FeedService:
         callers diff against the input to find unknown / cross-account ids
         (e.g. validating a watch's feed subscription set)."""
         return set(Feed.objects.filter(account_id=self.account_id, id__in=ids).values_list("id", flat=True))
+
+    def get_many(self, ids: Iterable[str], /) -> builtins.dict[str, Feed]:
+        """The requested feeds by id (account-scoped), as {id: feed}. Missing /
+        other-account ids are simply absent from the map. The runs audit view
+        uses this to resolve the (few) feeds backing a page of runs without an
+        N+1, then keys each run's item to its feed in the response envelope.
+        `id__in` is chunked by ID_IN_CHUNK to stay under the per-statement
+        parameter ceiling; the caller bounds how many ids it passes."""
+        result: builtins.dict[str, Feed] = {}
+        for chunk in itertools.batched(ids, ID_IN_CHUNK, strict=False):
+            result.update(
+                (str(feed.id), feed) for feed in Feed.objects.filter(account_id=self.account_id, id__in=chunk)
+            )
+        return result
 
     def list(self, *, after: str | None = None, limit: int = 50) -> list[Feed]:
         """This account's feeds, newest first (by ULID pk).

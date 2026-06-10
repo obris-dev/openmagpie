@@ -22,13 +22,22 @@ from rest_framework.response import Response
 from accounts.api import AccountScopedAPIView
 from common.api_params import is_truthy, parse_limit
 from common.pydantic_errors import pydantic_errors_to_drf
-from openmagpie_schema.feed import FeedListResponse
+from openmagpie_schema.feed import FeedItemListResponse, FeedListResponse
 
-from .api import FeedItemSvcMixin, FeedScopedAPIView, FeedSvcMixin, SourceScopedAPIView, SourceSvcMixin
+from .api import (
+    FeedItemNotFound,
+    FeedItemSvcMixin,
+    FeedScopedAPIView,
+    FeedSvcMixin,
+    SourceNotFound,
+    SourceSvcMixin,
+)
+from .models import FeedItem, Source
 from .policy import PolicyError
 from .serializers import (
     SOURCE_INPUT_LIST_ADAPTER,
     FeedCreateSerializer,
+    feed_item_wire,
     feed_mutation,
     feed_view,
     feed_wire,
@@ -195,16 +204,55 @@ class FeedSourcesView(SourceSvcMixin, FeedScopedAPIView):
         return Response(result.model_dump(mode="json"), status=status.HTTP_200_OK)
 
 
-class FeedSourceDetailView(SourceScopedAPIView):
-    """Per-row source ops on `/v1/feeds/<id>/sources/<source_id>`.
+class FeedItemsView(FeedItemSvcMixin, FeedScopedAPIView):
+    """GET /v1/feeds/<id>/items: the feed's item log, newest-first, cursor-
+    paginated (`?after=`, `?limit=`). The feed-scoped list complement to the
+    by-own-id detail at /v1/feed-items/<id> ; items are read-only (no write
+    verbs), so this is the only mutation-free sub-router on a feed."""
 
-    Scoped to the feed in the path so a `source_id` from another feed
-    (or another account) gives a 404 via `SourceNotFound`, not a 204
-    on the wrong row."""
+    def get(self, request, feed_id: str):
+        limit = parse_limit(request)
+        after = request.query_params.get("after") or None
+        items = self.feed_item_svc.list_for_feed(self.feed, after=after, limit=limit)
+        next_cursor = str(items[-1].id) if len(items) == limit else None
+        return Response(
+            FeedItemListResponse(items=[feed_item_wire(i) for i in items], next_cursor=next_cursor).model_dump(
+                mode="json"
+            )
+        )
 
-    def delete(self, request, feed_id: str, source_id: str):
+
+class FeedItemDetailView(FeedItemSvcMixin, AccountScopedAPIView):
+    """GET /v1/feed-items/<item_id>: one feed item by its own (globally unique)
+    ULID, account-scoped. A feed item is a dependent record of its feed, so it is
+    parent-qualified ; the list (lean rows) lives nested at /v1/feeds/<id>/items.
+    Read-only."""
+
+    def get(self, request, item_id: str):
         try:
-            self.source_svc.remove(self.feed, source_id=self.source.id)
+            item = self.feed_item_svc.get(item_id)
+        except FeedItem.DoesNotExist as exc:
+            raise FeedItemNotFound(item_id) from exc
+        return Response(feed_item_wire(item).model_dump(mode="json"))
+
+
+class SourceDetailView(SourceSvcMixin, AccountScopedAPIView):
+    """GET / DELETE /v1/feed-sources/<source_id>: one source by its own (globally
+    unique) ULID, account-scoped ; the feed it belongs to is resolved server-side,
+    not supplied by the caller. The feed-scoped set lives at /v1/feeds/<id>/sources."""
+
+    def get(self, request, source_id: str):
+        try:
+            source = self.source_svc.get_by_id(source_id)
+        except Source.DoesNotExist as exc:
+            raise SourceNotFound(source_id) from exc
+        return Response(source_wire(source).model_dump(mode="json"))
+
+    def delete(self, request, source_id: str):
+        try:
+            self.source_svc.remove_by_id(source_id)
+        except Source.DoesNotExist as exc:
+            raise SourceNotFound(source_id) from exc
         except PolicyError as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         return Response(status=status.HTTP_204_NO_CONTENT)

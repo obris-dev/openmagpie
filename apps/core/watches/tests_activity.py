@@ -6,12 +6,13 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 
 from auth_api.operations.signup import SignupOperation
-from watches.models import WatchAction, WatchActionDelivery, WatchActionRun
+from feeds.models import Feed, FeedItem
+from watches.models import WatchAction, WatchActionRun
 
 
 class LeafActionRouteTests(TestCase):
     """Per-action endpoints addressed by the action's own id at
-    `/v1/actions/<action_id>` (no watch id): set / remove / runs, plus
+    `/v1/actions/<action_id>` (no watch id): set / remove / activity, plus
     account isolation."""
 
     def setUp(self) -> None:
@@ -33,7 +34,7 @@ class LeafActionRouteTests(TestCase):
         _watch_id, action_id = self._make_watch_with_action()
 
         # runs: 200 with an empty log (no runs yet), no watch id in the path.
-        runs = self.client.get(f"/v1/actions/{action_id}/runs")
+        runs = self.client.get(f"/v1/actions/{action_id}/activity")
         self.assertEqual(runs.status_code, 200, runs.content)
         self.assertEqual(runs.json()["items"], [])
 
@@ -46,15 +47,26 @@ class LeafActionRouteTests(TestCase):
         self.assertEqual(self.client.delete(f"/v1/actions/{action_id}").status_code, 204)
         self.assertFalse(WatchAction.objects.filter(id=action_id).exists())
 
+    def test_get_returns_action_definition(self) -> None:
+        _watch_id, action_id = self._make_watch_with_action()
+        resp = self.client.get(f"/v1/actions/{action_id}")
+        self.assertEqual(resp.status_code, 200, resp.content)
+        body = resp.json()
+        self.assertEqual(body["id"], action_id)
+        self.assertEqual(body["kind"], "log")
+        self.assertIn("config", body)
+        self.assertIn("summary", body)
+
     def test_unknown_action_id_is_404(self) -> None:
-        self.assertEqual(self.client.get(f"/v1/actions/{ulid.ulid()}/runs").status_code, 404)
+        self.assertEqual(self.client.get(f"/v1/actions/{ulid.ulid()}/activity").status_code, 404)
+        self.assertEqual(self.client.get(f"/v1/actions/{ulid.ulid()}").status_code, 404)
 
     def test_another_account_cannot_reach_the_action(self) -> None:
         _watch_id, action_id = self._make_watch_with_action()
         other = APIClient()
         other.force_authenticate(user=SignupOperation(email="other@example.com", password="Str0ng-Passw0rd!").run())
         # Same opaque 404 whether the action is absent or owned by someone else.
-        self.assertEqual(other.get(f"/v1/actions/{action_id}/runs").status_code, 404)
+        self.assertEqual(other.get(f"/v1/actions/{action_id}/activity").status_code, 404)
         self.assertEqual(
             other.put(
                 f"/v1/actions/{action_id}", {"kind": "log", "config": {"prefix": "x"}}, format="json"
@@ -101,7 +113,7 @@ class ActionActivitySummaryTests(TestCase):
         self._run("pending")  # backlog (no completion time)
         self._run("pending")
         self._run("running")
-        resp = self.client.get(f"/v1/actions/{self.action_id}/runs", {"window": "7d"})
+        resp = self.client.get(f"/v1/actions/{self.action_id}/activity", {"window": "7d"})
         self.assertEqual(resp.status_code, 200, resp.content)
         s = resp.json()["summary"]
         self.assertEqual(s["window"], "7d")  # echoes the requested preset
@@ -117,14 +129,14 @@ class ActionActivitySummaryTests(TestCase):
         self._run("failed", completed_at=None)  # retry-pending
         self._run("failed", completed_at=now)  # exhausted/terminal -> evaluated, not retrying
         self._run("pending")
-        resp = self.client.get(f"/v1/actions/{self.action_id}/runs", {"window": "7d"})
+        resp = self.client.get(f"/v1/actions/{self.action_id}/activity", {"window": "7d"})
         s = resp.json()["summary"]
         self.assertEqual(s["retrying"], 1)
         self.assertEqual(s["pending"], 1)
         self.assertEqual(s["evaluated"], {"failed": 1})  # only the completed one
 
     def test_summary_omitted_while_paging(self) -> None:
-        resp = self.client.get(f"/v1/actions/{self.action_id}/runs", {"after": ulid.ulid()})
+        resp = self.client.get(f"/v1/actions/{self.action_id}/activity", {"after": ulid.ulid()})
         self.assertIsNone(resp.json()["summary"])
 
     def test_yesterday_is_a_closed_utc_day(self) -> None:
@@ -135,99 +147,173 @@ class ActionActivitySummaryTests(TestCase):
         self._run("succeeded", completed_at=midnight - timedelta(hours=12))  # yesterday midday -> in
         self._run("gated", completed_at=now)  # today -> excluded by the until bound
         self._run("failed", completed_at=midnight - timedelta(days=1, hours=1))  # before yesterday -> excluded
-        resp = self.client.get(f"/v1/actions/{self.action_id}/runs", {"window": "yesterday"})
+        resp = self.client.get(f"/v1/actions/{self.action_id}/activity", {"window": "yesterday"})
         s = resp.json()["summary"]
         self.assertEqual(s["window"], "yesterday")
         self.assertEqual(s["evaluated"], {"succeeded": 1})
 
     def test_bad_window_is_400(self) -> None:
-        self.assertEqual(self.client.get(f"/v1/actions/{self.action_id}/runs", {"window": "bogus"}).status_code, 400)
+        self.assertEqual(
+            self.client.get(f"/v1/actions/{self.action_id}/activity", {"window": "bogus"}).status_code, 400
+        )
 
 
-class ActionDeliveriesRouteTests(TestCase):
-    """`/v1/actions/<action_id>/deliveries`: the HTTP-call audit, addressed by
-    the action's own id, account-scoped."""
+class ActionRunFeedItemTests(TestCase):
+    """The runs response normalizes the judged items + their feeds into keyed
+    side tables (`feed_items` by item id, `feeds` by feed id) instead of
+    embedding them on each row. A run row is pure ids; a pruned item is simply
+    absent from `feed_items` and the row still renders by `feed_item_id`."""
 
     def setUp(self) -> None:
-        self.user = SignupOperation(email="deliv@example.com", password="Str0ng-Passw0rd!").run()
+        self.user = SignupOperation(email="runitem@example.com", password="Str0ng-Passw0rd!").run()
         self.client = APIClient()
         self.client.force_authenticate(user=self.user)
+        resp = self.client.post(
+            "/v1/watches",
+            {"name": "w", "feed_ids": [], "actions": [{"kind": "log", "config": {"prefix": "[A]"}}]},
+            format="json",
+        )
+        self.action_id = resp.json()["actions"][0]["id"]
+        self.account_id = WatchAction.objects.get(id=self.action_id).account_id
 
-    def _webhook_action(self) -> tuple[str, str]:
+    def _run(self, feed_item_id: str) -> None:
+        WatchActionRun.objects.create(
+            account_id=self.account_id,
+            watch_id=ulid.ulid(),
+            action_id=self.action_id,
+            feed_item_id=feed_item_id,
+            state="succeeded",
+            scheduled_at=timezone.now(),
+            completed_at=timezone.now(),
+        )
+
+    def test_items_and_feeds_maps_let_rows_key_in_and_tolerate_pruned(self) -> None:
+        feed = Feed.objects.create(account_id=self.account_id, user_id=ulid.ulid(), kind="rss", name="Athletics")
+        item = FeedItem.objects.create(
+            account_id=self.account_id,
+            feed_id=feed.id,
+            source_kind="rss",
+            external_id="ext-1",
+            source_label="Example U",
+            data={"title": "Coach hired", "url": "https://x.test/a", "kind": "rss"},
+        )
+        self._run(str(item.id))  # item present
+        pruned_id = ulid.ulid()
+        self._run(pruned_id)  # item absent (pruned)
+
+        resp = self.client.get(f"/v1/actions/{self.action_id}/activity")
+        self.assertEqual(resp.status_code, 200, resp.content)
+        body = resp.json()
+
+        # Rows carry ids only (no embedded item); both ids are present as rows.
+        row_item_ids = {r["feed_item_id"] for r in body["items"]}
+        self.assertEqual(row_item_ids, {str(item.id), pruned_id})
+        self.assertNotIn("feed_item", body["items"][0])
+
+        # The present item is in `feed_items`, keyed by its id, and points at its feed.
+        present = body["feed_items"][str(item.id)]
+        self.assertEqual(present["title"], "Coach hired")
+        self.assertEqual(present["url"], "https://x.test/a")
+        self.assertEqual(present["source_label"], "Example U")
+        self.assertEqual(present["feed_id"], str(feed.id))
+
+        # The feed is normalized once into `feeds`, keyed by its id.
+        self.assertEqual(body["feeds"][str(feed.id)]["name"], "Athletics")
+
+        # The pruned item is absent from both maps; its row still renders by id.
+        self.assertNotIn(pruned_id, body["feed_items"])
+        self.assertNotIn("None", body["feeds"])
+
+
+class ActionContextHeaderTests(TestCase):
+    """The runs response carries the action being audited (kind + config), so a
+    reader sees WHAT the runs were judged against (a semantic_filter's
+    instructions + threshold) as a header, even with no runs yet."""
+
+    def setUp(self) -> None:
+        self.user = SignupOperation(email="ctx@example.com", password="Str0ng-Passw0rd!").run()
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.user)
         resp = self.client.post(
             "/v1/watches",
             {
                 "name": "w",
                 "feed_ids": [],
-                "actions": [{"kind": "webhook", "config": {"url": "https://h.example.com/x"}}],
+                "actions": [
+                    {"kind": "semantic_filter", "config": {"instructions": "coach hires only", "threshold": 0.8}}
+                ],
             },
             format="json",
         )
         self.assertEqual(resp.status_code, 201, resp.content)
-        body = resp.json()
-        return body["id"], body["actions"][0]["id"]
+        self.action_id = resp.json()["actions"][0]["id"]
 
-    def test_deliveries_lists_recorded_calls(self) -> None:
-        watch_id, action_id = self._webhook_action()
-        empty = self.client.get(f"/v1/actions/{action_id}/deliveries")
-        self.assertEqual(empty.status_code, 200, empty.content)
-        self.assertEqual(empty.json()["items"], [])
-
-        action = WatchAction.objects.get(id=action_id)
-        WatchActionDelivery.objects.create(
-            account_id=action.account_id,
-            watch_id=watch_id,
-            action_id=action_id,
-            delivery="instant",
-            method="POST",
-            target_host="h.example.com",
-            state="succeeded",
-            http_status=200,
-            item_count=1,
-            attempt=1,
-            request_payload={"items": []},
-        )
-        resp = self.client.get(f"/v1/actions/{action_id}/deliveries")
+    def test_response_carries_action_kind_and_config(self) -> None:
+        resp = self.client.get(f"/v1/actions/{self.action_id}/activity")
         self.assertEqual(resp.status_code, 200, resp.content)
-        (item,) = resp.json()["items"]
-        self.assertEqual(item["state"], "succeeded")
-        self.assertEqual(item["http_status"], 200)
-        self.assertEqual(item["method"], "POST")
-        self.assertEqual(item["item_count"], 1)
-        self.assertNotIn("request_payload", item)  # lean list ; payload is on the detail only
+        action = resp.json()["action"]
+        self.assertEqual(action["id"], self.action_id)
+        self.assertEqual(action["kind"], "semantic_filter")
+        self.assertEqual(action["config"]["instructions"], "coach hires only")
+        self.assertEqual(action["config"]["threshold"], 0.8)
 
-    def _make_delivery(self, watch_id: str, action_id: str) -> str:
-        action = WatchAction.objects.get(id=action_id)
-        d = WatchActionDelivery.objects.create(
-            account_id=action.account_id,
-            watch_id=watch_id,
-            action_id=action_id,
-            delivery="instant",
-            method="POST",
-            target_host="h.example.com",
-            state="succeeded",
-            http_status=200,
-            item_count=1,
-            request_payload={"items": [{"key": "reddit:1"}]},
+
+class ActionActivityDetailTests(TestCase):
+    """`GET /v1/action-activity/<id>`: one run in full, with the joined item /
+    feed / action; a pruned item leaves those joins null; unknown id is 404."""
+
+    def setUp(self) -> None:
+        self.user = SignupOperation(email="actdetail@example.com", password="Str0ng-Passw0rd!").run()
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.user)
+        resp = self.client.post(
+            "/v1/watches",
+            {"name": "w", "feed_ids": [], "actions": [{"kind": "log", "config": {"prefix": "[A]"}}]},
+            format="json",
         )
-        return str(d.id)
+        self.action_id = resp.json()["actions"][0]["id"]
+        self.account_id = WatchAction.objects.get(id=self.action_id).account_id
 
-    def test_delivery_detail_includes_payload(self) -> None:
-        watch_id, action_id = self._webhook_action()
-        delivery_id = self._make_delivery(watch_id, action_id)
-        resp = self.client.get(f"/v1/deliveries/{delivery_id}")
+    def _run(self, feed_item_id: str) -> WatchActionRun:
+        return WatchActionRun.objects.create(
+            account_id=self.account_id,
+            watch_id=ulid.ulid(),
+            action_id=self.action_id,
+            feed_item_id=feed_item_id,
+            state="succeeded",
+            scheduled_at=timezone.now(),
+            completed_at=timezone.now(),
+            result={"score": 0.9, "reason": "matched"},
+        )
+
+    def test_detail_joins_run_item_feed_action(self) -> None:
+        feed = Feed.objects.create(account_id=self.account_id, user_id=ulid.ulid(), kind="rss", name="Athletics")
+        item = FeedItem.objects.create(
+            account_id=self.account_id,
+            feed_id=feed.id,
+            source_kind="rss",
+            external_id="ext-1",
+            source_label="Example U",
+            data={"title": "Coach hired", "url": "https://x.test/a"},
+        )
+        run = self._run(str(item.id))
+        resp = self.client.get(f"/v1/action-activity/{run.id}")
         self.assertEqual(resp.status_code, 200, resp.content)
         body = resp.json()
-        self.assertEqual(body["id"], delivery_id)
-        self.assertEqual(body["request_payload"], {"items": [{"key": "reddit:1"}]})
+        self.assertEqual(body["run"]["id"], str(run.id))
+        self.assertEqual(body["run"]["result"]["score"], 0.9)
+        self.assertEqual(body["feed_item"]["title"], "Coach hired")
+        self.assertEqual(body["feed_item"]["feed_id"], str(feed.id))
+        self.assertEqual(body["feed"]["name"], "Athletics")
+        self.assertEqual(body["action"]["kind"], "log")
 
-    def test_bad_state_is_400(self) -> None:
-        _watch_id, action_id = self._webhook_action()
-        bad = self.client.get(f"/v1/actions/{action_id}/deliveries", {"state": "bogus"})
-        self.assertEqual(bad.status_code, 400, bad.content)
+    def test_pruned_item_leaves_joins_null(self) -> None:
+        pruned_id = ulid.ulid()
+        run = self._run(pruned_id)  # no such item
+        body = self.client.get(f"/v1/action-activity/{run.id}").json()
+        self.assertIsNone(body["feed_item"])
+        self.assertIsNone(body["feed"])
+        self.assertEqual(body["run"]["feed_item_id"], pruned_id)
 
-    def test_unknown_action_is_404(self) -> None:
-        self.assertEqual(self.client.get(f"/v1/actions/{ulid.ulid()}/deliveries").status_code, 404)
-
-    def test_unknown_delivery_is_404(self) -> None:
-        self.assertEqual(self.client.get(f"/v1/deliveries/{ulid.ulid()}").status_code, 404)
+    def test_unknown_activity_is_404(self) -> None:
+        self.assertEqual(self.client.get(f"/v1/action-activity/{ulid.ulid()}").status_code, 404)

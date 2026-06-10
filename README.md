@@ -76,7 +76,7 @@ The quickstart already built and seeded everything and put the `magpie` CLI on y
 magpie auth login                            # browser device flow
 magpie feed create                           # opens $EDITOR on a feed template (sources + retention)
 magpie watch create                          # opens $EDITOR on a watch template (feeds + action chain)
-magpie watch action activity <action_id>     # matched-vs-gated breakdown for a filter
+magpie activity summary --action <action_id> # per-state run breakdown for any action (filter, webhook, log)
 ```
 
 A watch's `actions:` chain typically starts with a `semantic_filter` (your natural-language criteria + threshold) followed by a `webhook` or `log` delivery. Pick a backfill window when you create the feed and the first `make local-tick` scores real posts against your criteria immediately, with no wait for the scheduler.
@@ -165,8 +165,8 @@ Delivery is **instant** (per item) or **digest** (a window of items batched into
 `item` is the feed item narrowed to the action's `include_fields`. Each item's `key` is `source:external_id`; delivery is at-least-once, so receivers dedup on it. Every call is recorded as a `WatchActionDelivery` you can inspect:
 
 ```bash
-make local-cli ARGS="watch action deliveries <webhook_action_id>"   # the list: state / HTTP / host / items / attempt
-make local-cli ARGS="watch action delivery <delivery_id>"           # one call in full, incl. the exact body sent
+make local-cli ARGS="delivery list --action <webhook_action_id>"    # the list: state / HTTP / host / items / attempt
+make local-cli ARGS="delivery get <delivery_id>"                    # one call in full, incl. the exact body sent
 ```
 
 See [AGENTS.md](AGENTS.md) for the design conventions (char pointers, typed-blob pattern, the trigger/drain/flush execution model).
@@ -178,7 +178,7 @@ Social listening is a crowded market (Brand24, Mention, Octolens, Syften, and to
 - **Open source.** Apache 2.0, the whole stack. Read it, fork it, and extend the connectors and engines yourself.
 - **Bring your own LLM.** Relevance is judged by an LLM you run (Ollama today), so your criteria and your matches never leave your infrastructure.
 - **Natural-language matching.** You describe what's relevant in natural language and the model scores each new post on meaning.
-- **Auditable.** Every poll, judgement, and delivery is a row you can inspect (`magpie watch action activity` / `deliveries`).
+- **Auditable.** Every poll, judgement, and delivery is a row you can inspect (`magpie activity summary` / `delivery list`), as a table or `--jsonl` to pipe into `jq` / an LLM, or written to a file with `-o`.
 
 ## What's shipped today
 
@@ -235,7 +235,7 @@ scripts/                      quickstart installer (quickstart/{bootstrap,run,se
 - [CHANGELOG.md](CHANGELOG.md): notable changes per release.
 - [magpie CLI reference](apps/cli/README.md): install + the full command list.
 - [make/README.md](make/README.md): the important dev `make` commands (`make help` for the full list).
-- [AGENTS.md](AGENTS.md): cross-cutting design conventions, plus per-area notes: [apps/core](apps/core/AGENTS.md) · [apps/cli](apps/cli/AGENTS.md) · [web](web/AGENTS.md).
+- [AGENTS.md](AGENTS.md): cross-cutting design conventions, plus per-area notes: [apps/core](apps/core/AGENTS.md), [apps/cli](apps/cli/AGENTS.md), [web](web/AGENTS.md).
 
 ## License
 

@@ -36,6 +36,47 @@ cli/src/openmagpie/
   commands/          # Typer subcommands. Thin orchestration only.
 ```
 
+## Command shape: positionals, scope flags, observability
+
+The command tree splits by how data is used, not by ORM containment.
+
+- **What one parent OWNS nests** (real containment): `feed` + `feed source` + `feed item`, `watch` + `watch action`. This holds whether the child is operator-authored config (`source`, `action`) or server-produced content (`item`, read-only: `list` / `get`, no create / edit / delete). It is a part of exactly one feed/watch, so you address it under that parent.
+- **Observability you query is flat and top-level**, filter-first, addressed by a scope flag, never walked through its parents: `activity`, `delivery`. These are run/delivery audit that spans an action over time (not part of the action's definition), so they stand on their own rather than nesting under `watch action`.
+
+Argument rule, uniform across every noun:
+
+- **A bare positional is the resource's OWN id.** It never changes meaning between verbs under one noun.
+- **A scope flag appears only when the command has no own id to act on** (`list` / `add` / bulk `set`). See the short-flag map below.
+- **Own-id mutations (`get` / `edit` / `delete`) take only the own id and confirm against the parent the server resolves** (e.g. `feed source delete <source_id>` prints "delete source X from feed Y?"). The parent is a guard, never an id you have to look up first.
+- **`delete` is the single destructive verb on every noun** (`feed` / `watch` / `feed source` / `watch action`). There is no `remove`: a child belongs to exactly one parent and isn't detachable, so removing it from the set IS deleting its row. One verb, predictable for humans and LLM callers.
+- A scope flag is also forced when a resource is not addressable by its own id in the data layer. `WatchAction` is id-addressable, so `watch action delete <action_id>` needs no scope; `Source` is currently feed-scoped. Prefer adding id-only resolution over forcing the caller to supply a scope id.
+
+Short flags are decided once here, not per command. A flag gets a short only when it is unambiguous and frequently typed; long-only is fine, and inventing a short for symmetry is not.
+
+| flag | short | note |
+|---|---|---|
+| `--file` | `-f` | reserved for file / config input, everywhere |
+| `--output` | `-o` | reserved for the output-file destination (write to a file instead of stdout), everywhere; already live on `feed`/`watch` create + `feed source` export. NOT a format selector |
+| `--watch` | `-w` | scope (config commands; observability is action-scoped only, see below) |
+| `--action` | `-a` | scope |
+| `--state` | `-s` | filter, on subcommands |
+| `--server` | `-s` | global, root callback only (passed before the subcommand). Typer scopes it apart from the subcommand `--state`, so there is no parse clash, but don't mint a third `-s` |
+| `--limit` | `-l` | row cap on every list / observability view. ONE short everywhere (some commands currently use `-n`; consolidate to `-l`, which is free once `--list` is gone, below) |
+| `--rank` | `-r` | insert position, `watch action add` only |
+| `--dry-run` | `-n` | preview-only, on the create / edit / set mutations |
+| `--yes` | `-y` | skip the confirm prompt; required when stdin is not a TTY so a pipe can't silently mutate |
+| `--feed` | none | no good short once `-f` is files; only on `feed source` ops, where the noun already reads |
+| `--after` | none | cursor, rarely hand-typed; `-a` is `--action` |
+| `--window` | none | the `summary` preset; long-only (`-w` is `--watch`) |
+
+Two flags are RETIRED by the reshape, freeing their shorts: `--list` (the `summary` vs `list` subcommand split replaces it, freeing `-l` for `--limit`) and `--format` (`--jsonl` replaces it). Until each command is migrated it may still carry the old short; the table above is the target.
+
+Observability `list`/`get` render a human table by default. On a TTY that view auto-paginates through `$PAGER` (`less`): the CLI fetches the next cursor page lazily as `less` pulls more, so a human browses the whole set, but fetching stops when they quit (the first page stays cheap; no bespoke `n`/`p` keys, `less` is what users know). Machine output does NOT auto-paginate: `--jsonl` emits one NDJSON object per row (no bespoke `--format`: `--jsonl | jq` owns custom shaping); `-o`/`--output` only chooses *where* output goes (a file instead of stdout, the reserved meaning above), never *what format*. Scripted pagination uses `-o <file>`: the page's rows go to the file, which **frees stdout to carry the next cursor** (a bare id, empty when none remain), so `next=$(magpie ... --after "$next" -o page)` loops with `--after`. The cursor is on stdout-because-the-data-was-redirected, NOT stderr (stderr is for diagnostics; a value a script depends on must be a real channel, not a scraped log line). `--follow` (live tail, dedupe by id, Ctrl-C stops) layers on top later.
+
+Today `activity` and `delivery` are **action-scoped only** (`--action` / `-a`): the runs and deliveries endpoints are addressed by the action's own id in the path, with no watch-level rollup or `?watch=` filter. A watch-scoped observability view (`--watch` on `activity` / `delivery`) needs a new aggregate endpoint and is deferred to Phase 2; until then `-w` is a scope flag for the config commands (`watch action list --watch`) only.
+
+Some current commands predate this and do not follow it yet; they are being migrated. New commands MUST follow the rule above.
+
 ## AppContext
 
 Built once by the root Typer callback into a `contextvars.ContextVar`. Subcommands pull it via `app_ctx()` / `app_api()` / `app_config()`. No `ctx: typer.Context` threading in command signatures.
@@ -142,7 +183,7 @@ The CLI never opens a server-supplied URL blindly. `_safe_authorize_url` require
 
 ## File-driven config commands
 
-Commands that create / edit server-side resources from operator-authored config (`magpie feed create`, `magpie watch create`, and their `edit` / `set-sources` siblings) accept YAML on disk or stdin, plus a no-argument variant that opens `$EDITOR` on a template:
+Commands that create / edit server-side resources from operator-authored config (`magpie feed create`, `magpie watch create`, and their `edit` / `feed source set` siblings) accept YAML on disk or stdin, plus a no-argument variant that opens `$EDITOR` on a template:
 
 - `magpie watch create -f watch.yaml`
 - `magpie watch create -f -` (stdin)

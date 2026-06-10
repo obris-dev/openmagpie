@@ -35,7 +35,7 @@ instead of waiting for brand-new ones to arrive. The dev login is
 - In the tick's terminal output: the `log` action writes one line per match,
   tagged with the starter's prefix (e.g. `[oss starter]`, `[devtools starter]`).
   Run a tick with `make local-tick` (poll, then trigger, drain, flush).
-- In the CLI activity log: `magpie watch action activity <action_id>` (run
+- In the CLI activity log: `magpie activity summary --action <action_id>` (run
   `magpie auth login` first).
 
 The web UI does not show matches yet, so check the terminal or the CLI.
@@ -67,4 +67,4 @@ Each starter watch ends with a commented `webhook` action. Uncomment it and
 point `url` at your notifier (ntfy, or a relay like a Slack/Discord webhook or
 openclaw-style instance) to get pushed instead of (or alongside) the log line. A
 webhook also records a delivery
-audit you can inspect with `magpie watch action deliveries`.
+audit you can inspect with `magpie delivery list --action <action_id>`.

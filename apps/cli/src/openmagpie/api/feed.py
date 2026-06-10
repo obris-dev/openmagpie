@@ -118,5 +118,7 @@ class FeedApi:
         )
         return SourceSetResult.model_validate(raw)
 
-    def remove_source(self, feed_id: str, source_id: str) -> None:
-        self._http.delete(routes.feeds.source_detail(feed_id, source_id))
+    def remove_source(self, source_id: str) -> None:
+        # By the source's own id; the server resolves its feed (sources address
+        # by own id now, not feed-scoped).
+        self._http.delete(routes.feed_sources.detail(source_id))

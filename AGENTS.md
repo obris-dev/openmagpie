@@ -37,7 +37,8 @@ pyproject.toml + uv.lock    uv workspace root (one lock for all members)
 
 - The unit of attention is a **`Watch`**: a subscription over a set of feeds plus an ordered chain of actions. "Listener" survives as the product pitch ("a Watch is a listener"), not a code-level node name.
 - A polled item is a **`FeedItem`** (persisted Django row). The in-memory typed version a connector produces is a **`SourcePayload`** (Pydantic).
-- A single action executing against one feed item is a **`WatchActionRun`** (the audit row). There is no `Event` / hit model; a successful filter is just a `WatchActionRun` that advanced the chain.
+- A single action executing against one feed item is a **`WatchActionRun`** (the audit row), surfaced publicly (CLI + REST) as **`activity`** (the model name stays `WatchActionRun`; the unit is an "activity entry"). There is no `Event` / hit model; a successful filter is just a `WatchActionRun` that advanced the chain.
+- **Resource names qualify by parent only when dependent.** A first-class entity, a hub other resources are addressed relative to, is named bare (`Watch`, `Feed`, `WatchAction`). A dependent record or component, meaningless apart from its parent, is qualified by it (a feed's items / sources, an action's activity / deliveries). This drives both REST route names ([apps/core/AGENTS.md](apps/core/AGENTS.md)) and CLI command nouns ([apps/cli/AGENTS.md](apps/cli/AGENTS.md)).
 - Source connectors are named for the variant: **`RedditSubRedditConnector`** (kind=`"reddit_subreddit"`). Future Reddit variants get their own connector + kind.
 - Payloads from sources are named for *what happened*: **`NewRedditPostPayload`** (`PAYLOAD_KIND="new_post"`).
 - An action's typed result is a per-kind model: **`SemanticFilterResult`** (`{passed, score, reason}`), `WebhookResult`, `LogResult`.

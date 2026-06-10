@@ -213,6 +213,13 @@ class WatchActionRunService(DigestBatchMixin):
             run.delivery_id = delivery_id
         return run
 
+    def get(self, run_id: str, /) -> WatchActionRun:
+        """One run by its id (account-scoped). Raises WatchActionRun.DoesNotExist
+        if missing / another account's. The audit detail
+        (`/v1/action-activity/<id>`) loads one run to join its item + feed +
+        action."""
+        return WatchActionRun.objects.get(id=run_id, account_id=self.account_id)
+
     def list_for_action(
         self,
         action_id: str,

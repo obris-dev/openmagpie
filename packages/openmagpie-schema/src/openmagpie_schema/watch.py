@@ -147,13 +147,46 @@ class WatchInput(BaseModel):
 # ── ActionRun (audit log read path) ───────────────────────────────────────
 
 
-class WatchActionRunWire(BaseModel):
-    """One WatchActionRun on the wire (`GET /v1/actions/<action_id>/runs`).
+class RunFeedItem(BaseModel):
+    """The feed item a run was judged against, narrowed for the audit log.
 
-    The stateful audit row of one action executing against one item.
+    The `Run*` prefix (vs the package's `*Wire` suffix) marks an audit-narrowed
+    projection: a deliberately smaller view of `FeedItem` for the runs response's
+    side tables, not the full `FeedItemWire`. `RunFeed` is the same idea for Feed.
+
+    `title` / `url` come from the connector payload (`FeedItem.data`, a
+    SourcePayload dump where both fields live on the base). `source_label` is the
+    operator-visible source string. `feed_id` keys into the response's `feeds`
+    map and is REQUIRED (the structural join key; the display fields default to
+    empty, the join key never does). NOT embedded on each run row: returned once
+    per item in the response's `feed_items` map (items are ~1:1 with runs, but the
+    run row stays pure ids and the shape matches `action` / `feeds`)."""
+
+    feed_id: str
+    title: str = ""
+    url: str = ""
+    source_label: str = ""
+
+
+class RunFeed(BaseModel):
+    """A feed referenced by the audited runs, returned once in the response's
+    `feeds` map (keyed by id). Feeds are far fewer than runs, so this normalizes
+    the many runs -> few feeds relationship instead of repeating the feed per
+    row."""
+
+    id: str
+    name: str = ""
+
+
+class WatchActionRunWire(BaseModel):
+    """One WatchActionRun on the wire (`GET /v1/actions/<action_id>/activity`).
+
+    The stateful audit row of one action executing against one item. Pure ids +
+    run state: the judged item is in the response's `feed_items` map (key
+    `feed_item_id`), the feed in `feeds` (key `feed_items[feed_item_id].feed_id`).
     `result` is the kind-specific output blob (opaque; render common keys
-    best-effort). `state` is the `WatchActionRunState` value. Datetimes
-    real; renderer encodes."""
+    best-effort). `state` is the `WatchActionRunState` value. Datetimes real;
+    renderer encodes."""
 
     id: str
     watch_id: str
@@ -201,7 +234,7 @@ class WatchActionRunSummary(BaseModel):
 
 
 class WatchActionRunListResponse(BaseModel):
-    """`GET /v1/actions/<action_id>/runs` envelope. Cursor-paginated by ULID
+    """`GET /v1/actions/<action_id>/activity` envelope. Cursor-paginated by ULID
     pk, newest-first. `?after=<id>` for the next page; `next_cursor` null
     when the page wasn't full. Filter by `?state=` (a WatchActionRunState
     value). `summary` (the full per-state breakdown) is present on the
@@ -209,9 +242,36 @@ class WatchActionRunListResponse(BaseModel):
 
     items: list[WatchActionRunWire] = Field(default_factory=list)
     next_cursor: str | None = None
+    # The action being audited (kind + config), so a reader sees WHAT the runs
+    # were judged against (e.g. a semantic_filter's instructions + threshold) as
+    # a header. Constant per page; the action row is already loaded server-side.
+    action: WatchActionWire | None = None
+    # Side tables the run rows key into instead of embedding (a run carries only
+    # `feed_item_id`): `feed_items` by feed_item_id (the judged item's title/url),
+    # `feeds` by feed_id (its feed). Pruned items are simply absent. Normalizes
+    # many runs -> few feeds; a missing key renders by id.
+    feed_items: dict[str, RunFeedItem] = Field(default_factory=dict)
+    feeds: dict[str, RunFeed] = Field(default_factory=dict)
     # None means "this is a paged response" (no summary computed) — NOT "no
     # activity". The first page always carries a summary, all-zero if idle.
     summary: WatchActionRunSummary | None = None
+
+
+class WatchActionRunView(BaseModel):
+    """`GET /v1/action-activity/<id>`: one run ("activity entry") in full, with
+    the joined item / feed / action so a reader sees WHAT it judged and under
+    WHICH action without a second call. `run` is NESTED (not inherited the way
+    WatchActionDeliveryView extends its wire) because the item / feed / action are
+    peer joins onto the run, not extra columns on it. The list returns the same
+    join as keyed side tables; the detail inlines the one item + feed it needs.
+    `feed_item` / `feed` are null when the item has been pruned by retention (the
+    run still renders by `run.feed_item_id`); `action` is null only if it was
+    removed."""
+
+    run: WatchActionRunWire
+    feed_item: RunFeedItem | None = None
+    feed: RunFeed | None = None
+    action: WatchActionWire | None = None
 
 
 # ── Delivery (outbound HTTP call audit read path) ─────────────────────────
@@ -245,7 +305,7 @@ class WatchActionDeliveryWire(BaseModel):
 
 
 class WatchActionDeliveryView(WatchActionDeliveryWire):
-    """`GET /v1/deliveries/<delivery_id>`, the detail: the list row plus the
+    """`GET /v1/action-deliveries/<delivery_id>`, the detail: the list row plus the
     exact `request_payload` we sent (a WebhookPayload dump), stored
     point-in-time. Opaque here ; headers are NEVER included (auth tokens). Kept
     off the list wire so a list call doesn't ship every batch body."""

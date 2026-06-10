@@ -6,8 +6,9 @@ Typer so `magpie feed --help` shows everything in one place.
 Bulk write is `set-sources` (the shape an external scrape script
 naturally produces); `template-sources` emits a starter file so a
 new user sees what shape set-sources expects without reading code.
-`remove-source <feed_id> <source_id>` is the one single-row mutation
-that survives ; it identifies a row by id, no bespoke per-kind flags.
+`remove-source <source_id>` is the one single-row mutation that survives ;
+it identifies the source by its own id (the server resolves the feed), no
+bespoke per-kind flags.
 
 `add-source` was considered and dropped: the flag UX (`--kind`,
 `--url`, `--meta key=value` ...) is bespoke per source kind and
@@ -151,12 +152,11 @@ def list_sources(feed_id: str = typer.Argument(..., help="Feed id.")) -> None:
 @feed_app.command("remove-source")
 @_handle_api_errors
 def remove_source(
-    feed_id: str = typer.Argument(..., help="Feed id."),
     source_id: str = typer.Argument(..., help="Source id (copy from `list-sources`)."),
 ) -> None:
-    """Remove one source from a feed by its ULID."""
-    app_ctx().api.feed.remove_source(feed_id, source_id)
-    console.success(f"Removed source {source_id} from feed {feed_id}")
+    """Remove one source by its own ULID (the feed is resolved server-side)."""
+    app_ctx().api.feed.remove_source(source_id)
+    console.success(f"Removed source {source_id}")
 
 
 # ── template (starter file for set-sources) ────────────────────────────

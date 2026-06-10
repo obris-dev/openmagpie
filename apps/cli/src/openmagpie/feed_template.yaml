@@ -1,7 +1,7 @@
 # Magpie feed config.
 #
 # A feed is a curated set of sources the server polls on a cadence; its
-# items are what you read (`magpie feed view <id>`) and what listeners
+# items are what you read (`magpie feed item list --feed <id>`) and what listeners
 # subscribe to. Save and run:
 #   magpie feed create -f feed.yaml
 #

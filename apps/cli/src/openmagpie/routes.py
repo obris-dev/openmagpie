@@ -16,8 +16,9 @@ API_VERSION = "v1"
 _AUTH = f"/{API_VERSION}/auth"
 _FEEDS = f"/{API_VERSION}/feeds"
 _WATCHES = f"/{API_VERSION}/watches"
+_FEED_SOURCES = f"/{API_VERSION}/feed-sources"
 _ACTIONS = f"/{API_VERSION}/actions"
-_DELIVERIES = f"/{API_VERSION}/deliveries"
+_ACTION_DELIVERIES = f"/{API_VERSION}/action-deliveries"
 _ENGINES = f"/{API_VERSION}/engines"
 
 
@@ -52,9 +53,14 @@ class feeds:
     def sources(feed_id: str) -> str:
         return f"{_FEEDS}/{feed_id}/sources"
 
+
+class feed_sources:
+    """`/v1/feed-sources/<id>` — one source by its own ULID (a dependent record
+    of its feed; the feed is resolved server-side, not passed in the path)."""
+
     @staticmethod
-    def source_detail(feed_id: str, source_id: str) -> str:
-        return f"{_FEEDS}/{feed_id}/sources/{source_id}"
+    def detail(source_id: str) -> str:
+        return f"{_FEED_SOURCES}/{source_id}"
 
 
 class watches:
@@ -75,7 +81,10 @@ class watches:
 
 
 class actions:
-    """`/v1/actions/*` — per-action ops keyed on the action's own ULID."""
+    """`/v1/actions/*` — per-action ops keyed on the action's own ULID. The
+    audit LISTS are nested here (`activity` = the run log, `deliveries`); the
+    by-own-id detail of one run / delivery is parent-qualified (see `activity`
+    / `deliveries` below)."""
 
     @staticmethod
     def detail(action_id: str) -> str:
@@ -83,7 +92,9 @@ class actions:
 
     @staticmethod
     def runs(action_id: str) -> str:
-        return f"{_ACTIONS}/{action_id}/runs"
+        # Method name follows the model (WatchActionRun); path follows the public
+        # noun (activity). Phase 2 reshapes this client, so leave the name as-is.
+        return f"{_ACTIONS}/{action_id}/activity"
 
     @staticmethod
     def deliveries(action_id: str) -> str:
@@ -91,11 +102,12 @@ class actions:
 
 
 class deliveries:
-    """`/v1/deliveries/*` — one delivery's detail by its own ULID."""
+    """`/v1/action-deliveries/*` — one delivery's detail by its own ULID
+    (a dependent record of its action, so the route is parent-qualified)."""
 
     @staticmethod
     def detail(delivery_id: str) -> str:
-        return f"{_DELIVERIES}/{delivery_id}"
+        return f"{_ACTION_DELIVERIES}/{delivery_id}"
 
 
 class engines:

@@ -23,7 +23,7 @@ from rest_framework.exceptions import APIException
 
 from accounts.api import AccountScopedAPIView, AccountScopedRequest
 
-from .models import Feed, Source
+from .models import Feed
 from .services import FeedItemService, FeedService
 from .services.sources import SourceService
 
@@ -33,13 +33,6 @@ class FeedScopedRequest(AccountScopedRequest):
     `FeedScopedAPIView.initial()`."""
 
     feed_id: str
-
-
-class SourceScopedRequest(FeedScopedRequest):
-    """Typing view of the request once `source_id` is stashed by
-    `SourceScopedAPIView.initial()`."""
-
-    source_id: str
 
 
 class FeedNotFound(APIException):
@@ -68,6 +61,20 @@ class SourceNotFound(APIException):
     def __init__(self, source_id: str) -> None:
         super().__init__(
             detail={"error": "not_found", "detail": f"no source {source_id}"},
+            code=self.default_code,
+        )
+
+
+class FeedItemNotFound(APIException):
+    """404 for a FeedItem absent from the caller's account (never existed,
+    pruned, or another account's). Opaque, like the others."""
+
+    status_code = status.HTTP_404_NOT_FOUND
+    default_code = "not_found"
+
+    def __init__(self, item_id: str) -> None:
+        super().__init__(
+            detail={"error": "not_found", "detail": f"no item {item_id}"},
             code=self.default_code,
         )
 
@@ -141,28 +148,3 @@ class FeedScopedAPIView(FeedSvcMixin, AccountScopedAPIView):
             return self.feed_svc.get(self.request.feed_id)
         except Feed.DoesNotExist as exc:
             raise FeedNotFound(self.request.feed_id) from exc
-
-
-class SourceScopedAPIView(SourceSvcMixin, FeedScopedAPIView):
-    """APIView for endpoints scoped to one Source row inside a feed.
-
-    Extends FeedScopedAPIView with a stashed `source_id` and a
-    `self.source` cached_property that raises `SourceNotFound` on
-    miss (DRF -> 404). Touch `self.feed` (auto-404 on a missing
-    feed) before mutating to keep the feed-scoping guarantee
-    explicit; the source lookup is account + feed bounded inside
-    `SourceService.get`."""
-
-    request: SourceScopedRequest
-
-    def initial(self, request, *args, **kwargs):
-        super().initial(request, *args, **kwargs)
-        # `<str:source_id>` URL capture is always present; index for `str`.
-        request.source_id = kwargs["source_id"]
-
-    @cached_property
-    def source(self) -> Source:
-        try:
-            return self.source_svc.get(self.feed, source_id=self.request.source_id)
-        except Source.DoesNotExist as exc:
-            raise SourceNotFound(self.request.source_id) from exc

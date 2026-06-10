@@ -21,12 +21,18 @@ urlpatterns = [
     path("healthz", healthz, name="healthz"),
     api_include(f"{_V1}/auth", "auth_api.urls"),
     api_include(f"{_V1}/feeds", "feeds.urls"),
+    # One item's / source's detail by its own ULID (dependent records of a feed,
+    # so parent-qualified) ; the lists are nested under the feed.
+    api_include(f"{_V1}/feed-items", "feeds.item_urls"),
+    api_include(f"{_V1}/feed-sources", "feeds.source_urls"),
     api_include(f"{_V1}/watches", "watches.urls"),
     # Per-action ops live at the top level (addressed by the action's own
     # ULID), not under /watches/<id>/actions ; see watches.action_urls.
     api_include(f"{_V1}/actions", "watches.action_urls"),
-    # A single delivery's detail by its own ULID ; the list is under the action.
-    api_include(f"{_V1}/deliveries", "watches.delivery_urls"),
+    # One run's / delivery's detail by its own ULID (dependent records of an
+    # action, so parent-qualified) ; the lists are nested under the action.
+    api_include(f"{_V1}/action-activity", "watches.activity_urls"),
+    api_include(f"{_V1}/action-deliveries", "watches.delivery_urls"),
     api_include(f"{_V1}/engines", "engine.urls"),
     # Public, unauthenticated waitlist signup (marketing site).
     api_include(f"{_V1}/waitlist", "waitlist.urls"),

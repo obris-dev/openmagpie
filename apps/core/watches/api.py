@@ -77,6 +77,19 @@ class WatchActionDeliveryNotFound(APIException):
         )
 
 
+class WatchActionRunNotFound(APIException):
+    """404 for a run (activity entry) absent from the caller's account."""
+
+    status_code = status.HTTP_404_NOT_FOUND
+    default_code = "not_found"
+
+    def __init__(self, run_id: str) -> None:
+        super().__init__(
+            detail={"error": "not_found", "detail": f"no activity {run_id}"},
+            code=self.default_code,
+        )
+
+
 class WatchSvcMixin:
     """Per-request `watch_svc` cached_property ; usable on any view that
     knows the account but doesn't have a watch-id in its URL."""

@@ -19,7 +19,7 @@ from django.test import SimpleTestCase, TestCase
 from rest_framework.test import APIClient
 
 from auth_api.operations.signup import SignupOperation
-from feeds.models import Feed
+from feeds.models import Feed, FeedItem
 from feeds.services.polling import FeedPollOperation
 from feeds.services.sources import _hash_spec
 from openmagpie_schema.configs import RedditSubredditSourceSpec, RssSourceSpec
@@ -123,3 +123,74 @@ class SpecHashCanonicalTests(SimpleTestCase):
         a = RssSourceSpec(url="https://example.com/feed.rss", name="A")
         b = RssSourceSpec(name="A", url="https://example.com/feed.rss")
         self.assertEqual(_hash_spec(a), _hash_spec(b))
+
+
+class FeedItemAndSourceRouteTests(TestCase):
+    """By-own-id detail routes for a feed's items + sources, plus the
+    cursor-paginated item list. Items are read-only; a source can be deleted by
+    its own id. Account isolation throughout."""
+
+    def setUp(self) -> None:
+        self.user = SignupOperation(email="frt@example.com", password="Str0ng-Passw0rd!").run()
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.user)
+        resp = self.client.post(
+            "/v1/feeds",
+            {
+                "name": "f",
+                "kind": "curated",
+                "poll_interval_seconds": 300,
+                "data": {"retention_days": 30},
+                "sources": [{"spec": {"kind": "rss", "url": "https://a.test/rss", "name": "A"}}],
+            },
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 201, resp.content)
+        self.feed_id = resp.json()["id"]
+        self.account_id = Feed.objects.get(id=self.feed_id).account_id
+
+    def _item(self, external_id: str) -> FeedItem:
+        return FeedItem.objects.create(
+            account_id=self.account_id,
+            feed_id=self.feed_id,
+            source_kind="rss",
+            external_id=external_id,
+            source_label="A",
+            data={"title": f"t-{external_id}", "url": "https://a.test/x"},
+        )
+
+    def _source_id(self) -> str:
+        return self.client.get(f"/v1/feeds/{self.feed_id}/sources").json()["items"][0]["id"]
+
+    def test_feed_source_detail_and_delete_by_own_id(self) -> None:
+        source_id = self._source_id()
+        got = self.client.get(f"/v1/feed-sources/{source_id}")
+        self.assertEqual(got.status_code, 200, got.content)
+        self.assertEqual(got.json()["id"], source_id)
+        # delete by own id (no feed in the path)
+        self.assertEqual(self.client.delete(f"/v1/feed-sources/{source_id}").status_code, 204)
+        self.assertEqual(self.client.get(f"/v1/feed-sources/{source_id}").status_code, 404)
+        self.assertEqual(self.client.delete(f"/v1/feed-sources/{ulid.ulid()}").status_code, 404)
+
+    def test_feed_items_list_and_detail(self) -> None:
+        a = self._item("a")
+        b = self._item("b")
+        listed = self.client.get(f"/v1/feeds/{self.feed_id}/items")
+        self.assertEqual(listed.status_code, 200, listed.content)
+        self.assertEqual({r["id"] for r in listed.json()["items"]}, {str(a.id), str(b.id)})
+        got = self.client.get(f"/v1/feed-items/{a.id}")
+        self.assertEqual(got.status_code, 200, got.content)
+        self.assertEqual(got.json()["id"], str(a.id))
+        self.assertEqual(got.json()["data"]["title"], "t-a")
+        self.assertEqual(self.client.get(f"/v1/feed-items/{ulid.ulid()}").status_code, 404)
+
+    def test_account_isolation(self) -> None:
+        item = self._item("a")
+        source_id = self._source_id()
+        other = APIClient()
+        other.force_authenticate(user=SignupOperation(email="frt-other@example.com", password="Str0ng-Passw0rd!").run())
+        self.assertEqual(other.get(f"/v1/feed-items/{item.id}").status_code, 404)
+        self.assertEqual(other.get(f"/v1/feed-sources/{source_id}").status_code, 404)
+        self.assertEqual(other.delete(f"/v1/feed-sources/{source_id}").status_code, 404)
+        # the owner's source is untouched by the other account's failed delete
+        self.assertEqual(self.client.get(f"/v1/feed-sources/{source_id}").status_code, 200)

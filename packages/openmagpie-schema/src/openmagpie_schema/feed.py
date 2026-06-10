@@ -180,6 +180,17 @@ class FeedListResponse(BaseModel):
     next_cursor: str | None = None
 
 
+class FeedItemListResponse(BaseModel):
+    """`GET /v1/feeds/<id>/items` -> `{"items": [...], "next_cursor": <id>|None}`.
+
+    Cursor-paginated by ULID pk, newest-first. Pass `?after=<id>` to fetch the
+    next page; `next_cursor` is the id to send back, or null when the page wasn't
+    full (= no more rows)."""
+
+    items: list[FeedItemWire] = []
+    next_cursor: str | None = None
+
+
 class FeedView(FeedWire):
     """`GET /v1/feeds/<id>` - read view: envelope + display `summary` +
     the recent item log (this is the "sort by new and go" surface; the

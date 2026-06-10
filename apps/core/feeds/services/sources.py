@@ -155,19 +155,31 @@ class SourceService:
         deleted, _ = self._scoped(feed).delete()
         return deleted
 
-    def get(self, feed: Feed, *, source_id: str) -> Source:
-        """Fetch one Source row, account + feed scoped. Raises
-        `Source.DoesNotExist` on miss; the HTTP layer maps that to
-        `SourceNotFound` (404)."""
-        self._assert_scope(str(feed.account_id), "feed")
-        return self._scoped(feed).get(id=source_id)
+    def get_by_id(self, source_id: str, /) -> Source:
+        """One source by its OWN id (account-scoped, no feed needed). Raises
+        `Source.DoesNotExist` on miss / another account's. Backs the by-own-id
+        detail route `/v1/feed-sources/<id>` ; the feed it belongs to is read off
+        the returned row, not supplied by the caller."""
+        return Source.objects.get(id=source_id, account_id=self.account_id)
 
-    def remove(self, feed: Feed, *, source_id: str) -> int:
-        """Delete by Source id. Returns 0 if no row matched (idempotent).
-        Scoped to the feed so a source_id from another feed (or another
-        account) can't be removed by mistake."""
+    def remove_by_id(self, source_id: str, /) -> int:
+        """Delete one source by its OWN id (account-scoped). Resolves the source,
+        verifies its owning feed is curated, then deletes. Raises
+        `Source.DoesNotExist` if absent / another account's (HTTP -> 404) and
+        `PolicyError` if the feed isn't curated (HTTP -> 400), the same guard the
+        feed-scoped set path runs, checked here rather than assumed. Returns the
+        delete count (1 ; 0 only if a concurrent delete won the race). Backs
+        `DELETE /v1/feed-sources/<id>`."""
+        source = self.get_by_id(source_id)
+        try:
+            feed = Feed.objects.get(id=source.feed_id, account_id=self.account_id)
+        except Feed.DoesNotExist as exc:
+            # Race: the feed (and its sources, via FeedService.delete's atomic
+            # cleanup) was deleted between resolving the source and here. The
+            # source is gone too, so 404 is the truthful answer.
+            raise Source.DoesNotExist from exc
         self._assert_curated(feed)
-        deleted, _ = self._scoped(feed).filter(id=source_id).delete()
+        deleted, _ = source.delete()
         return deleted
 
     def set_sources(

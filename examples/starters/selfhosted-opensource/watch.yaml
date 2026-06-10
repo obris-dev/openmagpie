@@ -15,7 +15,7 @@ actions:
       prefix: "[oss starter]"
   # Prefer a push over a log line? Uncomment and point at your notifier (ntfy, or
   # a relay like a Slack/Discord webhook or openclaw-style instance). A webhook also
-  # records a delivery audit you can inspect with `magpie watch action deliveries`:
+  # records a delivery audit you can inspect with `magpie delivery list --action <action_id>`:
   # - kind: webhook
   #   config:
   #     url: "https://your-notifier.example/hook"
