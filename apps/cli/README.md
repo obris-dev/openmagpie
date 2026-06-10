@@ -39,6 +39,14 @@ Create a feed of sources to watch, then a watch that subscribes to it and runs a
 | `magpie delivery list` / `get` | Outbound webhook delivery audit: `list --action <id>` the attempts (state / HTTP / host / items / attempt), `get <delivery_id>` one call in full incl. the exact body sent |
 | `magpie feed template` / `watch template` | Emit a config skeleton to stdout |
 
-Observability views (`activity`, `delivery`) render a human table by default and stream newline-delimited JSON with `--jsonl` (one object per row, cursor auto-paginated) for `jq` / piping.
+Observability views (`activity`, `delivery`) render a human table by default. On a terminal that view pages through `$PAGER` (`less`), fetching the next cursor page lazily as you scroll, so you browse the whole set interactively (quit `less` and fetching stops; the first page stays cheap). Machine output does not auto-paginate: `--jsonl` emits newline-delimited JSON (one object per row) for `jq` / piping. To paginate in a script, redirect the page to a file with `-o <file>` (the rows go to the file); the next cursor then prints to stdout (a bare id, empty when no pages remain), so a loop captures it and passes `--after`:
+
+```bash
+next=""
+i=0
+while next=$(magpie activity list --action ID --jsonl --after "$next" -o "page_$i.jsonl"); [ -n "$next" ]; do
+  i=$((i + 1))
+done
+```
 
 Config lives at `~/.magpie/config.json`.

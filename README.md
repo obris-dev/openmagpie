@@ -178,7 +178,7 @@ Social listening is a crowded market (Brand24, Mention, Octolens, Syften, and to
 - **Open source.** Apache 2.0, the whole stack. Read it, fork it, and extend the connectors and engines yourself.
 - **Bring your own LLM.** Relevance is judged by an LLM you run (Ollama today), so your criteria and your matches never leave your infrastructure.
 - **Natural-language matching.** You describe what's relevant in natural language and the model scores each new post on meaning.
-- **Auditable.** Every poll, judgement, and delivery is a row you can inspect (`magpie activity summary` / `delivery list`).
+- **Auditable.** Every poll, judgement, and delivery is a row you can inspect (`magpie activity summary` / `delivery list`), as a table or `--jsonl` to pipe into `jq` / an LLM, or written to a file with `-o`.
 
 ## What's shipped today
 
