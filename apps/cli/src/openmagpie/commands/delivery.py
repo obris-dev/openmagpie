@@ -21,7 +21,7 @@ from openmagpie_schema.watch_enums import WatchActionDeliveryState, choices
 
 from .. import console
 from ..context import app_ctx
-from ._shared import _check_choice, _handle_api_errors, _print_detail, _print_next_page
+from ._shared import _check_choice, _emit_detail, _emit_list, _handle_api_errors, _print_detail
 
 delivery_app = typer.Typer(no_args_is_help=True)
 
@@ -34,20 +34,34 @@ def list_(
         None, "--state", "-s", help=f"Filter by delivery state ({choices(WatchActionDeliveryState)})."
     ),
     after: str | None = typer.Option(None, "--after", help="Cursor (delivery id) to page after."),
-    limit: int | None = typer.Option(None, "--limit", "-l", help="Max rows to show."),
+    limit: int | None = typer.Option(None, "--limit", "-l", help="Rows per page."),
+    jsonl: bool = typer.Option(False, "--jsonl", help="Emit one JSON object per delivery (NDJSON) instead of a table."),
+    output: str | None = typer.Option(
+        None, "--output", "-o", help="Write to a file instead of stdout; the next cursor prints to stdout."
+    ),
 ) -> None:
     """One action's outbound webhook calls (one row per attempt), newest first."""
     _check_choice(state, WatchActionDeliveryState)
-    _print_deliveries(app_ctx().api.delivery.list(action_id, state=state, after=after, limit=limit))
+    _emit_list(
+        fetch=lambda cursor: app_ctx().api.delivery.list(action_id, state=state, after=cursor, limit=limit),
+        after=after,
+        render_table=_print_deliveries,
+        jsonl_lines=lambda resp: (d.model_dump_json() for d in resp.items),
+        jsonl=jsonl,
+        output=output,
+    )
 
 
 @delivery_app.command("get")
 @_handle_api_errors
 def get(
     delivery_id: str = typer.Argument(..., help="Delivery id, from `magpie delivery list`."),
+    jsonl: bool = typer.Option(False, "--jsonl", help="Emit the delivery as one JSON object instead of a field table."),
+    output: str | None = typer.Option(None, "--output", "-o", help="Write to a file instead of stdout."),
 ) -> None:
     """Show one delivery in full, including the exact request body that was sent."""
-    _print_delivery_detail(app_ctx().api.delivery.get(delivery_id))
+    view = app_ctx().api.delivery.get(delivery_id)
+    _emit_detail(render=lambda: _print_delivery_detail(view), json_obj=view.model_dump_json, jsonl=jsonl, output=output)
 
 
 def _print_deliveries(resp: WatchActionDeliveryListResponse) -> None:
@@ -67,7 +81,6 @@ def _print_deliveries(resp: WatchActionDeliveryListResponse) -> None:
         console.Column("ERROR", lambda d: d.error or "-"),
     ]
     console.table(resp.items, columns)
-    _print_next_page(resp.next_cursor)
 
 
 def _print_delivery_detail(d: WatchActionDeliveryView) -> None:

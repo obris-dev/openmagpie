@@ -9,13 +9,14 @@ commands package — they are not part of any public surface.
 
 from __future__ import annotations
 
+import contextlib
 import functools
 import json
 import sys
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from enum import StrEnum
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
 import httpx
 import typer
@@ -133,11 +134,119 @@ def _print_detail(header: str, fields: list[tuple[str, str]]) -> None:
     console.table(fields, cols)
 
 
-def _print_next_page(next_cursor: str | None) -> None:
+def _print_next_page(next_cursor: str | None, *, to_stderr: bool = False) -> None:
     """Print the next-page cursor hint after a paginated list, when another page
-    exists. Shared by the activity / delivery `list` renderers."""
+    exists. Shared by the activity / delivery `list` renderers. `to_stderr` routes
+    it off stdout for `--jsonl` (so the hint can't corrupt the NDJSON stream)."""
     if next_cursor:
-        console.log(f"\nNext page: --after {next_cursor}")
+        typer.echo(f"\nNext page: --after {next_cursor}", err=to_stderr)
+
+
+@contextlib.contextmanager
+def _maybe_to_file(output: str | None):
+    """Redirect stdout to `output` for the duration, or pass through when None.
+    The page renderers stay stdout-only ; this is the single seam that turns
+    `-o <file>` into 'write the rows there instead'."""
+    if output is None:
+        yield
+        return
+    try:
+        with open(output, "w") as fh, contextlib.redirect_stdout(fh):
+            yield
+    except OSError as exc:
+        console.error(f"failed to write {output}: {exc}")
+        raise typer.Exit(code=1) from None
+
+
+class _Page(Protocol):
+    """The minimal shape `_emit_list` itself reads off a list response: the
+    next-page cursor that drives the loop. The per-command renderers
+    (`render_table` / `jsonl_lines`) receive the SAME concrete response and read
+    the rest (`.items`, the keyed side tables) ; the generic only needs the
+    cursor, so `P` binds to each command's real response type at the call site."""
+
+    next_cursor: str | None
+
+
+def _emit_list[P: _Page](
+    *,
+    fetch: Callable[[str | None], P],
+    after: str | None,
+    render_table: Callable[[P], None],
+    jsonl_lines: Callable[[P], Iterable[str]],
+    jsonl: bool,
+    output: str | None,
+) -> None:
+    """Emit a paginated list in the right mode. `fetch(cursor)` returns one page
+    (a response with `.items` + `.next_cursor`) ; `render_table` / `jsonl_lines`
+    render one page.
+
+    Paging follows the TERMINAL, not the format:
+    - interactive TTY (and not `-o`): PROMPT-PAGED — render a page, then `Fetch
+      next page? [Y/n]` (Enter advances), looping until declined or the cursor
+      runs out. Applies to BOTH the table and `--jsonl`. Earlier pages stay in
+      the terminal's scrollback. A `Page: <n>` marker precedes each TABLE page
+      (stdout) ; `--jsonl` stays pure NDJSON, the prompt delineates its pages.
+    - `-o <file>`: single page (table or NDJSON) to the file, next cursor as a
+      BARE id on stdout (the scripted-pagination path) — never prompts.
+    - piped / non-TTY: single page ; the `--after` hint on stdout (table) or
+      stderr (`--jsonl`, so stdout stays pure)."""
+    interactive = sys.stdin.isatty() and sys.stdout.isatty()
+    if output or not interactive:
+        resp = fetch(after)
+        with _maybe_to_file(output):
+            if jsonl:
+                console.jsonl(jsonl_lines(resp))
+            else:
+                render_table(resp)
+        if output:
+            # Bare cursor on stdout (the data went to the file) IS the scripted
+            # pagination contract: a loop reads it and stops on empty, e.g.
+            # `while next=$(... -o page); [ -n "$next" ]; do ...`. Don't dress it up.
+            if resp.next_cursor:
+                typer.echo(resp.next_cursor)
+        else:
+            _print_next_page(resp.next_cursor, to_stderr=jsonl)
+        return
+    page = 0
+    while True:
+        resp = fetch(after)
+        page += 1
+        if jsonl:
+            console.jsonl(jsonl_lines(resp))  # pure NDJSON ; no Page: marker on stdout
+        else:
+            console.log(f"\nPage: {page}")  # blank line, marker, then the table directly below
+            render_table(resp)
+        after = resp.next_cursor
+        if not after:
+            break
+        try:
+            advance = typer.confirm("Fetch next page?", default=True, err=True)
+        except typer.Abort:
+            # Ctrl-C (or EOF) at the prompt: the pages already shown ARE valid
+            # output, the user just stopped browsing. Exit 130 (128 + SIGINT) per
+            # the repo convention, leading newline off the terminal's `^C` echo,
+            # instead of click's default "Aborted." (exit 1, no newline).
+            console.warn("\nStopped.")
+            raise typer.Exit(code=130) from None
+        if not advance:
+            break
+
+
+def _emit_detail(
+    *,
+    render: Callable[[], None],
+    json_obj: Callable[[], str],
+    jsonl: bool,
+    output: str | None,
+) -> None:
+    """Emit a single-object view (`get` / `summary`): the field tables by default,
+    one JSON object with `--jsonl`, either one routed to `-o <file>`."""
+    with _maybe_to_file(output):
+        if jsonl:
+            typer.echo(json_obj())
+        else:
+            render()
 
 
 def _as_enum[E: StrEnum](value: str, enum: type[E]) -> E | None:

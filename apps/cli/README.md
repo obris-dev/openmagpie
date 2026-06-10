@@ -39,7 +39,7 @@ Create a feed of sources to watch, then a watch that subscribes to it and runs a
 | `magpie delivery list` / `get` | Outbound webhook delivery audit: `list --action <id>` the attempts (state / HTTP / host / items / attempt), `get <delivery_id>` one call in full incl. the exact body sent |
 | `magpie feed template` / `watch template` | Emit a config skeleton to stdout |
 
-Observability views (`activity`, `delivery`) render a human table by default. On a terminal that view pages through `$PAGER` (`less`), fetching the next cursor page lazily as you scroll, so you browse the whole set interactively (quit `less` and fetching stops; the first page stays cheap). Machine output does not auto-paginate: `--jsonl` emits newline-delimited JSON (one object per row) for `jq` / piping. To paginate in a script, redirect the page to a file with `-o <file>` (the rows go to the file); the next cursor then prints to stdout (a bare id, empty when no pages remain), so a loop captures it and passes `--after`:
+Observability views (`activity`, `delivery`) render a human table. On a terminal it is **prompt-paged**: each page prints under a `Page: <n>` marker, then `Fetch next page? [Y/n]` (Enter advances) until you decline or run out, with earlier pages in your terminal's scrollback. Piped or redirected, it prints one page plus a `Next page: --after <id>` hint. `--jsonl` emits newline-delimited JSON (one object per row) for `jq` / piping — also prompt-paged at a terminal, one page when piped. It pairs with `-o <file>` to dump a page to the file while the next cursor prints to stdout (a bare id, empty when done) — so a script loops on the cursor and passes `--after`:
 
 ```bash
 next=""
@@ -48,5 +48,7 @@ while next=$(magpie activity list --action ID --jsonl --after "$next" -o "page_$
   i=$((i + 1))
 done
 ```
+
+Planned: `--follow` to tail new rows live.
 
 Config lives at `~/.magpie/config.json`.

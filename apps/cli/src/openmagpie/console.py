@@ -94,6 +94,15 @@ def table[T](rows: Iterable[T], columns: list[Column[T]]) -> bool:
     return True
 
 
+def jsonl(lines: Iterable[str]) -> None:
+    """Emit pre-serialized JSON strings as newline-delimited JSON on stdout, one
+    object per line (the `--jsonl` machine output). The caller serializes each
+    row (e.g. `model.model_dump_json()`) so this stays a pure writer ; keeping
+    stdout pure NDJSON is why pagination hints go to stderr, not here."""
+    for line in lines:
+        typer.echo(line)
+
+
 def active_or_paused(is_active: bool) -> str:
     return "active" if is_active else "paused"
 
