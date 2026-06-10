@@ -68,8 +68,9 @@ Short flags are decided once here, not per command. A flag gets a short only whe
 | `--feed` | none | no good short once `-f` is files; only on `feed source` ops, where the noun already reads |
 | `--after` | none | cursor, rarely hand-typed; `-a` is `--action` |
 | `--window` | none | the `summary` preset; long-only (`-w` is `--watch`) |
+| `--format` | none | config-doc output serialization (`yaml`/`json`) on the `template` / `export` commands. NOT the observability format selector (that is `--jsonl`, a data-row stream, not a document) |
 
-Two flags are RETIRED by the reshape, freeing their shorts: `--list` (the `summary` vs `list` subcommand split replaces it, freeing `-l` for `--limit`) and `--format` (`--jsonl` replaces it). Until each command is migrated it may still carry the old short; the table above is the target.
+`--list` is RETIRED by the reshape, freeing its short: the `summary` vs `list` subcommand split replaces it, freeing `-l` for `--limit`. Until each command is migrated it may still carry the old short; the table above is the target.
 
 Observability `list`/`get` render a human table by default. On a TTY that view auto-paginates through `$PAGER` (`less`): the CLI fetches the next cursor page lazily as `less` pulls more, so a human browses the whole set, but fetching stops when they quit (the first page stays cheap; no bespoke `n`/`p` keys, `less` is what users know). Machine output does NOT auto-paginate: `--jsonl` emits one NDJSON object per row (no bespoke `--format`: `--jsonl | jq` owns custom shaping); `-o`/`--output` only chooses *where* output goes (a file instead of stdout, the reserved meaning above), never *what format*. Scripted pagination uses `-o <file>`: the page's rows go to the file, which **frees stdout to carry the next cursor** (a bare id, empty when none remain), so `next=$(magpie ... --after "$next" -o page)` loops with `--after`. The cursor is on stdout-because-the-data-was-redirected, NOT stderr (stderr is for diagnostics; a value a script depends on must be a real channel, not a scraped log line). `--follow` (live tail, dedupe by id, Ctrl-C stops) layers on top later.
 
