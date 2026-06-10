@@ -18,6 +18,7 @@ _FEEDS = f"/{API_VERSION}/feeds"
 _WATCHES = f"/{API_VERSION}/watches"
 _FEED_SOURCES = f"/{API_VERSION}/feed-sources"
 _ACTIONS = f"/{API_VERSION}/actions"
+_ACTION_ACTIVITY = f"/{API_VERSION}/action-activity"
 _ACTION_DELIVERIES = f"/{API_VERSION}/action-deliveries"
 _ENGINES = f"/{API_VERSION}/engines"
 
@@ -99,6 +100,15 @@ class actions:
     @staticmethod
     def deliveries(action_id: str) -> str:
         return f"{_ACTIONS}/{action_id}/deliveries"
+
+
+class action_activity:
+    """`/v1/action-activity/<id>` — one run ("activity entry") by its own ULID
+    (a dependent record of its action; the LIST is `/v1/actions/<id>/activity`)."""
+
+    @staticmethod
+    def detail(activity_id: str) -> str:
+        return f"{_ACTION_ACTIVITY}/{activity_id}"
 
 
 class deliveries:

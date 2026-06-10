@@ -13,6 +13,7 @@ import functools
 import json
 import sys
 from collections.abc import Callable
+from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
@@ -21,6 +22,8 @@ import typer
 import yaml
 from pydantic import BaseModel
 from pydantic import ValidationError as PydanticValidationError
+
+from openmagpie_schema.watch_enums import choices
 
 from .. import console
 from ..http import ApiError, AuthError
@@ -115,6 +118,48 @@ def _flatten_errors(body: Any, prefix: str = "") -> list[str]:
     else:
         out.append(f"{prefix or '_'}: {body}")
     return out
+
+
+def _print_detail(header: str, fields: list[tuple[str, str]]) -> None:
+    """A key/value detail table (the `get` views' shape): a header line then a
+    2-column FIELD / VALUE table. Shared by the activity / delivery `get`
+    renderers ; a caller adds any extras (e.g. a delivery's request payload)
+    after."""
+    cols: list[console.Column[tuple[str, str]]] = [
+        console.Column("FIELD", lambda kv: kv[0], width=12),
+        console.Column("VALUE", lambda kv: kv[1]),
+    ]
+    console.header(header)
+    console.table(fields, cols)
+
+
+def _print_next_page(next_cursor: str | None) -> None:
+    """Print the next-page cursor hint after a paginated list, when another page
+    exists. Shared by the activity / delivery `list` renderers."""
+    if next_cursor:
+        console.log(f"\nNext page: --after {next_cursor}")
+
+
+def _as_enum[E: StrEnum](value: str, enum: type[E]) -> E | None:
+    """Parse a string into its StrEnum member, or None if it isn't one. The
+    shared 'known value?' primitive: `_check_choice` turns a None into a rejected
+    BadParameter (the value is USER INPUT), while a classifier like the run
+    formatter lookup falls back to a default on None (the value is SERVER-supplied
+    and a newer kind the build simply doesn't render specially)."""
+    try:
+        return enum(value)
+    except ValueError:
+        return None
+
+
+def _check_choice(value: str | None, enum: type[StrEnum]) -> None:
+    """Validate an optional filter value against a StrEnum client-side, raising
+    typer.BadParameter (listing the choices) before the round-trip. The server
+    validates these too ; this just makes the error immediate and uniform across
+    the observability filters (`--state`, `--window`) instead of one being
+    checked locally and another only server-side."""
+    if value is not None and _as_enum(value, enum) is None:
+        raise typer.BadParameter(f"{value!r}; choose from {choices(enum)}")
 
 
 # Shared `--format yaml|json` option helpers for the template /

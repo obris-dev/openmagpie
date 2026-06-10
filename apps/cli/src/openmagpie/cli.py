@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import typer
 
+from .commands.activity import activity_app
 from .commands.auth import auth_app
+from .commands.delivery import delivery_app
 from .commands.feed import feed_app
 from .commands.watch import watch_app
 from .context import AppContext, bind_app_ctx, unbind_app_ctx
@@ -45,4 +47,14 @@ app.add_typer(
     watch_app,
     name="watch",
     help="Build + manage watches (a feed subscription + action chain).",
+)
+app.add_typer(
+    activity_app,
+    name="activity",
+    help="Audit an action's runs: summary / list / one in full.",
+)
+app.add_typer(
+    delivery_app,
+    name="delivery",
+    help="Audit an action's outbound webhook calls.",
 )
