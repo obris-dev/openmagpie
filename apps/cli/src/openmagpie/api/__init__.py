@@ -16,7 +16,9 @@ from __future__ import annotations
 from functools import cached_property
 
 from ..http import MagpieClient
+from .activity import ActivityApi
 from .auth import AuthApi
+from .delivery import DeliveryApi
 from .engine import EngineApi
 from .feed import FeedApi
 from .watch import WatchApi
@@ -39,8 +41,16 @@ class Api:
         return WatchApi(self._http)
 
     @cached_property
+    def activity(self) -> ActivityApi:
+        return ActivityApi(self._http)
+
+    @cached_property
+    def delivery(self) -> DeliveryApi:
+        return DeliveryApi(self._http)
+
+    @cached_property
     def engine(self) -> EngineApi:
         return EngineApi(self._http)
 
 
-__all__ = ["Api", "AuthApi", "EngineApi", "FeedApi", "WatchApi"]
+__all__ = ["ActivityApi", "Api", "AuthApi", "DeliveryApi", "EngineApi", "FeedApi", "WatchApi"]
