@@ -195,6 +195,10 @@ app/
 
 For resources whose schema varies by `kind` (a `WatchAction` with `kind=semantic_filter|webhook|log`), the write accepts an envelope `{kind, config}` with `kind` a sibling of the config blob. Validate `config` via the Pydantic registry that owns the typed-blob schema (`watches.registry.validate_config(kind, data)`); don't duplicate the schema in a DRF serializer. Translate Pydantic `ValidationError` into DRF's nested 400 shape so a deep failure surfaces at the right path; a bad kind keys at `actions.N.kind`. Example: `watches/serializers.py`.
 
+### Normalized list responses (keyed side tables, not per-row embeds)
+
+When list rows reference a related entity, **don't embed that entity on every row.** Put the rows' foreign keys on the rows and return the referenced entities once in a keyed side table on the envelope (`{id -> wire}`); the client joins by id in memory. Mirror this for each distinct related type (one map per type), and keep the side-table value models lean (display fields only). A referenced id with no entry (pruned / cross-account) is simply absent from its map, and the row still renders by its id. This both shrinks the payload when the relation is many-rows-to-few-entities (e.g. many runs backed by few feeds) and keeps rows pure ids so the wire shape stays stable as the row grows. Example: `ActionRunsView` returns `items` (run rows carrying `feed_item_id`) plus `feed_items {feed_item_id -> ...}` and `feeds {feed_id -> ...}`; batch-resolve each map with a service `get_many` (no N+1). Don't reach into opaque JSON blobs (`result`, `FeedItem.data`) to build query filters; project display fields out of them in the serializer instead.
+
 ### URL surface
 
 ```
