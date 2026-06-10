@@ -290,18 +290,20 @@ def export(
     feed_id: str = typer.Option(..., "--feed", help="Feed id whose sources to dump."),
     output: str | None = typer.Option(None, "--output", "-o", help="Write to a file instead of stdout."),
     format: str = typer.Option(
-        "json",
+        "yaml",
         "--format",
         case_sensitive=False,
-        help="Output format: `json` (default; what scrape scripts naturally emit) or `yaml` (human-editable).",
+        help="Output format: `yaml` (default; matches the template / edit round-trip) or `json`.",
     ),
 ) -> None:
     """Dump the feed's sources in `set`-compatible form.
 
-    Includes each source's `last_event_at` so a downstream `feed source set`
-    round-trip preserves watermarks (without it the new rows on a spec-changed
-    re-import would cold-start to wall-clock now and lose the operator's
-    backfill history)."""
+    Defaults to YAML so `export -> edit -> set` mirrors `template -> edit -> set`
+    (YAML is the on-disk format everywhere else); pass `--format json` for a
+    scripted consumer. Includes each source's `last_event_at` so a downstream
+    `feed source set` round-trip preserves watermarks (without it the new rows on
+    a spec-changed re-import would cold-start to wall-clock now and lose the
+    operator's backfill history)."""
     fmt = _check_format(format)
     sources = app_ctx().api.feed.list_sources(feed_id)
     payload = SourceSetPayload(
