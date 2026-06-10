@@ -175,7 +175,7 @@ The CLI never opens a server-supplied URL blindly. `_safe_authorize_url` require
 
 ## File-driven config commands
 
-Commands that create / edit server-side resources from operator-authored config (`magpie feed create`, `magpie watch create`, and their `edit` / `set-sources` siblings) accept YAML on disk or stdin, plus a no-argument variant that opens `$EDITOR` on a template:
+Commands that create / edit server-side resources from operator-authored config (`magpie feed create`, `magpie watch create`, and their `edit` / `feed source set` siblings) accept YAML on disk or stdin, plus a no-argument variant that opens `$EDITOR` on a template:
 
 - `magpie watch create -f watch.yaml`
 - `magpie watch create -f -` (stdin)
