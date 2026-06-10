@@ -1,9 +1,16 @@
+from typing import Literal, get_args, get_origin
 from unittest import mock
 
 import feedparser
 from django.test import SimpleTestCase
+from pydantic import BaseModel
 
 from openmagpie_schema.configs import RssSourceSpec
+from openmagpie_schema.feed import FeedItemData
+from sources import (
+    payload_registry,
+    registry,  # noqa: F401  import-time side effect: registers the connectors' payloads
+)
 from sources.connectors.rss.connector import RssConnector, _unwrap_xml_viewer
 
 # A minimal RSS feed and the Chromium XML-viewer HTML wrapper FlareSolverr
@@ -79,3 +86,44 @@ class ChallengeBypassRecoveryTests(SimpleTestCase):
         ):
             payloads = list(RssConnector().poll(spec, since=None))
         self.assertEqual([p.title for p in payloads], ["One", "Two"])
+
+
+class FeedItemPayloadParityTests(SimpleTestCase):
+    """Guard the hand-mirrored schema payloads against silent drift.
+
+    `openmagpie_schema.feed.FeedItemData` mirrors the server's SourcePayload
+    classes (apps/core/sources/connectors/*) so the CLI can type FeedItem.data.
+    The schema package is zero-Django, so it CAN'T import the producers to check
+    itself; this test can import both sides. It walks the connector payload
+    registry and asserts every PAYLOAD_KIND has a matching schema variant with
+    the same field set. When a connector adds/renames a payload field (or a whole
+    payload), mirror it in the schema and this goes green again."""
+
+    def _schema_variants_by_kind(self) -> dict[str, type[BaseModel]]:
+        # FeedItemData is Annotated[RssEntryPayload | ... | FeedItemPayload, Field].
+        union = get_args(FeedItemData)[0]
+        out: dict[str, type[BaseModel]] = {}
+        for member in get_args(union):
+            ann = member.model_fields["kind"].annotation
+            if get_origin(ann) is Literal:  # variants only; the base's `kind: str` is the fallback arm
+                (literal,) = get_args(ann)
+                out[literal] = member
+        return out
+
+    def test_connector_payloads_and_schema_variants_match(self) -> None:
+        schema = self._schema_variants_by_kind()
+        server_kinds = {kind for (_source, kind) in payload_registry._REGISTRY}
+        self.assertEqual(
+            server_kinds,
+            set(schema),
+            "connector PAYLOAD_KINDs and schema FeedItemData variants drifted; "
+            "add/remove the mirror in openmagpie_schema.feed",
+        )
+        for (_source, kind), server_cls in payload_registry._REGISTRY.items():
+            with self.subTest(kind=kind):
+                self.assertEqual(
+                    set(server_cls.model_fields),
+                    set(schema[kind].model_fields),
+                    f"{server_cls.__name__} fields drifted from schema {schema[kind].__name__}; "
+                    "update the mirror in openmagpie_schema.feed",
+                )

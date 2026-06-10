@@ -16,12 +16,14 @@ import yaml
 from openmagpie_schema.watch import WatchActionInput
 
 from ... import console
-from ...api.watch import WatchActionWire, WatchInput, WatchMutationResponse, WatchView, WatchWire
+from ...api.watch import WatchActionWire, WatchInput, WatchListResponse, WatchMutationResponse, WatchView, WatchWire
 from ...context import AppContext, app_ctx
 from .._shared import (
     _abort_unexpected,
     _check_format,
+    _emit_detail,
     _emit_doc,
+    _emit_list,
     _handle_api_errors,
     _open_editor_or_abort,
     _parse_yaml_or_abort,
@@ -79,10 +81,19 @@ def create(
 
 @watch_app.command("get")
 @_handle_api_errors
-def get(watch_id: str = typer.Argument(..., help="Watch id.")) -> None:
+def get(
+    watch_id: str = typer.Argument(..., help="Watch id."),
+    jsonl: bool = typer.Option(False, "--jsonl", help="Emit the watch as one JSON object instead of a field table."),
+    output: str | None = typer.Option(None, "--output", "-o", help="Write to a file instead of stdout."),
+) -> None:
     """Show one watch's config + action chain."""
     detail = app_ctx().api.watch.get(watch_id)
-    _print_watch(detail, f"Watch {detail.id}  [{console.active_or_paused(detail.is_active)}]")
+    _emit_detail(
+        render=lambda: _print_watch(detail, f"Watch {detail.id}  [{console.active_or_paused(detail.is_active)}]"),
+        json_obj=detail.model_dump_json,
+        jsonl=jsonl,
+        output=output,
+    )
 
 
 @watch_app.command("edit")
@@ -138,36 +149,38 @@ def delete(
 @watch_app.command("list")
 @_handle_api_errors
 def list_(
-    limit: int = typer.Option(_DEFAULT_LIST_LIMIT, "--limit", "-l", help="Max watches per page."),
-    after: str | None = typer.Option(None, "--after", "-a", help="Cursor (watch id) to fetch the page after."),
-    all_: bool = typer.Option(False, "--all", help="Page through every watch in the account."),
+    after: str | None = typer.Option(None, "--after", help="Cursor (watch id) to page after."),
+    limit: int = typer.Option(_DEFAULT_LIST_LIMIT, "--limit", "-l", help="Rows per page."),
+    jsonl: bool = typer.Option(False, "--jsonl", help="Emit one JSON object per watch (NDJSON) instead of a table."),
+    output: str | None = typer.Option(
+        None, "--output", "-o", help="Write to a file instead of stdout; the next cursor prints to stdout."
+    ),
 ) -> None:
     """List watches in the caller's account, newest first.
 
-    Cursor-paginated: a single call shows up to `--limit` watches. Pass
-    the `--after <id>` cursor printed at the bottom for the next page, or
-    `--all` to follow the cursor across pages automatically.
-    """
-    api = app_ctx().api.watch
-    rows: list[WatchWire] = []
-    next_cursor: str | None = None
-    while True:
-        page = api.list(after=after, limit=limit)
-        rows.extend(page.items)
-        next_cursor = page.next_cursor
-        if not all_ or not page.next_cursor:
-            break
-        after = page.next_cursor
+    Cursor-paginated: on a terminal it prompt-pages (Fetch next page? [Y/n]);
+    piped/`-o` it emits one page plus the next cursor for a scripted loop."""
+    _emit_list(
+        fetch=lambda cursor: app_ctx().api.watch.list(after=cursor, limit=limit),
+        after=after,
+        render_table=_print_watches,
+        jsonl_lines=lambda resp: (w.model_dump_json() for w in resp.items),
+        jsonl=jsonl,
+        output=output,
+    )
+
+
+def _print_watches(resp: WatchListResponse) -> None:
+    if not resp.items:
+        console.log("No watches yet. Try `magpie watch template`.")
+        return
     columns: list[console.Column[WatchWire]] = [
         console.Column("ID", lambda w: w.id),
         console.Column("NAME", lambda w: w.name),
         console.Column("STATUS", lambda w: console.active_or_paused(w.is_active)),
         console.Column("FEEDS", lambda w: ", ".join(w.feed_ids) or "(no feeds)"),
     ]
-    if not console.table(rows, columns):
-        console.log("No watches yet. Try `magpie watch template`.")
-    elif next_cursor:
-        console.log(f"  (more available; rerun with --after {next_cursor}, or --all)")
+    console.table(resp.items, columns)
 
 
 # ── Helpers ────────────────────────────────────────────────────────────

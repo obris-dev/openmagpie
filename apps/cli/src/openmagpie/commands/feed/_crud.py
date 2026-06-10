@@ -15,12 +15,14 @@ import typer
 import yaml
 
 from ... import console
-from ...api.feed import FeedEnvelope, FeedMutationResponse, FeedView, FeedWire
+from ...api.feed import FeedEnvelope, FeedListResponse, FeedMutationResponse, FeedView, FeedWire
 from ...context import AppContext, app_ctx
 from .._shared import (
     _abort_unexpected,
     _check_format,
+    _emit_detail,
     _emit_doc,
+    _emit_list,
     _handle_api_errors,
     _open_editor_or_abort,
     _parse_yaml_or_abort,
@@ -78,10 +80,19 @@ def create(
 
 @feed_app.command("get")
 @_handle_api_errors
-def get(feed_id: str = typer.Argument(..., help="Feed id.")) -> None:
+def get(
+    feed_id: str = typer.Argument(..., help="Feed id."),
+    jsonl: bool = typer.Option(False, "--jsonl", help="Emit the feed as one JSON object instead of a field table."),
+    output: str | None = typer.Option(None, "--output", "-o", help="Write to a file instead of stdout."),
+) -> None:
     """Show one feed's config in the caller's account."""
     detail = app_ctx().api.feed.get(feed_id)
-    _print_feed(detail, f"Feed {detail.id}  [{console.active_or_paused(detail.is_active)}]")
+    _emit_detail(
+        render=lambda: _print_feed(detail, f"Feed {detail.id}  [{console.active_or_paused(detail.is_active)}]"),
+        json_obj=detail.model_dump_json,
+        jsonl=jsonl,
+        output=output,
+    )
 
 
 @feed_app.command("edit")
@@ -145,26 +156,31 @@ def delete(
 @feed_app.command("list")
 @_handle_api_errors
 def list_(
-    limit: int = typer.Option(_DEFAULT_LIST_LIMIT, "--limit", "-l", help="Max feeds per page."),
-    after: str | None = typer.Option(None, "--after", "-a", help="Cursor (feed id) to fetch the page after."),
-    all_: bool = typer.Option(False, "--all", help="Page through every feed in the account."),
+    after: str | None = typer.Option(None, "--after", help="Cursor (feed id) to page after."),
+    limit: int = typer.Option(_DEFAULT_LIST_LIMIT, "--limit", "-l", help="Rows per page."),
+    jsonl: bool = typer.Option(False, "--jsonl", help="Emit one JSON object per feed (NDJSON) instead of a table."),
+    output: str | None = typer.Option(
+        None, "--output", "-o", help="Write to a file instead of stdout; the next cursor prints to stdout."
+    ),
 ) -> None:
     """List feeds in the caller's account, newest first.
 
-    Cursor-paginated: a single call shows up to `--limit` feeds. Pass the
-    `--after <id>` cursor printed at the bottom to get the next page, or
-    `--all` to follow the cursor across pages automatically.
-    """
-    api = app_ctx().api.feed
-    rows: list[FeedWire] = []
-    next_cursor: str | None = None
-    while True:
-        page = api.list(after=after, limit=limit)
-        rows.extend(page.items)
-        next_cursor = page.next_cursor
-        if not all_ or not page.next_cursor:
-            break
-        after = page.next_cursor
+    Cursor-paginated: on a terminal it prompt-pages (Fetch next page? [Y/n]);
+    piped/`-o` it emits one page plus the next cursor for a scripted loop."""
+    _emit_list(
+        fetch=lambda cursor: app_ctx().api.feed.list(after=cursor, limit=limit),
+        after=after,
+        render_table=_print_feeds,
+        jsonl_lines=lambda resp: (f.model_dump_json() for f in resp.items),
+        jsonl=jsonl,
+        output=output,
+    )
+
+
+def _print_feeds(resp: FeedListResponse) -> None:
+    if not resp.items:
+        console.log("No feeds yet. Try `magpie feed template`.")
+        return
     columns: list[console.Column[FeedWire]] = [
         console.Column("ID", lambda f: f.id),
         console.Column("NAME", lambda f: f.name),
@@ -172,10 +188,7 @@ def list_(
         console.Column("POLL", lambda f: f"{f.poll_interval_seconds}s"),
         console.Column("STATUS", lambda f: console.active_or_paused(f.is_active)),
     ]
-    if not console.table(rows, columns):
-        console.log("No feeds yet. Try `magpie feed template`.")
-    elif next_cursor:
-        console.log(f"  (more available; rerun with --after {next_cursor}, or --all)")
+    console.table(resp.items, columns)
 
 
 # ── Helpers ────────────────────────────────────────────────────────────

@@ -1,0 +1,45 @@
+# Source list for `magpie feed source set --feed <feed_id> -f file.yaml`.
+#
+# `set` REPLACES the feed's full source list: new rows are added,
+# missing ones are dropped, and rows that survive the diff keep their
+# per-source watermarks. Always run `set` with `--dry-run` first to
+# preview the {added, removed, persisted} counts before applying.
+#
+# `magpie feed source export --feed <feed_id>` emits exactly this shape,
+# so the round-trip is `export -> edit -> set` (or `template -> fill in
+# -> set` if you're starting from scratch).
+
+version: v1
+sources:
+  # RSS source: any feed URL feedparser can parse.
+  - spec:
+      kind: rss
+      url: https://example.com/feed.rss
+      name: Example                       # optional display label
+
+    # `meta` (optional): operator-supplied tags. Each entry is copied
+    # onto every FeedItem this source produces, so a downstream UI
+    # can filter ("show me items tagged `research`"). Free-form
+    # key/value; the server doesn't interpret it.
+    meta:
+      tag: research
+
+    # `field_map` (optional): per-source connector hints. Maps a
+    # canonical SourcePayload field (`content`, `external_id`, ...)
+    # to where the connector should read it from the upstream
+    # payload. Useful when a publisher puts the body in `summary`
+    # instead of `content`, or when an auto-generated `external_id`
+    # rotates and you want to dedupe by `link` instead. Per-key
+    # override of the feed's `default_field_map`; empty = inherit.
+    field_map:
+      content: summary
+
+    # `last_event_at` (optional): pin the starting watermark to a
+    # past datetime to backfill from that point. Omit to default to
+    # wall-clock now (live mode from this moment).
+    # last_event_at: "2026-05-28T00:00:00Z"
+
+  # Reddit subreddit source: the `/new` feed of one subreddit.
+  - spec:
+      kind: reddit_subreddit
+      subreddit: ClaudeAI
