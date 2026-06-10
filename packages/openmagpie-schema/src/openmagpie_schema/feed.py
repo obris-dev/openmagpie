@@ -183,7 +183,12 @@ class NewRedditPostPayload(FeedItemPayload):
 # Tried left-to-right so a dump resolves to its concrete variant (matched on the
 # required `kind` literal) and only falls to the permissive base when no variant
 # claims it. Variants REQUIRE their `kind`, so an empty / kind-less dict can't
-# greedily match the first variant and lands on the base instead.
+# greedily match the first variant and lands on the base instead. CAVEAT: a dump
+# whose `kind` matches a variant but whose other fields fail that variant's
+# validation (e.g. `categories: "oops"` on rss_entry) ALSO degrades to the base,
+# raw fields kept in model_extra, not an error - robust for a read/display wire,
+# but a consumer keying on `isinstance(data, RssEntryPayload)` won't see the
+# malformed row (canonical fields like `title` still read off the base).
 FeedItemData = Annotated[
     RssEntryPayload | NewRedditPostPayload | FeedItemPayload,
     Field(union_mode="left_to_right"),

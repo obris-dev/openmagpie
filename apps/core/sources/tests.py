@@ -9,7 +9,7 @@ from openmagpie_schema.configs import RssSourceSpec
 from openmagpie_schema.feed import FeedItemData
 from sources import (
     payload_registry,
-    registry,  # noqa: F401  import-time side effect: registers the connectors' payloads
+    registry,  # noqa: F401  pulls in the connectors, which self-register their payloads
 )
 from sources.connectors.rss.connector import RssConnector, _unwrap_xml_viewer
 
@@ -97,7 +97,13 @@ class FeedItemPayloadParityTests(SimpleTestCase):
     itself; this test can import both sides. It walks the connector payload
     registry and asserts every PAYLOAD_KIND has a matching schema variant with
     the same field set. When a connector adds/renames a payload field (or a whole
-    payload), mirror it in the schema and this goes green again."""
+    payload), mirror it in the schema and this goes green again.
+
+    Field NAMES only: a type or required-ness change (e.g. `categories: list[str]`
+    -> `dict`, or dropping a default) is NOT caught, because a strict annotation
+    compare would false-positive on the deliberate differences (server's `kind:
+    str` vs the schema variant's `kind: Literal[...]`; server-required fields the
+    read wire defaults). Name parity is the cheap, false-positive-free guard."""
 
     def _schema_variants_by_kind(self) -> dict[str, type[BaseModel]]:
         # FeedItemData is Annotated[RssEntryPayload | ... | FeedItemPayload, Field].
@@ -112,14 +118,15 @@ class FeedItemPayloadParityTests(SimpleTestCase):
 
     def test_connector_payloads_and_schema_variants_match(self) -> None:
         schema = self._schema_variants_by_kind()
-        server_kinds = {kind for (_source, kind) in payload_registry._REGISTRY}
+        registered = payload_registry.registered()
+        server_kinds = {kind for (_source, kind) in registered}
         self.assertEqual(
             server_kinds,
             set(schema),
             "connector PAYLOAD_KINDs and schema FeedItemData variants drifted; "
             "add/remove the mirror in openmagpie_schema.feed",
         )
-        for (_source, kind), server_cls in payload_registry._REGISTRY.items():
+        for (_source, kind), server_cls in registered.items():
             with self.subTest(kind=kind):
                 self.assertEqual(
                     set(server_cls.model_fields),
