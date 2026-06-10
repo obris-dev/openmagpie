@@ -237,3 +237,13 @@ class FeedItemPayloadUnionTests(SimpleTestCase):
         # kind-less dict can't greedily match the first union member; it lands
         # on the base instead of becoming a (wrong) RssEntryPayload.
         self.assertIs(type(self._data({"title": "T"})), FeedItemPayload)
+
+    def test_malformed_known_kind_degrades_to_base(self) -> None:
+        # A dump whose `kind` matches a variant but whose other fields fail that
+        # variant (here categories must be list[str]) degrades to the permissive
+        # base rather than raising - the documented robustness trade-off. The raw
+        # bad value is kept in model_extra; canonical fields still read.
+        data = self._data({"kind": "rss_entry", "categories": "oops", "title": "T"})
+        self.assertIs(type(data), FeedItemPayload)
+        self.assertEqual((data.model_extra or {}).get("categories"), "oops")
+        self.assertEqual(data.title, "T")

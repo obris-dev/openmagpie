@@ -52,6 +52,13 @@ def register(source: str, payload_classes: list[type[SourcePayload]]) -> None:
         _REGISTRY[(source, cls.PAYLOAD_KIND)] = cls
 
 
+def registered() -> dict[tuple[str, str], type[SourcePayload]]:
+    """A copy of the `(source, PAYLOAD_KIND) -> class` map, for callers that
+    enumerate every registered payload (e.g. the schema-parity test) without
+    reaching into the module-private `_REGISTRY`."""
+    return dict(_REGISTRY)
+
+
 def class_for_source(source: str) -> type[SourcePayload] | None:
     """First registered SourcePayload class for the given source-connector
     kind (e.g. `"reddit_subreddit"`). None if nothing is registered for
