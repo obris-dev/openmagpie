@@ -17,7 +17,7 @@ from rest_framework.response import Response
 
 from accounts.api import AccountScopedAPIView
 from common.api_params import parse_limit
-from feeds.services import FeedItemService
+from feeds.services import FeedItemService, FeedService
 from openmagpie_schema.watch import (
     WatchActionDeliveryListResponse,
     WatchActionRunListResponse,
@@ -33,6 +33,8 @@ from openmagpie_schema.watch_enums import (
 from .api import ActionScopedAPIView, WatchActionDeliveryNotFound, WatchSvcMixin
 from .models import WatchActionDelivery
 from .serializers import (
+    run_feed_item_wire,
+    run_feed_wire,
     watch_action_delivery_view,
     watch_action_delivery_wire,
     watch_action_run_wire,
@@ -102,11 +104,15 @@ class ActionRunsView(ActionScopedAPIView):
         after = request.query_params.get("after") or None
         runs = self.run_svc.list_for_action(str(action.id), after=after, limit=limit, state=state)
         next_cursor = str(runs[-1].id) if len(runs) == limit else None
-        # Batch-fetch the judged feed items for this page so each row can show the
-        # item title/url without an N+1; a pruned item is simply absent from the
-        # map and the wire falls back to feed_item_id.
+        items = [watch_action_run_wire(r) for r in runs]
+        # Side tables the rows key into (no embedding): the judged feed items for
+        # this page by id, then the (few) feeds backing them by id. Two batched
+        # fetches, no N+1; a pruned item / feed is simply absent from its map and
+        # the row renders by id.
         feed_items = FeedItemService(account_id=request.account_id).get_many([str(r.feed_item_id) for r in runs])
-        items = [watch_action_run_wire(r, feed_items.get(str(r.feed_item_id))) for r in runs]
+        feed_items_map = {fid: run_feed_item_wire(item) for fid, item in feed_items.items()}
+        feeds = FeedService(account_id=request.account_id).get_many({str(item.feed_id) for item in feed_items.values()})
+        feeds_map = {fid: run_feed_wire(feed) for fid, feed in feeds.items()}
         # Summary on the first page only (skipped while paging) — keeps a
         # deep-paging call a pure row fetch.
         summary = None
@@ -124,7 +130,12 @@ class ActionRunsView(ActionScopedAPIView):
             )
         return Response(
             WatchActionRunListResponse(
-                items=items, next_cursor=next_cursor, action=watch_action_wire(action), summary=summary
+                items=items,
+                next_cursor=next_cursor,
+                action=watch_action_wire(action),
+                feed_items=feed_items_map,
+                feeds=feeds_map,
+                summary=summary,
             ).model_dump(mode="json")
         )
 

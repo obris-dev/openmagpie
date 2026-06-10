@@ -152,28 +152,41 @@ class RunFeedItem(BaseModel):
 
     `title` / `url` come from the connector payload (`FeedItem.data`, a
     SourcePayload dump where both fields live on the base). `source_label` is the
-    operator-visible source string. Null on the run wire when the item has been
-    pruned by retention, so the row still renders by `feed_item_id`."""
+    operator-visible source string. `feed_id` keys into the response's `feeds`
+    map. NOT embedded on each run row: returned once per item in the response's
+    `items` map (items are ~1:1 with runs, but the run row stays pure ids and the
+    shape matches `action` / `feeds`)."""
 
     title: str = ""
     url: str = ""
     source_label: str = ""
+    feed_id: str = ""
+
+
+class RunFeed(BaseModel):
+    """A feed referenced by the audited runs, returned once in the response's
+    `feeds` map (keyed by id). Feeds are far fewer than runs, so this normalizes
+    the many runs -> few feeds relationship instead of repeating the feed per
+    row."""
+
+    id: str
+    name: str = ""
 
 
 class WatchActionRunWire(BaseModel):
     """One WatchActionRun on the wire (`GET /v1/actions/<action_id>/runs`).
 
-    The stateful audit row of one action executing against one item.
+    The stateful audit row of one action executing against one item. Pure ids +
+    run state: the judged item is in the response's `items` map (key
+    `feed_item_id`), the feed in `feeds` (key `items[feed_item_id].feed_id`).
     `result` is the kind-specific output blob (opaque; render common keys
-    best-effort). `state` is the `WatchActionRunState` value. `feed_item` is the
-    judged item narrowed for display (null when pruned). Datetimes real; renderer
-    encodes."""
+    best-effort). `state` is the `WatchActionRunState` value. Datetimes real;
+    renderer encodes."""
 
     id: str
     watch_id: str
     action_id: str
     feed_item_id: str
-    feed_item: RunFeedItem | None = None
     state: WatchActionRunState
     result: ResultBlob = Field(default_factory=dict)
     error: str = ""
@@ -228,6 +241,12 @@ class WatchActionRunListResponse(BaseModel):
     # were judged against (e.g. a semantic_filter's instructions + threshold) as
     # a header. Constant per page; the action row is already loaded server-side.
     action: WatchActionWire | None = None
+    # Side tables the run rows key into instead of embedding (a run carries only
+    # `feed_item_id`): `feed_items` by feed_item_id (the judged item's title/url),
+    # `feeds` by feed_id (its feed). Pruned items are simply absent. Normalizes
+    # many runs -> few feeds; a missing key renders by id.
+    feed_items: dict[str, RunFeedItem] = Field(default_factory=dict)
+    feeds: dict[str, RunFeed] = Field(default_factory=dict)
     # None means "this is a paged response" (no summary computed) — NOT "no
     # activity". The first page always carries a summary, all-zero if idle.
     summary: WatchActionRunSummary | None = None

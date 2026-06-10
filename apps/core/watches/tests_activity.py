@@ -6,7 +6,7 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 
 from auth_api.operations.signup import SignupOperation
-from feeds.models import FeedItem
+from feeds.models import Feed, FeedItem
 from watches.models import WatchAction, WatchActionDelivery, WatchActionRun
 
 
@@ -235,9 +235,10 @@ class ActionDeliveriesRouteTests(TestCase):
 
 
 class ActionRunFeedItemTests(TestCase):
-    """The runs log joins the judged feed item (title / url / source_label),
-    batched; a pruned item leaves `feed_item` null but keeps `feed_item_id` so
-    the row still renders."""
+    """The runs response normalizes the judged items + their feeds into keyed
+    side tables (`feed_items` by item id, `feeds` by feed id) instead of
+    embedding them on each row. A run row is pure ids; a pruned item is simply
+    absent from `feed_items` and the row still renders by `feed_item_id`."""
 
     def setUp(self) -> None:
         self.user = SignupOperation(email="runitem@example.com", password="Str0ng-Passw0rd!").run()
@@ -262,10 +263,11 @@ class ActionRunFeedItemTests(TestCase):
             completed_at=timezone.now(),
         )
 
-    def test_run_carries_item_fields_and_tolerates_pruned(self) -> None:
+    def test_items_and_feeds_maps_let_rows_key_in_and_tolerate_pruned(self) -> None:
+        feed = Feed.objects.create(account_id=self.account_id, user_id=ulid.ulid(), kind="rss", name="Athletics")
         item = FeedItem.objects.create(
             account_id=self.account_id,
-            feed_id=ulid.ulid(),
+            feed_id=feed.id,
             source_kind="rss",
             external_id="ext-1",
             source_label="Example U",
@@ -277,16 +279,26 @@ class ActionRunFeedItemTests(TestCase):
 
         resp = self.client.get(f"/v1/actions/{self.action_id}/runs")
         self.assertEqual(resp.status_code, 200, resp.content)
-        by_item = {r["feed_item_id"]: r for r in resp.json()["items"]}
+        body = resp.json()
 
-        present = by_item[str(item.id)]["feed_item"]
+        # Rows carry ids only (no embedded item); both ids are present as rows.
+        row_item_ids = {r["feed_item_id"] for r in body["items"]}
+        self.assertEqual(row_item_ids, {str(item.id), pruned_id})
+        self.assertNotIn("feed_item", body["items"][0])
+
+        # The present item is in `feed_items`, keyed by its id, and points at its feed.
+        present = body["feed_items"][str(item.id)]
         self.assertEqual(present["title"], "Coach hired")
         self.assertEqual(present["url"], "https://x.test/a")
         self.assertEqual(present["source_label"], "Example U")
+        self.assertEqual(present["feed_id"], str(feed.id))
 
-        pruned = by_item[pruned_id]
-        self.assertIsNone(pruned["feed_item"])
-        self.assertEqual(pruned["feed_item_id"], pruned_id)
+        # The feed is normalized once into `feeds`, keyed by its id.
+        self.assertEqual(body["feeds"][str(feed.id)]["name"], "Athletics")
+
+        # The pruned item is absent from both maps; its row still renders by id.
+        self.assertNotIn(pruned_id, body["feed_items"])
+        self.assertNotIn("None", body["feeds"])
 
 
 class ActionContextHeaderTests(TestCase):

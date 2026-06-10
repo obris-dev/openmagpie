@@ -17,9 +17,10 @@ from pydantic import ValidationError as PydanticValidationError
 from rest_framework import serializers
 
 from common.pydantic_errors import pydantic_errors_to_drf
-from feeds.models import FeedItem
+from feeds.models import Feed, FeedItem
 from feeds.services import FeedService
 from openmagpie_schema.watch import (
+    RunFeed,
     RunFeedItem,
     WatchActionDeliveryView,
     WatchActionDeliveryWire,
@@ -143,29 +144,38 @@ def watch_action_wire(action: WatchAction) -> WatchActionWire:
     )
 
 
-def _run_feed_item(item: FeedItem | None) -> RunFeedItem | None:
-    """Narrow a FeedItem to the audit row's display fields; None when the item is
-    gone (pruned by retention)."""
-    if item is None:
-        return None
+def run_feed_item_wire(item: FeedItem) -> RunFeedItem:
+    """Narrow a FeedItem to the audit log's display fields, for the runs
+    response's `feed_items` map (keyed by item id). `feed_id` keys into that
+    response's `feeds` map. The view only builds this for items that still
+    exist, so a pruned item is simply absent from the map (the run row carries
+    `feed_item_id` and renders by it)."""
     data = item.data or {}
     return RunFeedItem(
         title=str(data.get("title", "")),
         url=str(data.get("url", "")),
         source_label=str(item.source_label),
+        feed_id=str(item.feed_id),
     )
 
 
-def watch_action_run_wire(run: WatchActionRun, feed_item: FeedItem | None = None) -> WatchActionRunWire:
-    """One run's wire shape (the audit-log row). `state` coerces to the
-    WatchActionRunState enum; `result` is the opaque kind-specific blob;
-    `feed_item` is the judged item (pass it in batched to avoid an N+1)."""
+def run_feed_wire(feed: Feed) -> RunFeed:
+    """Narrow a Feed for the runs response's `feeds` map (keyed by feed id).
+    Few feeds back the many runs on a page, so this is returned once per feed
+    instead of repeated on every item."""
+    return RunFeed(id=str(feed.id), name=str(feed.name))
+
+
+def watch_action_run_wire(run: WatchActionRun) -> WatchActionRunWire:
+    """One run's wire shape (the audit-log row): pure ids + run state. The
+    judged item is in the response's `feed_items` map (key `feed_item_id`), its
+    feed in `feeds`. `state` coerces to the WatchActionRunState enum; `result`
+    is the opaque kind-specific blob."""
     return WatchActionRunWire(
         id=str(run.id),
         watch_id=str(run.watch_id),
         action_id=str(run.action_id),
         feed_item_id=str(run.feed_item_id),
-        feed_item=_run_feed_item(feed_item),
         state=WatchActionRunState(run.state),
         result=run.result or {},
         error=run.error,
