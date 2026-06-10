@@ -110,14 +110,20 @@ def _feed_summary(feed: Feed) -> FeedConfigSummary:
 
 def feed_item_wire(item: FeedItem) -> FeedItemWire:
     """One FeedItem's wire row. Used inline by `feed_view`'s recent-item list and
-    by the item audit views (`/v1/feeds/<id>/items`, `/v1/feed-items/<id>`)."""
-    return FeedItemWire(
-        id=str(item.id),
-        source_kind=str(item.source_kind),
-        source_label=str(item.source_label),
-        external_id=str(item.external_id),
-        occurred_at=item.occurred_at,
-        data=item.data or {},
+    by the item audit views (`/v1/feeds/<id>/items`, `/v1/feed-items/<id>`).
+
+    `model_validate` (not the kwarg constructor) so the `data` dump is parsed
+    into the typed `FeedItemData` union at this boundary; a raw dict is not
+    statically one of the payload models."""
+    return FeedItemWire.model_validate(
+        {
+            "id": str(item.id),
+            "source_kind": str(item.source_kind),
+            "source_label": str(item.source_label),
+            "external_id": str(item.external_id),
+            "occurred_at": item.occurred_at,
+            "data": item.data or {},
+        }
     )
 
 

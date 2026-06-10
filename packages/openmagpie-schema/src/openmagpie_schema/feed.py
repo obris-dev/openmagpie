@@ -10,9 +10,9 @@ bounds) lives in core `feeds.policy`.
 """
 
 from datetime import datetime
-from typing import Any, ClassVar, Literal
+from typing import Annotated, Any, ClassVar, Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from .configs import SourceSpec
 from .wire import ConfigBlob
@@ -132,12 +132,71 @@ class SourceWire(BaseModel):
 # ── Wire (read-path response envelope) ────────────────────────────────────
 
 
+# ── Item payload (the typed `FeedItem.data` dump) ─────────────────────────
+#
+# `FeedItem.data` is one connector SourcePayload's `model_dump()`. The server's
+# SourcePayload hierarchy (apps/core/sources) carries connector machinery
+# (sample(), parsing, registry) that doesn't cross the wire ; these mirror only
+# the DATA fields a reader consumes, so the canonical engine inputs (title /
+# content / url ...) are typed and connector-specific fields (subreddit, ...)
+# are typed per kind. `kind` is the PAYLOAD_KIND (e.g. "new_post"), NOT the
+# connector kind on FeedItemWire.source_kind (e.g. "reddit_subreddit").
+
+
+class FeedItemPayload(BaseModel):
+    """Base payload: the canonical engine-input fields every connector maps
+    onto, plus a catch-all for keys this build doesn't model. `extra="allow"`
+    keeps unmodeled connector fields readable, and this is also the FALLBACK
+    union member: a payload whose `kind` matches no known variant (a newer
+    connector, or older data) validates here instead of breaking the read."""
+
+    model_config = {"extra": "allow"}
+
+    kind: str = ""
+    external_id: str = ""
+    source: str = ""
+    occurred_at: Any = None  # datetime | None; renderer ISO-encodes
+    title: str = ""
+    content: str = ""
+    url: str = ""
+    parent_external_id: str = ""
+
+
+class RssEntryPayload(FeedItemPayload):
+    """`rss_entry`: one RSS/Atom entry (RssEntryConnector)."""
+
+    kind: Literal["rss_entry"]  # required, so a non-rss dump can't match here
+    author: str = ""
+    feed_url: str = ""
+    categories: list[str] = []
+
+
+class NewRedditPostPayload(FeedItemPayload):
+    """`new_post`: one post off a subreddit's /new (RedditSubredditConnector)."""
+
+    kind: Literal["new_post"]  # required, so a non-reddit dump can't match here
+    author: str = ""
+    permalink: str = ""
+    subreddit: str = ""
+
+
+# Tried left-to-right so a dump resolves to its concrete variant (matched on the
+# required `kind` literal) and only falls to the permissive base when no variant
+# claims it. Variants REQUIRE their `kind`, so an empty / kind-less dict can't
+# greedily match the first variant and lands on the base instead.
+FeedItemData = Annotated[
+    RssEntryPayload | NewRedditPostPayload | FeedItemPayload,
+    Field(union_mode="left_to_right"),
+]
+
+
 class FeedItemWire(BaseModel):
     """One persisted FeedItem on the wire ; the "sort by new and go" unit.
 
-    `data` is the connector SourcePayload's dump (opaque to the CLI; the
-    server owns the per-source schema). Datetimes stay real; the renderer
-    ISO-encodes them.
+    `data` is the connector SourcePayload's dump, parsed into a typed
+    `FeedItemData` (canonical fields typed for every kind; connector-specific
+    fields typed per known kind; unknown kinds fall to the permissive base).
+    Datetimes stay real; the renderer ISO-encodes them.
 
     `source_kind` is the connector kind (e.g. `"reddit_subreddit"`),
     denormalized from the producing Source. `source_label` is the
@@ -149,7 +208,7 @@ class FeedItemWire(BaseModel):
     source_label: str = ""
     external_id: str
     occurred_at: Any = None  # datetime | None; renderer encodes
-    data: ConfigBlob = {}
+    data: FeedItemData = Field(default_factory=FeedItemPayload)
 
 
 class FeedWire(BaseModel):

@@ -13,6 +13,8 @@ from typing import Any
 from pydantic import BaseModel
 
 from openmagpie_schema.feed import (
+    FeedItemListResponse,
+    FeedItemWire,
     FeedListResponse,
     FeedMutationResponse,
     FeedView,
@@ -29,6 +31,8 @@ from ..http import MagpieClient
 __all__ = [
     "FeedApi",
     "FeedEnvelope",
+    "FeedItemListResponse",
+    "FeedItemWire",
     "FeedListResponse",
     "FeedMutationResponse",
     "FeedView",
@@ -80,14 +84,12 @@ class FeedApi:
         raw = self._http.get(routes.feeds.collection, params=params or None)
         return FeedListResponse.model_validate(raw)
 
-    def get(self, feed_id: str, *, limit: int | None = None) -> FeedView:
-        """GET one feed (account-scoped). The detail response is the
-        'sort by new and go' reader: it carries the feed's recent items.
-        `limit` caps the item list."""
-        params: dict[str, Any] = {}
-        if limit is not None:
-            params["limit"] = limit
-        raw = self._http.get(routes.feeds.detail(feed_id), params=params or None)
+    def get(self, feed_id: str) -> FeedView:
+        """GET one feed's CONFIG detail (account-scoped): the kind-independent
+        envelope + display `summary` + its current source set. The item log is a
+        separate read (`feed item list` / GET /v1/feeds/<id>/items); this view is
+        the feed's configuration, not its items."""
+        raw = self._http.get(routes.feeds.detail(feed_id))
         return FeedView.model_validate(raw)
 
     def update(self, feed_id: str, body: dict[str, Any], *, dry_run: bool = False) -> FeedMutationResponse:
@@ -98,12 +100,37 @@ class FeedApi:
     def delete(self, feed_id: str) -> None:
         self._http.delete(routes.feeds.detail(feed_id))
 
+    # ── Items sub-resource (read-only) ─────────────────────────────────
+
+    def list_items(self, feed_id: str, *, after: str | None = None, limit: int | None = None) -> FeedItemListResponse:
+        """One page of the feed's items (cursor-paginated, newest-first by ULID
+        pk). `after` = id of the last item from the previous page; the returned
+        `next_cursor` is None when there are no more rows."""
+        params: dict[str, Any] = {}
+        if after:
+            params["after"] = after
+        if limit is not None:
+            params["limit"] = limit
+        raw = self._http.get(routes.feeds.items(feed_id), params=params or None)
+        return FeedItemListResponse.model_validate(raw)
+
+    def get_item(self, item_id: str) -> FeedItemWire:
+        """GET one feed item by its own (globally unique) ULID, account-scoped."""
+        raw = self._http.get(routes.feed_items.detail(item_id))
+        return FeedItemWire.model_validate(raw)
+
     # ── Sources sub-resource ───────────────────────────────────────────
 
     def list_sources(self, feed_id: str) -> list[SourceWire]:
         raw = self._http.get(routes.feeds.sources(feed_id))
         items = (raw or {}).get("items") or []
         return [SourceWire.model_validate(it) for it in items]
+
+    def get_source(self, source_id: str) -> SourceWire:
+        """GET one source by its own (globally unique) ULID; the server resolves
+        its feed (sources address by own id, not feed-scoped)."""
+        raw = self._http.get(routes.feed_sources.detail(source_id))
+        return SourceWire.model_validate(raw)
 
     def set_sources(
         self,
@@ -118,7 +145,7 @@ class FeedApi:
         )
         return SourceSetResult.model_validate(raw)
 
-    def remove_source(self, source_id: str) -> None:
+    def delete_source(self, source_id: str) -> None:
         # By the source's own id; the server resolves its feed (sources address
         # by own id now, not feed-scoped).
         self._http.delete(routes.feed_sources.detail(source_id))
