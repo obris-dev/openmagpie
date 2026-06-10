@@ -36,6 +36,35 @@ cli/src/openmagpie/
   commands/          # Typer subcommands. Thin orchestration only.
 ```
 
+## Command shape: positionals, scope flags, observability
+
+The command tree splits by how data is used, not by ORM containment.
+
+- **Config you build nests** (it has real containment): `feed` + `feed source`, `watch` + `watch action`.
+- **Observability you query is flat and top-level**, filter-first, addressed by a scope flag, never walked through its parents: `activity`, `delivery`.
+
+Argument rule, uniform across every noun:
+
+- **A bare positional is the resource's OWN id.** It never changes meaning between verbs under one noun.
+- **A scope flag appears only when the command has no own id to act on** (`list` / `add` / bulk `set`). See the short-flag map below.
+- **Own-id mutations (`get` / `edit` / `remove`) take only the own id and confirm against the parent the server resolves** (e.g. `feed source remove <source_id>` prints "remove X from feed Y?"). The parent is a guard, never an id you have to look up first.
+- A scope flag is also forced when a resource is not addressable by its own id in the data layer. `WatchAction` is id-addressable, so `watch action remove <action_id>` needs no scope; `Source` is currently feed-scoped. Prefer adding id-only resolution over forcing the caller to supply a scope id.
+
+Short flags are decided once here, not per command. A flag gets a short only when it is unambiguous and frequently typed; long-only is fine, and inventing a short for symmetry is not.
+
+| flag | short | note |
+|---|---|---|
+| `--file` | `-f` | reserved for file / config input, everywhere |
+| `--watch` | `-w` | scope |
+| `--action` | `-a` | scope |
+| `--state` | `-s` | filter |
+| `--feed` | none | no good short once `-f` is files; only on `feed source` ops, where the noun already reads |
+| `--after` | none | cursor, rarely hand-typed; `-a` is `--action` |
+
+Observability `list`/`get` commands take a uniform `-o json|jsonl`. On a TTY the human view pages through `$PAGER` (`less`) so scroll / page-back / search replace manual `--after` (no bespoke `n`/`p` keys: `less` is what users already know); `-o jsonl` streams one object per row to stdout, auto-paginating the cursor, so exports never buffer. `--follow` polls the newest rows and emits new ones live (dedupe by id, Ctrl-C stops). No bespoke `--format`: `-o jsonl | jq` owns custom shaping.
+
+Some current commands predate this and do not follow it yet; they are being migrated. New commands MUST follow the rule above.
+
 ## AppContext
 
 Built once by the root Typer callback into a `contextvars.ContextVar`. Subcommands pull it via `app_ctx()` / `app_api()` / `app_config()`. No `ctx: typer.Context` threading in command signatures.
