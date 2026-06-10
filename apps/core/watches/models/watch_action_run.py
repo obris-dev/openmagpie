@@ -81,7 +81,7 @@ class WatchActionRun(BaseModel):
                 fields=["account_id", "action_id", "state", "attempts", "id"],
                 name="watchrun_digest_gather_idx",
             ),
-            # Activity-summary bucketing (`watch action activity`): per-(account,
+            # Activity-summary bucketing (`magpie activity summary`): per-(account,
             # action) GROUP BY state over a completed_at window. account+action
             # equality then a completed_at range = an index range scan instead
             # of scanning the action's whole run history as it grows. Plain

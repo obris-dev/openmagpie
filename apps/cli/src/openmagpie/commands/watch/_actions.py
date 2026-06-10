@@ -168,7 +168,7 @@ def action_delete(
         if not sys.stdin.isatty():
             console.warn(f"Piped input: can't prompt. Re-run with --yes to delete action {label}.")
             raise typer.Exit(code=1)
-        console.error(f"Delete action {label}? The chain renumbers to stay dense.")
+        console.warn(f"Delete action {label}? The chain renumbers to stay dense.")
         if not typer.confirm("Delete?"):
             console.warn("Aborted.")
             raise typer.Exit(code=1)

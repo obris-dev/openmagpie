@@ -164,7 +164,7 @@ def delete(
         if not sys.stdin.isatty():
             console.warn(f"Piped input: can't prompt. Re-run with --yes to delete source {label}.")
             raise typer.Exit(code=1)
-        console.error(f"Delete source {label}? This drops its polling watermark and cannot be undone.")
+        console.warn(f"Delete source {label}? This drops its polling watermark and cannot be undone.")
         if not typer.confirm("Delete?"):
             console.warn("Aborted.")
             raise typer.Exit(code=1)
@@ -265,7 +265,7 @@ def set_(
                 "re-run with --yes to apply, or --dry-run to preview only."
             )
             raise typer.Exit(code=1)
-        console.error(
+        console.warn(
             f"This will REMOVE {preview.removed} source(s) (and their watermarks): "
             f"added={preview.added} | removed={preview.removed} | persisted={preview.persisted} "
             f"| total={preview.source_count}"

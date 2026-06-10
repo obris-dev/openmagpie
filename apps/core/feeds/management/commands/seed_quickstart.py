@@ -60,7 +60,7 @@ class Command(BaseCommand):
         parser.add_argument(
             "--print-activity",
             action="store_true",
-            help="Print the seeded watch's semantic_filter action id (for `watch action activity`) and exit; no seeding.",
+            help="Print the seeded watch's semantic_filter action id (for `activity list --action`) and exit; no seeding.",
         )
 
     def handle(self, *args: Any, **options: Any) -> None:
@@ -69,7 +69,7 @@ class Command(BaseCommand):
 
         starter = options["starter"]
         # Read-only id lookup (no create) so `make local-seed` can echo a
-        # paste-ready `watch action activity <id>` after the tick. Nothing
+        # paste-ready `activity list --action <id>` after the tick. Nothing
         # printed if nothing is seeded yet; the caller falls back to a hint.
         if options["print_activity"]:
             action_id = self._lookup_gate_id(starter)
@@ -229,8 +229,8 @@ class Command(BaseCommand):
 
     @staticmethod
     def _gate_action_id(actions: list[Any]) -> str | None:
-        # The chain's semantic_filter (the gate); its activity is the
-        # matched vs gated breakdown a first user wants. None if absent.
+        # The chain's semantic_filter (the gate); its activity (the matched /
+        # gated runs) is what a first user wants to inspect. None if absent.
         return next((str(a.id) for a in actions if str(a.kind) == WatchActionKind.SEMANTIC_FILTER), None)
 
     @staticmethod
@@ -272,9 +272,10 @@ class Command(BaseCommand):
         self.stdout.write("Matches print to the terminal when the pipeline runs (the starter's log lines).")
         if gate_action_id is not None:
             self.stdout.write(
-                f"Inspect matched vs gated: `magpie watch action activity {gate_action_id}` (after `magpie auth login`)."
+                f"See the filter: `magpie watch action get {gate_action_id}` ; what it matched: "
+                f"`magpie activity list --action {gate_action_id}` (after `magpie auth login`)."
             )
         else:
             self.stdout.write(
-                "Inspect runs with: `magpie watch action activity <action_id>` (after `magpie auth login`)."
+                "Inspect runs with: `magpie activity list --action <action_id>` (after `magpie auth login`)."
             )
