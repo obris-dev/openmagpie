@@ -2,8 +2,9 @@
 
 The machine-output contract every `get`/`list` view shares (full rationale in
 apps/cli/AGENTS.md): a human table by default, `--jsonl` for NDJSON, `-o <file>`
-to redirect. `_emit_list` paginates, `_emit_collection` is its single-page
-sibling, `_emit_detail` is the single-object form.
+to redirect. `_emit_list` paginates; `_emit_detail` is the single-object form.
+The column-aware list emit (`_emit_columns_paginated` / `_emit_columns_items`)
+lives in the `columns` package and wraps `_emit_list`.
 """
 
 from __future__ import annotations
@@ -13,7 +14,6 @@ from collections.abc import Callable, Iterable
 from typing import Protocol
 
 import typer
-from pydantic import BaseModel
 
 from ... import console
 from .files import _maybe_to_file
@@ -104,23 +104,6 @@ def _emit_list[P: _Page](
             raise typer.Exit(code=130) from None
         if not advance:
             break
-
-
-def _emit_collection[T: BaseModel](
-    *,
-    items: list[T],
-    render_table: Callable[[list[T]], None],
-    jsonl: bool,
-    output: str | None,
-) -> None:
-    """Emit a NON-paginated collection (whole set in one call, no cursor): table |
-    NDJSON (`--jsonl`) | `-o <file>`. The single-page sibling of `_emit_list` for
-    the unpaginated `list` reads (feed sources, watch actions)."""
-    with _maybe_to_file(output):
-        if jsonl:
-            console.jsonl(item.model_dump_json() for item in items)
-        else:
-            render_table(items)
 
 
 def _emit_detail(

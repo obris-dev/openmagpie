@@ -27,38 +27,48 @@ from ... import console
 from ...context import app_ctx
 from .._shared import (
     _check_format,
-    _emit_collection,
+    _columns_option,
+    _emit_columns_items,
     _emit_detail,
     _emit_doc,
     _handle_api_errors,
+    _jsonl_rows_option,
+    _list_output_option,
     _open_editor_or_abort,
+    _print_columns_option,
     _print_detail,
     _read_file_or_abort,
+    _transpose_option,
+    col,
 )
 from ._apps import WATCH_ACTION_TEMPLATE_YAML, action_app
+
+# Default `watch action list` columns, as `HEADER:dot-path` into an action record.
+_ACTION_COLUMNS = [col("ID:id"), col("RANK:rank"), col("KIND:kind"), col("SUMMARY:summary.detail")]
 
 
 @action_app.command("list")
 @_handle_api_errors
 def action_list(
     watch_id: str = typer.Option(..., "--watch", "-w", help="Watch id whose action chain to list."),
-    jsonl: bool = typer.Option(False, "--jsonl", help="Emit one JSON object per action (NDJSON) instead of a table."),
-    output: str | None = typer.Option(None, "--output", "-o", help="Write to a file instead of stdout."),
+    columns: str | None = _columns_option(),
+    transpose: bool = _transpose_option("action"),
+    print_columns: bool = _print_columns_option("action"),
+    jsonl: bool = _jsonl_rows_option("action"),
+    output: str | None = _list_output_option(paginated=False),
 ) -> None:
     """List a watch's action chain, in rank order."""
-    actions = app_ctx().api.watch.list_actions(watch_id)
-    _emit_collection(items=actions, render_table=_print_actions, jsonl=jsonl, output=output)
-
-
-def _print_actions(actions: list[WatchActionWire]) -> None:
-    columns: list[console.Column[WatchActionWire]] = [
-        console.Column("ID", lambda a: a.id),
-        console.Column("RANK", lambda a: str(a.rank)),
-        console.Column("KIND", lambda a: a.kind),
-        console.Column("SUMMARY", lambda a: a.summary.detail or "(no summary)"),
-    ]
-    if not console.table(actions, columns):
-        console.log("No actions yet. Add one with `magpie watch action add`.")
+    _emit_columns_items(
+        items=app_ctx().api.watch.list_actions(watch_id),
+        record_of=lambda a: a.model_dump(mode="json"),
+        default_columns=_ACTION_COLUMNS,
+        columns=columns,
+        transpose=transpose,
+        print_columns=print_columns,
+        jsonl=jsonl,
+        output=output,
+        empty_msg="No actions yet. Add one with `magpie watch action add`.",
+    )
 
 
 @action_app.command("get")
@@ -79,7 +89,7 @@ def _print_action_detail(a: WatchActionWire) -> None:
     fields: list[tuple[str, str]] = [
         ("kind", a.kind),
         ("rank", str(a.rank)),
-        ("summary", a.summary.detail or "(no summary)"),
+        ("summary", a.summary.detail or console.EMPTY),
     ]
     _print_detail(f"action {a.id}", fields)
     console.log("\nconfig:")  # the server-redacted config blob, in full

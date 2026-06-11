@@ -12,18 +12,42 @@ import json
 
 import typer
 
-from openmagpie_schema.watch import (
-    WatchActionDeliveryListResponse,
-    WatchActionDeliveryView,
-    WatchActionDeliveryWire,
-)
+from openmagpie_schema.watch import WatchActionDeliveryView
 from openmagpie_schema.watch_enums import WatchActionDeliveryState, choices
 
 from .. import console
 from ..context import app_ctx
-from ._shared import _check_choice, _emit_detail, _emit_list, _handle_api_errors, _print_detail
+from ._shared import (
+    _check_choice,
+    _columns_option,
+    _emit_columns_paginated,
+    _emit_detail,
+    _handle_api_errors,
+    _jsonl_rows_option,
+    _list_output_option,
+    _print_columns_option,
+    _print_detail,
+    _transpose_option,
+    _ts,
+    col,
+)
 
 delivery_app = typer.Typer(no_args_is_help=True)
+
+# Default `delivery list` columns, as dot-paths into a delivery record. COMPLETED
+# opts into seconds formatting with fmt=_ts.
+_DELIVERY_COLUMNS = [
+    col("DELIVERY ID:id"),
+    col("STATE:state"),
+    col("CADENCE:delivery"),
+    col("METHOD:method"),
+    col("HTTP:http_status"),
+    col("HOST:target_host"),
+    col("ITEMS:item_count"),
+    col("ATTEMPT:attempt"),
+    col("COMPLETED:completed_at", fmt=_ts),
+    col("ERROR:error"),
+]
 
 
 @delivery_app.command("list")
@@ -35,20 +59,26 @@ def list_(
     ),
     after: str | None = typer.Option(None, "--after", help="Cursor (delivery id) to page after."),
     limit: int | None = typer.Option(None, "--limit", "-l", help="Rows per page."),
-    jsonl: bool = typer.Option(False, "--jsonl", help="Emit one JSON object per delivery (NDJSON) instead of a table."),
-    output: str | None = typer.Option(
-        None, "--output", "-o", help="Write to a file instead of stdout; the next cursor prints to stdout."
-    ),
+    columns: str | None = _columns_option(),
+    transpose: bool = _transpose_option("delivery"),
+    print_columns: bool = _print_columns_option("delivery"),
+    jsonl: bool = _jsonl_rows_option("delivery"),
+    output: str | None = _list_output_option(paginated=True),
 ) -> None:
     """One action's outbound webhook calls (one row per attempt), newest first."""
     _check_choice(state, WatchActionDeliveryState)
-    _emit_list(
-        fetch=lambda cursor: app_ctx().api.delivery.list(action_id, state=state, after=cursor, limit=limit),
+    _emit_columns_paginated(
+        fetch=lambda cursor, lim: app_ctx().api.delivery.list(action_id, state=state, after=cursor, limit=lim),
         after=after,
-        render_table=_print_deliveries,
-        jsonl_lines=lambda resp: (d.model_dump_json() for d in resp.items),
+        limit=limit,
+        record_of=lambda d, _: d.model_dump(mode="json"),
+        default_columns=_DELIVERY_COLUMNS,
+        columns=columns,
+        transpose=transpose,
+        print_columns=print_columns,
         jsonl=jsonl,
         output=output,
+        empty_msg="No deliveries match.",
     )
 
 
@@ -64,36 +94,17 @@ def get(
     _emit_detail(render=lambda: _print_delivery_detail(view), json_obj=view.model_dump_json, jsonl=jsonl, output=output)
 
 
-def _print_deliveries(resp: WatchActionDeliveryListResponse) -> None:
-    if not resp.items:
-        console.log("No deliveries match.")
-        return
-    columns: list[console.Column[WatchActionDeliveryWire]] = [
-        console.Column("DELIVERY ID", lambda d: d.id),
-        console.Column("STATE", lambda d: str(d.state)),
-        console.Column("CADENCE", lambda d: str(d.delivery)),
-        console.Column("METHOD", lambda d: str(d.method)),
-        console.Column("HTTP", lambda d: str(d.http_status) if d.http_status is not None else "-"),
-        console.Column("HOST", lambda d: d.target_host or "-"),
-        console.Column("ITEMS", lambda d: str(d.item_count)),
-        console.Column("ATTEMPT", lambda d: str(d.attempt)),
-        console.Column("COMPLETED", lambda d: console.timestamp(d.completed_at)),
-        console.Column("ERROR", lambda d: d.error or "-"),
-    ]
-    console.table(resp.items, columns)
-
-
 def _print_delivery_detail(d: WatchActionDeliveryView) -> None:
     fields: list[tuple[str, str]] = [
         ("state", str(d.state)),
         ("cadence", str(d.delivery)),
-        ("http", str(d.http_status) if d.http_status is not None else "-"),
+        ("http", str(d.http_status) if d.http_status is not None else console.EMPTY),
         ("method", str(d.method)),
-        ("host", d.target_host or "-"),
+        ("host", d.target_host or console.EMPTY),
         ("items", str(d.item_count)),
         ("attempt", str(d.attempt)),
         ("completed", console.timestamp(d.completed_at)),
-        ("error", d.error or "-"),
+        ("error", d.error or console.EMPTY),
     ]
     _print_detail(f"delivery {d.id}", fields)
     console.log("\nrequest payload:")

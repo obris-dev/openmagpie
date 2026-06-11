@@ -16,23 +16,26 @@ import yaml
 from openmagpie_schema.watch import WatchActionInput
 
 from ... import console
-from ...api.watch import WatchActionWire, WatchInput, WatchListResponse, WatchMutationResponse, WatchView, WatchWire
+from ...api.watch import WatchActionWire, WatchInput, WatchMutationResponse, WatchView
 from ...context import AppContext, app_ctx
 from .._shared import (
     _abort_unexpected,
     _check_format,
+    _columns_option,
+    _emit_columns_paginated,
     _emit_detail,
     _emit_doc,
-    _emit_list,
     _handle_api_errors,
+    _jsonl_rows_option,
+    _list_output_option,
     _open_editor_or_abort,
     _parse_yaml_or_abort,
+    _print_columns_option,
     _read_file_or_abort,
+    _transpose_option,
+    col,
 )
 from ._apps import WATCH_TEMPLATE_YAML, watch_app
-
-_DEFAULT_LIST_LIMIT = 50
-
 
 # ── Template ───────────────────────────────────────────────────────────
 
@@ -146,41 +149,46 @@ def delete(
 # ── List ───────────────────────────────────────────────────────────────
 
 
+# Default `watch list` columns, as dot-paths into a watch record. ACTIVE maps the
+# bool to the same active/paused label `watch get` shows; FEEDS is a list of feed
+# ids the renderer joins with `, ` (scalars), not a JSON array. Empty cells render
+# `-` on both surfaces (the uniform table convention; `get` aligns to it too).
+_WATCH_COLUMNS = [
+    col("ID:id"),
+    col("NAME:name"),
+    col("ACTIVE:is_active", fmt=console.active_or_paused),
+    col("FEEDS:feed_ids"),
+]
+
+
 @watch_app.command("list")
 @_handle_api_errors
 def list_(
     after: str | None = typer.Option(None, "--after", help="Cursor (watch id) to page after."),
-    limit: int = typer.Option(_DEFAULT_LIST_LIMIT, "--limit", "-l", help="Rows per page."),
-    jsonl: bool = typer.Option(False, "--jsonl", help="Emit one JSON object per watch (NDJSON) instead of a table."),
-    output: str | None = typer.Option(
-        None, "--output", "-o", help="Write to a file instead of stdout; the next cursor prints to stdout."
-    ),
+    limit: int | None = typer.Option(None, "--limit", "-l", help="Rows per page."),
+    columns: str | None = _columns_option(),
+    transpose: bool = _transpose_option("watch"),
+    print_columns: bool = _print_columns_option("watch"),
+    jsonl: bool = _jsonl_rows_option("watch"),
+    output: str | None = _list_output_option(paginated=True),
 ) -> None:
     """List watches in the caller's account, newest first.
 
     Cursor-paginated: on a terminal it prompt-pages (Fetch next page? [Y/n]);
     piped/`-o` it emits one page plus the next cursor for a scripted loop."""
-    _emit_list(
-        fetch=lambda cursor: app_ctx().api.watch.list(after=cursor, limit=limit),
+    _emit_columns_paginated(
+        fetch=lambda cursor, lim: app_ctx().api.watch.list(after=cursor, limit=lim),
         after=after,
-        render_table=_print_watches,
-        jsonl_lines=lambda resp: (w.model_dump_json() for w in resp.items),
+        limit=limit,
+        record_of=lambda w, _: w.model_dump(mode="json"),
+        default_columns=_WATCH_COLUMNS,
+        columns=columns,
+        transpose=transpose,
+        print_columns=print_columns,
         jsonl=jsonl,
         output=output,
+        empty_msg="No watches yet. Try `magpie watch template`.",
     )
-
-
-def _print_watches(resp: WatchListResponse) -> None:
-    if not resp.items:
-        console.log("No watches yet. Try `magpie watch template`.")
-        return
-    columns: list[console.Column[WatchWire]] = [
-        console.Column("ID", lambda w: w.id),
-        console.Column("NAME", lambda w: w.name),
-        console.Column("STATUS", lambda w: console.active_or_paused(w.is_active)),
-        console.Column("FEEDS", lambda w: ", ".join(w.feed_ids) or "(no feeds)"),
-    ]
-    console.table(resp.items, columns)
 
 
 # ── Helpers ────────────────────────────────────────────────────────────
@@ -255,8 +263,8 @@ def _print_watch(obj: WatchMutationResponse | WatchView, title: str) -> None:
     console.header(title)
     config_rows: list[tuple[str, str]] = [
         ("name", obj.name),
-        ("feeds", ", ".join(obj.feed_ids) or "(none)"),
-        ("chain", f"{len(obj.actions)} action(s)" if obj.actions else "(no actions)"),
+        ("feeds", ", ".join(obj.feed_ids) or console.EMPTY),
+        ("chain", f"{len(obj.actions)} action(s)"),
     ]
     config_columns: list[console.Column[tuple[str, str]]] = [
         console.Column("FIELD", lambda kv: kv[0], width=16),
@@ -269,6 +277,6 @@ def _print_watch(obj: WatchMutationResponse | WatchView, title: str) -> None:
     chain_columns: list[console.Column[WatchActionWire]] = [
         console.Column("RANK", lambda a: str(a.rank)),
         console.Column("KIND", lambda a: a.kind),
-        console.Column("SUMMARY", lambda a: a.summary.detail or "(no summary)"),
+        console.Column("SUMMARY", lambda a: a.summary.detail or console.EMPTY),
     ]
     console.table(obj.actions, chain_columns)

@@ -12,7 +12,7 @@ bounds) lives in core `feeds.policy`.
 from datetime import datetime
 from typing import Annotated, Any, ClassVar, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, computed_field
 
 from .configs import SourceSpec
 from .wire import ConfigBlob
@@ -119,14 +119,28 @@ class SourceInput(BaseModel):
 
 
 class SourceWire(BaseModel):
-    """One Source row on the read path."""
+    """One Source row on the read path.
+
+    Relies on pydantic's DEFAULT `extra="ignore"` (no explicit model_config): the
+    output-only `display` computed field is absent from the input schema, so
+    re-validating a `model_dump()` (which includes `display`) silently drops it and
+    recomputes, rather than erroring as it would under `extra="forbid"`."""
 
     id: str
     spec: SourceSpec
     meta: dict[str, str] = {}
     field_map: dict[str, str] = {}
-    last_event_at: Any = None
-    created_at: Any = None
+    last_event_at: Any = None  # datetime | None; renderer encodes
+    created_at: Any = None  # datetime | None; renderer encodes
+
+    @computed_field
+    @property
+    def display(self) -> str:
+        """The source's human label, kind-polymorphic (e.g. `r/foo`, or an RSS
+        feed's name/url). Provided on the wire so a consumer reads one labeled
+        field instead of re-deriving it per kind from `spec`; it is the same
+        `SourceSpec.display()` the server records onto FeedItem.source_label."""
+        return self.spec.display()
 
 
 # ── Wire (read-path response envelope) ────────────────────────────────────
