@@ -20,10 +20,21 @@ from .authoring import (
     _parse_yaml_or_abort,
 )
 from .choices import _as_enum, _check_choice
+from .columns import (
+    _Col,
+    _columns_option,
+    _emit_columns_items,
+    _emit_columns_paginated,
+    _jsonl_rows_option,
+    _list_output_option,
+    _print_columns_option,
+    _transpose_option,
+    _ts,
+    col,
+)
 from .errors import _flatten_errors, _handle_api_errors, _print_api_error
 from .files import _maybe_to_file, _open_editor_or_abort, _read_file_or_abort
 from .output import (
-    _emit_collection,
     _emit_detail,
     _emit_list,
     _Page,
@@ -33,22 +44,31 @@ from .output import (
 
 __all__ = [
     "FORMAT_CHOICES",
+    "_Col",
     "_Page",
     "_abort_unexpected",
     "_as_enum",
     "_check_choice",
     "_check_format",
-    "_emit_collection",
+    "_columns_option",
+    "_emit_columns_items",
+    "_emit_columns_paginated",
     "_emit_detail",
     "_emit_doc",
     "_emit_list",
     "_flatten_errors",
     "_handle_api_errors",
+    "_jsonl_rows_option",
+    "_list_output_option",
     "_maybe_to_file",
     "_open_editor_or_abort",
     "_parse_yaml_or_abort",
     "_print_api_error",
+    "_print_columns_option",
     "_print_detail",
     "_print_next_page",
     "_read_file_or_abort",
+    "_transpose_option",
+    "_ts",
+    "col",
 ]

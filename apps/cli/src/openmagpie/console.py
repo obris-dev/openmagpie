@@ -15,8 +15,8 @@ Plus small value formatters:
   the `is_active` flag carried on feeds + watches.
   rate(numerator, denominator) -> "X%" or "—"   — percentage label,
   rendered "—" when the denominator is zero.
-  timestamp(dt) -> "YYYY-MM-DD HH:MM:SS" or "-"   — one datetime to seconds
-  precision (or "-" when None), for a list view's time column.
+  timestamp(dt) -> "YYYY-MM-DD HH:MM:SS ZONE" or "-"   — one datetime to seconds
+  precision in the caller's LOCAL zone (or "-" when None), for a time column.
 """
 
 from collections.abc import Callable, Iterable
@@ -38,8 +38,10 @@ def success(msg: str) -> None:
     typer.secho(f"✓ {msg}", fg=typer.colors.GREEN)
 
 
-def header(msg: str) -> None:
-    typer.secho(msg, fg=typer.colors.CYAN)
+def header(msg: str, *, err: bool = False) -> None:
+    # err=True routes the label off stdout (e.g. above a `-o` path list) so it
+    # can't pollute machine-captured output.
+    typer.secho(msg, fg=typer.colors.CYAN, err=err)
 
 
 def log(msg: str) -> None:
@@ -50,12 +52,19 @@ def log(msg: str) -> None:
 # blow out the line. Overridable per column via `Column.width`.
 _DEFAULT_COL_WIDTH = 48
 
+# The placeholder for an absent / empty value in any human-facing table cell or
+# detail field (a missing dot-path, None, "", an empty list / dict). The ONE marker
+# the CLI uses everywhere, so list and detail views read the same (see
+# apps/cli/AGENTS.md). `--jsonl` emits the real null, not this.
+EMPTY = "-"
+
 
 @dataclass(frozen=True)
 class Column[T]:
     """One list-view column: a header label + how to render its cell from a
-    typed row object. `width` caps the cell width (longer values are
-    truncated with an ellipsis) ; None uses `_DEFAULT_COL_WIDTH`."""
+    typed row object. `width` caps the cell width (longer values are truncated
+    with an ellipsis): None uses `_DEFAULT_COL_WIDTH`; 0 means UNCAPPED (the full
+    value, never truncated)."""
 
     label: str
     render: Callable[[T], str]
@@ -63,10 +72,16 @@ class Column[T]:
 
 
 def _truncate(value: str, cap: int) -> str:
-    return value if len(value) <= cap else value[: cap - 1] + "…"
+    if cap == 0:  # explicit uncap: the full value
+        return value
+    if len(value) <= cap:
+        return value
+    if cap <= 1:  # too narrow for "value…"; the ellipsis alone would erase the value
+        return value[:cap]
+    return value[: cap - 1] + "…"
 
 
-def table[T](rows: Iterable[T], columns: list[Column[T]]) -> bool:
+def table[T](rows: Iterable[T], columns: list[Column[T]], *, note_if_truncated: str | None = None) -> bool:
     """The shared list-view renderer: a labeled header + divider, then one
     aligned row per item rendered from the typed object via each column's
     `render`. Each cell is truncated to the column's width cap (per-column
@@ -74,12 +89,17 @@ def table[T](rows: Iterable[T], columns: list[Column[T]]) -> bool:
     line, then columns are padded to the widest remaining cell so headers
     line up over their values. Returns whether any rows were printed, so
     callers can fall back to an empty-state message (nothing is printed for
-    an empty set). The default styling for every `list`-style CLI view."""
+    an empty set). When `note_if_truncated` is set and any cell was actually
+    truncated, that hint prints (yellow, stderr) BELOW the table - the seam for
+    'Use --transpose for the full view'. The default styling for every
+    `list`-style CLI view."""
     materialized = list(rows)
     if not materialized:
         return False
-    caps = [c.width or _DEFAULT_COL_WIDTH for c in columns]
-    cells = [[_truncate(c.render(row), caps[i]) for i, c in enumerate(columns)] for row in materialized]
+    caps = [_DEFAULT_COL_WIDTH if c.width is None else c.width for c in columns]
+    raw = [[c.render(row) for c in columns] for row in materialized]
+    cells = [[_truncate(raw[r][i], caps[i]) for i in range(len(columns))] for r in range(len(raw))]
+    truncated = any(cells[r][i] != raw[r][i] for r in range(len(raw)) for i in range(len(columns)))
     widths = [max(len(columns[i].label), *(len(r[i]) for r in cells)) for i in range(len(columns))]
 
     def line(values: list[str]) -> str:
@@ -91,6 +111,11 @@ def table[T](rows: Iterable[T], columns: list[Column[T]]) -> bool:
     typer.secho("  " + "-+-".join("-" * w for w in widths), fg=typer.colors.CYAN)
     for row in cells:
         typer.echo(line(row))
+    # The hint goes BELOW the table (the convention for next-step notices) so a
+    # long list doesn't scroll it off the top; it lands just above the page
+    # prompt / cursor, staying on screen.
+    if note_if_truncated and truncated:
+        typer.secho(note_if_truncated, fg=typer.colors.YELLOW, err=True)
     return True
 
 
@@ -114,6 +139,13 @@ def rate(numerator: int, denominator: int) -> str:
 
 
 def timestamp(dt: datetime | None) -> str:
-    """One datetime to seconds precision (drops microseconds / tz) ; "-" when
-    None. For a list view's time column."""
-    return dt.strftime("%Y-%m-%d %H:%M:%S") if dt else "-"
+    """One datetime to seconds precision in the caller's LOCAL time zone, or "-"
+    when None. The server sends UTC (an aware datetime); `astimezone()` converts it
+    to wherever the CLI runs, and `%Z` labels the zone so the reader never has to
+    guess UTC vs local. A naive datetime is assumed to be local already; `%Z` is
+    dropped (rstrip) on platforms that report it empty. Backs both the list time
+    columns (via the columns `_ts` fmt) and the `get`/`summary` detail fields, so
+    every human-facing timestamp is local; `--jsonl` keeps the canonical UTC ISO."""
+    if not dt:
+        return EMPTY
+    return dt.astimezone().strftime("%Y-%m-%d %H:%M:%S %Z").rstrip()

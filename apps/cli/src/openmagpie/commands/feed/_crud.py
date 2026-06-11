@@ -15,23 +15,26 @@ import typer
 import yaml
 
 from ... import console
-from ...api.feed import FeedEnvelope, FeedListResponse, FeedMutationResponse, FeedView, FeedWire
+from ...api.feed import FeedEnvelope, FeedMutationResponse, FeedView
 from ...context import AppContext, app_ctx
 from .._shared import (
     _abort_unexpected,
     _check_format,
+    _columns_option,
+    _emit_columns_paginated,
     _emit_detail,
     _emit_doc,
-    _emit_list,
     _handle_api_errors,
+    _jsonl_rows_option,
+    _list_output_option,
     _open_editor_or_abort,
     _parse_yaml_or_abort,
+    _print_columns_option,
     _read_file_or_abort,
+    _transpose_option,
+    col,
 )
 from ._apps import FEED_TEMPLATE_YAML, feed_app
-
-_DEFAULT_LIST_LIMIT = 50
-
 
 # ── Template ───────────────────────────────────────────────────────────
 
@@ -153,42 +156,46 @@ def delete(
 # ── List ───────────────────────────────────────────────────────────────
 
 
+# Default `feed list` columns, as dot-paths into a feed record. POLL appends the
+# unit the value can't (`300s`); ACTIVE maps the bool to the same active/paused
+# label `feed get` shows, so list + detail agree. `fmt` is the per-cell hook.
+_FEED_COLUMNS = [
+    col("ID:id"),
+    col("NAME:name"),
+    col("KIND:kind"),
+    col("POLL:poll_interval_seconds", fmt=lambda v: f"{v}s"),
+    col("ACTIVE:is_active", fmt=console.active_or_paused),
+]
+
+
 @feed_app.command("list")
 @_handle_api_errors
 def list_(
     after: str | None = typer.Option(None, "--after", help="Cursor (feed id) to page after."),
-    limit: int = typer.Option(_DEFAULT_LIST_LIMIT, "--limit", "-l", help="Rows per page."),
-    jsonl: bool = typer.Option(False, "--jsonl", help="Emit one JSON object per feed (NDJSON) instead of a table."),
-    output: str | None = typer.Option(
-        None, "--output", "-o", help="Write to a file instead of stdout; the next cursor prints to stdout."
-    ),
+    limit: int | None = typer.Option(None, "--limit", "-l", help="Rows per page."),
+    columns: str | None = _columns_option(),
+    transpose: bool = _transpose_option("feed"),
+    print_columns: bool = _print_columns_option("feed"),
+    jsonl: bool = _jsonl_rows_option("feed"),
+    output: str | None = _list_output_option(paginated=True),
 ) -> None:
     """List feeds in the caller's account, newest first.
 
     Cursor-paginated: on a terminal it prompt-pages (Fetch next page? [Y/n]);
     piped/`-o` it emits one page plus the next cursor for a scripted loop."""
-    _emit_list(
-        fetch=lambda cursor: app_ctx().api.feed.list(after=cursor, limit=limit),
+    _emit_columns_paginated(
+        fetch=lambda cursor, lim: app_ctx().api.feed.list(after=cursor, limit=lim),
         after=after,
-        render_table=_print_feeds,
-        jsonl_lines=lambda resp: (f.model_dump_json() for f in resp.items),
+        limit=limit,
+        record_of=lambda f, _: f.model_dump(mode="json"),
+        default_columns=_FEED_COLUMNS,
+        columns=columns,
+        transpose=transpose,
+        print_columns=print_columns,
         jsonl=jsonl,
         output=output,
+        empty_msg="No feeds yet. Try `magpie feed template`.",
     )
-
-
-def _print_feeds(resp: FeedListResponse) -> None:
-    if not resp.items:
-        console.log("No feeds yet. Try `magpie feed template`.")
-        return
-    columns: list[console.Column[FeedWire]] = [
-        console.Column("ID", lambda f: f.id),
-        console.Column("NAME", lambda f: f.name),
-        console.Column("KIND", lambda f: f.kind),
-        console.Column("POLL", lambda f: f"{f.poll_interval_seconds}s"),
-        console.Column("STATUS", lambda f: console.active_or_paused(f.is_active)),
-    ]
-    console.table(resp.items, columns)
 
 
 # ── Helpers ────────────────────────────────────────────────────────────
@@ -268,9 +275,7 @@ def _sources_value(obj: FeedMutationResponse | FeedView) -> str:
     truncates the long list to the column cap (a 1093-source feed shows the
     count + a peek, not the whole roster) ; the full list is `feed source list`.
     `(count)` alone when rows aren't echoed (e.g. the create dry-run, which
-    reports the would-be count without materializing Source rows)."""
-    if obj.source_count == 0:
-        return "(0) (none)"
+    reports the would-be count without materializing Source rows) or a 0 feed `(0)`."""
     # SourceWire.spec is the typed SourceSpec union; use `.display()`
     # (every variant implements it) ; `.get(...)` would AttributeError.
     display = ", ".join(s.spec.display() for s in obj.sources)

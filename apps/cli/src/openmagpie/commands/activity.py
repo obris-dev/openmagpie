@@ -3,14 +3,14 @@
 Flat, top-level observability noun (not nested under `watch action`). `summary`
 is a per-state breakdown over a window; `list` is the individual run log; `get`
 is one run in full. All three scope to an action via `--action`; `get` takes the
-run's own id. Works for every action kind — the score / reason columns are shown
-only for `semantic_filter` (the only kind that produces them).
+run's own id. Works for every action kind; the SCORE column appears only when the
+action scores (`semantic_filter`) and is dropped entirely for kinds that don't,
+the same way `get`'s reason field is gated to the kinds that produce one.
 """
 
 from __future__ import annotations
 
-import json
-from collections.abc import Iterable
+from typing import Any
 
 import typer
 
@@ -30,7 +30,22 @@ from openmagpie_schema.watch_enums import (
 
 from .. import console
 from ..context import app_ctx
-from ._shared import _as_enum, _check_choice, _emit_detail, _emit_list, _handle_api_errors, _print_detail
+from ._shared import (
+    _as_enum,
+    _check_choice,
+    _Col,
+    _columns_option,
+    _emit_columns_paginated,
+    _emit_detail,
+    _handle_api_errors,
+    _jsonl_rows_option,
+    _list_output_option,
+    _print_columns_option,
+    _print_detail,
+    _transpose_option,
+    _ts,
+    col,
+)
 
 activity_app = typer.Typer(no_args_is_help=True)
 
@@ -55,11 +70,16 @@ def _evaluated_label(state: WatchActionRunState) -> str:
     return "failed (exhausted)" if state is WatchActionRunState.FAILED else state.value
 
 
+def _fmt_score(value: object) -> str:
+    """A score to 2dp, or '-' for a non-numeric / absent value. Shared by the
+    `list` SCORE column (`fmt`) and `get`'s score field so the two never disagree."""
+    return f"{value:.2f}" if isinstance(value, (int, float)) else console.EMPTY
+
+
 def _score(run: WatchActionRunWire) -> str:
     """The semantic-filter score from the result blob, 2dp ; '-' for kinds that
     don't score or runs that never produced one."""
-    score = run.result.get("score")
-    return f"{score:.2f}" if isinstance(score, (int, float)) else "-"
+    return _fmt_score(run.result.get("score"))
 
 
 # ── Per-kind run rendering ──────────────────────────────────────────────────
@@ -73,21 +93,15 @@ def _score(run: WatchActionRunWire) -> str:
 
 
 class RunFormatter:
-    """Base: no kind-specific columns or fields. The common skeleton (id, state,
-    item, feed, timing) is rendered by the print helpers regardless of kind."""
-
-    def list_columns(self) -> list[console.Column[WatchActionRunWire]]:
-        return []
+    """Base: no kind-specific DETAIL fields (the `get` view). The list view is a
+    dot-path projection of the run record, so it needs no per-kind columns."""
 
     def detail_fields(self, run: WatchActionRunWire) -> list[tuple[str, str]]:
         return []
 
 
 class FilterRunFormatter(RunFormatter):
-    """`semantic_filter`: the relevance score (list + detail) and reason (detail)."""
-
-    def list_columns(self) -> list[console.Column[WatchActionRunWire]]:
-        return [console.Column("SCORE", _score)]
+    """`semantic_filter`: the relevance score + reason on the `get` detail."""
 
     def detail_fields(self, run: WatchActionRunWire) -> list[tuple[str, str]]:
         fields = [("score", _score(run))]
@@ -156,20 +170,26 @@ def list_(
     ),
     after: str | None = typer.Option(None, "--after", help="Cursor (activity id) to page after."),
     limit: int | None = typer.Option(None, "--limit", "-l", help="Rows per page."),
-    jsonl: bool = typer.Option(False, "--jsonl", help="Emit one JSON object per run (NDJSON) instead of a table."),
-    output: str | None = typer.Option(
-        None, "--output", "-o", help="Write to a file instead of stdout; the next cursor prints to stdout."
-    ),
+    columns: str | None = _columns_option("run.state,feed_item.title,feed_item.url,action.config.threshold"),
+    transpose: bool = _transpose_option("run"),
+    print_columns: bool = _print_columns_option("run"),
+    jsonl: bool = _jsonl_rows_option("run"),
+    output: str | None = _list_output_option(paginated=True),
 ) -> None:
     """The individual runs ("activity entries") for one action, newest first."""
     _check_choice(state, WatchActionRunState)
-    _emit_list(
-        fetch=lambda cursor: app_ctx().api.activity.list(action_id, state=state, after=cursor, limit=limit),
+    _emit_columns_paginated(
+        fetch=lambda cursor, lim: app_ctx().api.activity.list(action_id, state=state, after=cursor, limit=lim),
         after=after,
-        render_table=_print_runs,
-        jsonl_lines=_run_jsonl,
+        limit=limit,
+        record_of=_run_record,
+        default_columns=_run_columns,
+        columns=columns,
+        transpose=transpose,
+        print_columns=print_columns,
         jsonl=jsonl,
         output=output,
+        empty_msg="No activity matches.",
     )
 
 
@@ -213,62 +233,40 @@ def _print_summary(action_id: str, resp: WatchActionRunListResponse) -> None:
     console.log(f"Other window: magpie activity summary --action {action_id} --window <preset>")
 
 
-def _run_jsonl(resp: WatchActionRunListResponse) -> Iterable[str]:
-    """Each run as a self-contained JSON object, shaped EXACTLY like `activity
-    get`'s WatchActionRunView so list + detail are one contract: `{run,
-    feed_item, feed, action}` (the keyed side-table join done CLI-side). `action`
-    is constant per page (the audited action), so a `jq`/LLM consumer keying on
-    `.action` gets the same field on list and detail. Pruned item / feed (and a
-    removed action) -> null. Serialized compact + raw UTF-8 to match pydantic's
-    `model_dump_json` (the delivery stream), not stdlib defaults (which would
-    escape non-ASCII and space the separators)."""
-    action = resp.action.model_dump(mode="json") if resp.action is not None else None
-    for run in resp.items:
-        item = resp.feed_items.get(run.feed_item_id)
-        feed = resp.feeds.get(item.feed_id) if item is not None else None
-        row = {
-            "run": run.model_dump(mode="json"),
-            "feed_item": item.model_dump(mode="json") if item is not None else None,
-            "feed": feed.model_dump(mode="json") if feed is not None else None,
-            "action": action,
-        }
-        yield json.dumps(row, ensure_ascii=False, separators=(",", ":"))
-
-
-def _print_runs(resp: WatchActionRunListResponse) -> None:
-    if not resp.items:
-        console.log("No activity matches.")
-        return
-    # Join each row to its item (title / feed) via the response's keyed side
-    # tables, so a reader sees WHAT was judged, not bare ids. A pruned item /
-    # feed is simply absent ; fall back to the id.
-    items, feeds = resp.feed_items, resp.feeds
-
-    def _title(r: WatchActionRunWire) -> str:
-        # Title is title: show it when set, else "-". No substituting url / id
-        # for a missing title (an empty title and a pruned item both read "-").
-        item = items.get(r.feed_item_id)
-        return item.title if (item is not None and item.title) else "-"
-
-    def _feed(r: WatchActionRunWire) -> str:
-        item = items.get(r.feed_item_id)
-        feed = feeds.get(item.feed_id) if item is not None else None
-        return feed.name if feed is not None else "-"
-
-    # Kind-specific columns (e.g. semantic_filter's SCORE) come from the run
-    # formatter, slotted between STATE and the common item/feed columns ; the
-    # base formatter adds none for log / webhook.
-    columns: list[console.Column[WatchActionRunWire]] = [
-        console.Column("ACTIVITY ID", lambda r: r.id),
-        console.Column("STATE", lambda r: str(r.state)),
-        *_run_formatter(resp.action).list_columns(),
-        console.Column("TITLE", _title, width=60),
-        console.Column("FEED", _feed),
-        console.Column("SCHEDULED", lambda r: console.timestamp(r.scheduled_at)),
-        console.Column("COMPLETED", lambda r: console.timestamp(r.completed_at)),
-        console.Column("ERROR", lambda r: r.error or "-"),
+def _run_columns(resp: WatchActionRunListResponse) -> list[_Col]:
+    """The `activity list` columns for this page (ACTIVITY ID first, per the
+    pk-first rule). SCORE is included only when the action scores, off the TYPED
+    `resp.action.kind` (dropped, not a dead `-`, for other kinds); SCHEDULED +
+    COMPLETED render to seconds (the pair shows run latency); ERROR is the triage
+    column for failed runs (`-` on healthy ones). FEED is not default; reach it
+    with `--columns feed.name`, `--transpose`, or `activity get`."""
+    # `_as_enum` (not a raw `==`) so an unknown / future kind resolves to None and
+    # drops SCORE, matching `_run_formatter`'s idiom.
+    scoring = resp.action is not None and _as_enum(resp.action.kind, WatchActionKind) == WatchActionKind.SEMANTIC_FILTER
+    return [
+        col("ACTIVITY ID:run.id"),
+        col("STATE:run.state"),
+        *([col("SCORE:run.result.score", fmt=_fmt_score)] if scoring else []),
+        col("TITLE:feed_item.title", width=60),
+        col("SCHEDULED:run.scheduled_at", fmt=_ts),
+        col("COMPLETED:run.completed_at", fmt=_ts),
+        col("ERROR:run.error"),
+        col("URL:feed_item.url"),
     ]
-    console.table(resp.items, columns)
+
+
+def _run_record(run: WatchActionRunWire, resp: WatchActionRunListResponse) -> dict[str, Any]:
+    """One run as the `{run, feed_item, feed, action}` dict (the CLI-side side-table
+    join): the single source for both `--jsonl` and the table. Pruned item / feed /
+    removed action -> null. Matches `activity get`'s WatchActionRunView shape."""
+    item = resp.feed_items.get(run.feed_item_id)
+    feed = resp.feeds.get(item.feed_id) if item is not None else None
+    return {
+        "run": run.model_dump(mode="json"),
+        "feed_item": item.model_dump(mode="json") if item is not None else None,
+        "feed": feed.model_dump(mode="json") if feed is not None else None,
+        "action": resp.action.model_dump(mode="json") if resp.action is not None else None,
+    }
 
 
 def _print_activity_detail(view: WatchActionRunView) -> None:

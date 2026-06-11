@@ -166,6 +166,11 @@ default styling. Don't hand-roll `console.log(f"  {a} | {b}")` rows.
   per-column `width` to let a column run wider.
 - **When a column is the row's pk (`id`), it goes FIRST.** Other identifiers
   (a source's `external_id`) are not the pk and stay where they read best.
+- **An absent / empty value renders `console.EMPTY` (`-`)**: the ONE marker,
+  shared by table cells (the `--columns` projection: missing path, None, "",
+  empty list/dict) AND `get`/`summary` detail fields, so list and detail never
+  disagree on "nothing here". Never hand-write `"-"` or a bespoke `"(none)"` /
+  `"(no summary)"`; use `console.EMPTY`. `--jsonl` emits the real null, not this.
 - Paginated views accumulate the page items into one list, then make a
   single `table` call + the cursor hint.
 

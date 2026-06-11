@@ -7,11 +7,9 @@ single-row ops (`get` / `delete`) and by `--feed` for collection ops (`list` /
 `remove`): a source belongs to one feed and isn't detachable, so dropping it
 from the set IS deleting its row.
 
-Bulk write is `set` (the shape an external scrape script naturally produces);
-`template` emits a starter file so a new user sees what `set` expects without
-reading code. `add` was considered and dropped: the flag UX (`--kind`, `--url`,
-`--meta key=value` ...) is bespoke per source kind and scales badly past a row
-or two. The create-time path is `feed create -f feed.yaml` with an inline
+Bulk write is `set` (the shape a scrape script naturally emits); `template`
+emits a starter file. `add` was dropped: per-kind flag UX (`--kind`/`--url`/
+`--meta` ...) scales badly. Create-time is `feed create -f` with an inline
 `sources:` block; ongoing mutation is `export -> edit -> set`.
 """
 
@@ -32,11 +30,18 @@ from ...api.feed import SourceWire
 from ...context import app_ctx
 from .._shared import (
     _check_format,
-    _emit_collection,
+    _columns_option,
+    _emit_columns_items,
     _emit_detail,
     _handle_api_errors,
+    _jsonl_rows_option,
+    _list_output_option,
+    _print_columns_option,
     _print_detail,
     _read_file_or_abort,
+    _transpose_option,
+    _ts,
+    col,
 )
 from ._apps import source_app
 
@@ -45,9 +50,7 @@ _SET_FILE_SHAPES = (
     "(produced by `magpie feed source export` or `magpie feed source template`)."
 )
 
-# The commented starter file emitted by `feed source template`. Lives as a
-# resource (like feed_template.yaml / watch_template.yaml) so the verbose,
-# user-facing comments don't bloat this module.
+# The `feed source template` starter; a resource so its comments don't bloat here.
 _SOURCES_TEMPLATE_YAML = resources.files("openmagpie").joinpath("sources_template.yaml").read_text(encoding="utf-8")
 
 
@@ -86,15 +89,15 @@ def _parse_set_payload(text: str, source_path: str) -> list[SourceInput]:
 # ── list (by --feed) ───────────────────────────────────────────────────
 
 
-# SourceWire.spec is the typed SourceSpec union (a Pydantic model instance),
-# not a dict ; `.display()` + `.kind` are on every variant.
-_SOURCE_COLUMNS: list[console.Column[SourceWire]] = [
-    console.Column("ID", lambda s: s.id),
-    console.Column("SOURCE", lambda s: s.spec.display()),
-    console.Column("KIND", lambda s: s.spec.kind),
-    console.Column("LAST EVENT", lambda s: str(s.last_event_at) if s.last_event_at else "-"),
-    console.Column("META", lambda s: str(s.meta) if s.meta else "-"),
-    console.Column("FIELD MAP", lambda s: str(s.field_map) if s.field_map else "-"),
+# Default `feed source list` columns (HEADER:dot-path). `display` is the wire's
+# kind-polymorphic label; spec.kind / spec.subreddit / spec.url are raw paths.
+_SOURCE_COLUMNS = [
+    col("ID:id"),
+    col("SOURCE:display"),
+    col("KIND:spec.kind"),
+    col("LAST EVENT:last_event_at", fmt=_ts),
+    col("META:meta"),
+    col("FIELD MAP:field_map"),
 ]
 
 
@@ -102,18 +105,33 @@ _SOURCE_COLUMNS: list[console.Column[SourceWire]] = [
 @_handle_api_errors
 def list_(
     feed_id: str = typer.Option(..., "--feed", help="Feed id whose sources to list."),
-    jsonl: bool = typer.Option(False, "--jsonl", help="Emit one JSON object per source (NDJSON) instead of a table."),
-    output: str | None = typer.Option(None, "--output", "-o", help="Write to a file instead of stdout."),
+    columns: str | None = _columns_option(),
+    transpose: bool = _transpose_option("source"),
+    print_columns: bool = _print_columns_option("source"),
+    jsonl: bool = _jsonl_rows_option("source"),
+    output: str | None = _list_output_option(paginated=False),
 ) -> None:
-    """List the sources attached to a feed."""
+    """List the sources attached to a feed.
+
+    A read view: rows carry the server-computed `display` label, which `feed source
+    set` does NOT accept (SourceInput ignores it). To round-trip a source set, use
+    `feed source export` (the set-shaped file), not this `--jsonl`."""
     sources = app_ctx().api.feed.list_sources(feed_id)
-    _emit_collection(items=sources, render_table=_print_sources, jsonl=jsonl, output=output)
-
-
-def _print_sources(sources: list[SourceWire]) -> None:
-    console.header(f"{len(sources)} source(s)")
-    if not console.table(sources, _SOURCE_COLUMNS):
-        console.log("No sources on this feed yet.")
+    # The count is information the table alone doesn't carry (an empty feed still
+    # reports `0 source(s)`); the helper shows it for the human view and keeps it
+    # off the machine-output paths.
+    _emit_columns_items(
+        items=sources,
+        record_of=lambda s: s.model_dump(mode="json"),
+        default_columns=_SOURCE_COLUMNS,
+        columns=columns,
+        transpose=transpose,
+        print_columns=print_columns,
+        jsonl=jsonl,
+        output=output,
+        empty_msg="No sources on this feed yet.",
+        header=f"{len(sources)} source(s)",
+    )
 
 
 # ── get (single, by own id) ────────────────────────────────────────────
@@ -135,10 +153,10 @@ def _print_source_detail(s: SourceWire) -> None:
     fields: list[tuple[str, str]] = [
         ("source", s.spec.display()),
         ("kind", s.spec.kind),
-        ("last event", str(s.last_event_at) if s.last_event_at else "-"),
-        ("created", str(s.created_at) if s.created_at else "-"),
-        ("meta", str(s.meta) if s.meta else "-"),
-        ("field map", str(s.field_map) if s.field_map else "-"),
+        ("last event", _ts(s.last_event_at)),
+        ("created", _ts(s.created_at)),
+        ("meta", str(s.meta) if s.meta else console.EMPTY),
+        ("field map", str(s.field_map) if s.field_map else console.EMPTY),
     ]
     _print_detail(f"source {s.id}", fields)
 

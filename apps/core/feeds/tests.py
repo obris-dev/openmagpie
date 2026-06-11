@@ -29,6 +29,7 @@ from openmagpie_schema.feed import (
     FeedItemWire,
     NewRedditPostPayload,
     RssEntryPayload,
+    SourceWire,
 )
 
 
@@ -247,3 +248,25 @@ class FeedItemPayloadUnionTests(SimpleTestCase):
         self.assertIs(type(data), FeedItemPayload)
         self.assertEqual((data.model_extra or {}).get("categories"), "oops")
         self.assertEqual(data.title, "T")
+
+
+class SourceWireDisplayTests(SimpleTestCase):
+    """SourceWire exposes the kind-polymorphic source label as a computed `display`
+    field on the wire, so a consumer reads one labeled field instead of
+    re-deriving `spec.display()` per kind. Output-only: a dump round-trips."""
+
+    def test_display_computed_per_kind_and_in_dump(self) -> None:
+        reddit = SourceWire(id="s1", spec=RedditSubredditSourceSpec(subreddit="ClaudeAI"))
+        self.assertEqual(reddit.model_dump(mode="json")["display"], "r/ClaudeAI")
+        rss_named = SourceWire(id="s2", spec=RssSourceSpec(url="https://a.test/rss", name="Example"))
+        self.assertEqual(rss_named.model_dump(mode="json")["display"], "Example")
+        rss_bare = SourceWire(id="s3", spec=RssSourceSpec(url="https://b.test/rss"))
+        self.assertEqual(rss_bare.model_dump(mode="json")["display"], "https://b.test/rss")
+
+    def test_display_is_output_only_and_round_trips(self) -> None:
+        # A dumped wire carries `display`; re-validating it must NOT error AND must
+        # IGNORE the incoming value, recomputing from `spec` (the field is output-only).
+        dumped = SourceWire(id="s1", spec=RedditSubredditSourceSpec(subreddit="x")).model_dump(mode="json")
+        self.assertIn("display", dumped)
+        dumped["display"] = "WRONG"  # a stale / tampered incoming value must be dropped
+        self.assertEqual(SourceWire.model_validate(dumped).display, "r/x")
