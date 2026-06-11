@@ -7,7 +7,8 @@
 # Clones the repo and hands off to scripts/quickstart/run.sh (build the stack,
 # migrate, install the local CLI, seed an example feed + watch, install git
 # hooks). Local development only; OpenMagpie is BYO-LLM, so run.sh points at an
-# Ollama you control.
+# OpenAI-compatible LLM endpoint you control (Ollama, vLLM, LM Studio, llama.cpp,
+# or a hosted API like OpenAI) - it auto-detects a local one or prompts for it.
 #
 # POSIX sh (no bashisms), like every scripts/*.sh (shellcheck -s sh enforces it
 # in pre-commit + CI), so the whole `curl ... | sh` flow is bash-free.

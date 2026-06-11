@@ -22,7 +22,7 @@ body:
       label: Area
       options:
         - Connector (Reddit/RSS)
-        - Engine (Ollama)
+        - LLM
         - Watches / actions
         - Webhook delivery
         - CLI
@@ -32,7 +32,7 @@ body:
   - type: textarea
     attributes:
       label: Environment
-      placeholder: "OS, how you run it (docker compose), Ollama model, git SHA (`git rev-parse --short HEAD`)"
+      placeholder: "OS, how you run it (docker compose), OpenAI-compatible LLM backend + model (e.g. Ollama qwen2.5:7b), git SHA (`git rev-parse --short HEAD`)"
     validations:
       required: true
   - type: textarea

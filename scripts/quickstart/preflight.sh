@@ -103,6 +103,11 @@ else
      docs: https://docs.astral.sh/uv/getting-started/installation/"
 fi
 
+# The LLM is BYO and not a hard prereq, so it's NOT checked here. Setup (run.sh's
+# configure_engine, right after this) finds a local one, validates it via
+# /v1/models, and writes ENGINE_BASE_URL/MODEL/API_KEY - the one place the check runs
+# and its result is used.
+
 if [ -n "$fixes" ]; then
     case "$via" in
         bootstrap) rerun="curl -fsSL https://openmagpie.ai | sh" ;;

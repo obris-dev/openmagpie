@@ -16,7 +16,7 @@ An open-source semantic listener. Tell it what to listen for; it picks out what 
 
 Three things stay pluggable across the codebase:
 - **Connectors** (Reddit, GitHub, GDocs, Slack, ...): yield typed `SourcePayload` subclasses from each source
-- **Engines** (Ollama, future Anthropic/OpenAI/keyword): BYO LLM that judges a `SourcePayload` for a semantic-filter action
+- **Engines** (any OpenAI-compatible `/v1` LLM: Ollama, vLLM, llama.cpp, LM Studio, OpenAI, ...; future keyword/other): BYO LLM that judges a `SourcePayload` for a semantic-filter action
 - **Action kinds** (semantic_filter, webhook, log, future keyword/Slack/email): the steps a Watch runs over each feed item (filter, then deliver)
 
 The product is **only** a listener: watches, judges, learns, notifies. It does NOT auto-reply, post back to sources, run workflows, or generate reports. Scope test: if a feature isn't listening / learning / notifying, it's out.
@@ -29,7 +29,7 @@ apps/cli/                   magpie CLI (see apps/cli/AGENTS.md)
 packages/openmagpie-schema/ pure Pydantic models shared by core + cli
 web/                        pnpm workspace, Next.js (see web/AGENTS.md)
 make/                       Per-concern Makefile targets
-scripts/                    quickstart installer (quickstart/{bootstrap,run,seed}.sh) + dev tooling (check-docker, hooks, lint/whitespace/branch checks, make-help)
+scripts/                    quickstart installer (quickstart/{bootstrap,preflight,run,seed,tick}.sh) + dev tooling (check-docker, hooks, lint/whitespace/branch checks, make-help)
 pyproject.toml + uv.lock    uv workspace root (one lock for all members)
 ```
 

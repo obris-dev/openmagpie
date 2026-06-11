@@ -1,4 +1,10 @@
-from .base import Engine, EngineModelInvalid, JudgmentJSON, JudgmentResult
-from .ollama import OllamaEngine
+from .base import Engine, EngineRequestRejected, JudgmentJSON, JudgmentResult
+from .openai_compat import OpenAICompatEngine
 
-__all__ = ["Engine", "EngineModelInvalid", "JudgmentJSON", "JudgmentResult", "OllamaEngine"]
+__all__ = [
+    "Engine",
+    "EngineRequestRejected",
+    "JudgmentJSON",
+    "JudgmentResult",
+    "OpenAICompatEngine",
+]

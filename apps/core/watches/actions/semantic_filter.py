@@ -10,10 +10,10 @@ from __future__ import annotations
 
 import logging
 
-from django.conf import settings
 from pydantic import ValidationError
 
 from engine import registry as engine_registry
+from engine.engines import EngineRequestRejected
 from openmagpie_schema.watch_actions import SemanticFilterConfig, SemanticFilterResult
 from openmagpie_schema.watch_enums import WatchActionKind, WatchActionRunState
 from sources.payload_registry import UnhydrateablePayload, hydrate_data
@@ -66,11 +66,19 @@ class SemanticFilterAction(Action):
         # call's OWN errors (httpx, bad JSON) still propagate -> FAILED,
         # since an engine being down IS transient.
         try:
-            engine = engine_registry.get(config.engine.kind or settings.ENGINE_DEFAULT_KIND)
+            engine = engine_registry.get(config.engine.kind)
         except KeyError:
             logger.warning("semantic_filter: unknown engine kind=%r for action=%s", config.engine.kind, action.id)
             return ActionResult(state=WatchActionRunState.ERRORED, error=run_messages.ENGINE_UNAVAILABLE)
-        judgment = engine.judge(payload, instructions=config.instructions, model=config.engine.model or None)
+        # A 4xx that proves a permanent request/config defect (bad auth, missing
+        # endpoint/model, malformed request) is ERRORED, not retried - like the
+        # unknown-kind path above. Transient judge failures (engine down,
+        # rate-limited, malformed JSON) still propagate -> the drain's FAILED.
+        try:
+            judgment = engine.judge(payload, instructions=config.instructions, model=config.engine.model or None)
+        except EngineRequestRejected as exc:
+            logger.error("semantic_filter: engine rejected request for action=%s: %s", action.id, exc)
+            return ActionResult(state=WatchActionRunState.ERRORED, error=run_messages.ENGINE_REJECTED)
 
         passed = judgment.score >= config.threshold
         result = SemanticFilterResult(passed=passed, score=judgment.score, reason=judgment.reason)

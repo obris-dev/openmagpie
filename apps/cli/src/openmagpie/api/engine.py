@@ -3,9 +3,9 @@
 Wraps `/v1/engines`. Response models live in the shared
 `openmagpie_schema.engine` module and are imported verbatim.
 
-Used to pre-flight Ollama before wiring up a semantic-filter action ;
-surfacing "Ollama unreachable" at config time beats discovering it via
-500-per-judge-cycle once polling starts.
+Intended to back a future pre-flight check (surfacing "LLM unreachable"
+at config time beats discovering it via 500-per-judge-cycle once polling
+starts); no `magpie` command consumes it yet.
 """
 
 from __future__ import annotations

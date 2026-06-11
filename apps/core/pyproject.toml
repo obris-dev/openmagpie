@@ -15,6 +15,7 @@ dependencies = [
     "djangorestframework>=3.15",
     "feedparser>=6.0",
     "httpx>=0.28",
+    "openai>=1.40",  # official client; the lingua franca every OpenAI-compatible backend tests against
     "openmagpie-schema",
     "psycopg>=3.3",  # impl extra is env-specific: [binary] in dev, [c] in cloud
     "pydantic>=2.5",

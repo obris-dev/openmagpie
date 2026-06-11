@@ -13,12 +13,15 @@ set -eu
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$ROOT"
 
-# Shared helpers (manage(), is_truthy()). Sourced after cd so the relative path
-# resolves; keeps the truthy SKIP_DATA_SEED parse + manage() in one place.
-# Don't follow the source: pre-commit lints one file at a time, so _lib.sh isn't
-# in the input set; it's linted on its own.
+# Helpers, sourced after cd so the relative paths resolve. _lib.sh = generic
+# (manage(), is_truthy(), env_*); _engine.sh = the LLM setup (configure_engine +
+# its helpers), kept separate so this file stays a readable top-to-bottom flow.
+# Don't follow the source: pre-commit lints one file at a time, so the sourced
+# files aren't in the input set; each is linted on its own.
 # shellcheck source=/dev/null
 . ./scripts/quickstart/_lib.sh
+# shellcheck source=/dev/null
+. ./scripts/quickstart/_engine.sh
 
 # Invoke siblings via `sh <script>` (not `./<script>`) for the same reason the
 # bootstrap does: don't depend on the +x bit surviving the clone / a tarball.
@@ -38,6 +41,10 @@ if [ ! -f apps/core/.env ]; then
     cp apps/core/.env.example apps/core/.env
     echo "Created apps/core/.env from .env.example"
 fi
+
+# Resolve the LLM endpoint/model/key into apps/core/.env BEFORE `up` so the
+# container reads the final config (configure_engine lives in _engine.sh).
+configure_engine
 
 # The core-setup one-shot runs createcachetable before core serves (see
 # docker-compose.yml), so core's /healthz is green on a fresh DB and `--wait`
@@ -61,10 +68,15 @@ sh ./scripts/install-local-cli.sh || true
 # quickstart after the stack is already up.
 sh ./scripts/hooks.sh || true
 
-# Seed + score the backlog LAST among the work, so any matches stream right
-# before the summary. OPENMAGPIE_QUICKSTART tells seed.sh to defer its activity
-# hint to the consolidated summary below (so it isn't printed twice).
+# Seed the example, then score it LAST among the work so any matches stream right
+# before the summary. Split: seed.sh only seeds; tick.sh only ticks (gated on the
+# LLM being reachable via `manage.py engine_status`). OPENMAGPIE_QUICKSTART tells
+# tick.sh to defer its activity hint to the consolidated summary below (so it
+# isn't printed twice). Account-only mode (SKIP_DATA_SEED) has nothing to score.
 OPENMAGPIE_QUICKSTART=1 sh ./scripts/quickstart/seed.sh
+if ! is_truthy "${SKIP_DATA_SEED:-}"; then
+    OPENMAGPIE_QUICKSTART=1 sh ./scripts/quickstart/tick.sh
+fi
 
 # Final summary, printed LAST so the CLI commands + login don't scroll off behind
 # the build/seed output. creds use the same env + defaults as the seed (source of

@@ -11,8 +11,9 @@ default (here or in base.py). (S) = secret, store in the secret manager.
     DJANGO_SECRET_KEY     (S)  long random string
     POSTGRES_HOST              managed db host (DB/USER/PORT default to openmagpie/openmagpie/5432)
     POSTGRES_PASSWORD     (S)  db password
-    OLLAMA_URL                 reachable Ollama instance
-    OLLAMA_DEFAULT_MODEL       e.g. qwen2.5:7b
+    ENGINE_BASE_URL            OpenAI-compatible LLM `/v1` base URL
+    ENGINE_MODEL               LLM model id (e.g. qwen2.5:7b, gpt-4o-mini)
+    ENGINE_API_KEY        (S)  Bearer key if the LLM is hosted (omit for local)
     EMAIL_RENDER_URL           email-render sidecar URL (unset -> sends retry to the cap, then FAILED)
     EMAIL_HOST_USER       (S)  Brevo SMTP login
     EMAIL_HOST_PASSWORD   (S)  Brevo SMTP key

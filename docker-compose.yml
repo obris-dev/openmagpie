@@ -57,6 +57,12 @@ services:
     ports:
       - "8000:8000"
     env_file: ./apps/core/.env
+    # Reach a BYO LLM running on the host (the default ENGINE_BASE_URL uses
+    # host.docker.internal). Docker Desktop (Mac/Win) maps this automatically;
+    # Linux does NOT, so map it explicitly or the semantic filter can't call the
+    # host's LLM. Harmless when ENGINE_BASE_URL points elsewhere (remote/hosted).
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       # core-setup creates the DB-backed cache table /healthz round-trips, so
       # core can't go healthy (and `up --wait` deadlocks) until it completes.

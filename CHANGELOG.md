@@ -29,6 +29,17 @@ and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2
 
 ### Changed
 
+- Relevance engine generalized to any OpenAI-compatible `/v1` endpoint (Ollama,
+  vLLM, llama.cpp, LM Studio, OpenAI, or a hosted provider), driven by the
+  official `openai` client. **Breaking config rename:** `OLLAMA_URL` /
+  `OLLAMA_DEFAULT_MODEL` become `ENGINE_BASE_URL` / `ENGINE_MODEL` (plus an
+  optional `ENGINE_API_KEY`). To upgrade an existing install, set
+  `ENGINE_BASE_URL` (e.g. `http://host.docker.internal:11434/v1`) in
+  `apps/core/.env`; a missing value now fails startup with a named
+  `ImproperlyConfigured` naming the old and new vars, not a raw `KeyError`.
+  `ENGINE_MODEL` is optional (unset still boots, with an `engine.W001` warning).
+  A data migration rewrites any stored `semantic_filter` `engine.kind: "ollama"`
+  to the server default.
 - CLI command tree reshaped so the structure matches how data is used, not ORM
   containment. Observability is now flat and top-level: `magpie activity
   summary` / `list` / `get` and `magpie delivery list` / `get`, each scoped by

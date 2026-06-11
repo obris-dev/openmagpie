@@ -3,9 +3,9 @@
 Shared, zero-Django source of truth for `/v1/engines` responses. Each
 registered relevance engine reports its `EngineStatus` (kind +
 configured default model + reachability + the upstream's loaded models)
-so callers can pre-flight engine availability before a config save —
-the wizard surfaces this so operators see "Ollama unreachable at
-<url>" before they fill in instructions, not at first judge cycle.
+so a caller can pre-flight engine availability before a config save and
+surface "the LLM is unreachable at <url>" instead of discovering it at
+the first judge cycle.
 
 `unreachable_reason` is None when `available` is True; when False it
 carries a short operator-facing string (the exception class name +
@@ -18,10 +18,9 @@ from pydantic import BaseModel
 class EngineStatus(BaseModel):
     """Per-engine reachability snapshot.
 
-    `default_model` is what the engine instance would use if a config
-    config leaves `engine.model` empty (i.e. the server-side default
-    from settings). For engines whose model is informational only this
-    may be empty.
+    `default_model` is what the engine would use when a config leaves
+    `engine.model` empty (the server-side default). It may be empty when
+    the server has no default model configured.
 
     `available_models` is the upstream's loaded set when reachable;
     when unreachable it's an empty list (the server didn't see anything

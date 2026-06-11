@@ -3,6 +3,8 @@ import os
 import time
 from pathlib import Path
 
+from django.core.exceptions import ImproperlyConfigured
+
 from common.env import env_bool
 
 # Log timestamps in UTC regardless of the host clock. Python's logging
@@ -304,18 +306,33 @@ DIGEST_MAX_BATCH_ITEMS = int(os.environ.get("DIGEST_MAX_BATCH_ITEMS", "500"))
 # the TTL; `manage.py clear_job_locks` is the manual release for those.
 JOB_LOCK_TIMEOUT_SECONDS = int(os.environ.get("JOB_LOCK_TIMEOUT_SECONDS", "86400"))
 
-# Relevance engine defaults. ENGINE_DEFAULT_KIND selects which engine a
-# semantic-filter action's config falls back to when it doesn't pin one
-# explicitly. The kind must be registered in `engine.registry`.
-ENGINE_DEFAULT_KIND = os.environ.get("ENGINE_DEFAULT_KIND", "ollama")
-
-# Ollama (relevance engine). Required when ENGINE_DEFAULT_KIND="ollama", fail
-# fast at startup if unset. `OLLAMA_DEFAULT_MODEL` is the fallback when an
-# action's config leaves `engine.model` empty; named "default" (not
-# "model") so it doesn't read like "the" model when the system supports
-# per-action overrides. See core/.env.example for example values.
-OLLAMA_URL = os.environ["OLLAMA_URL"]
-OLLAMA_DEFAULT_MODEL = os.environ["OLLAMA_DEFAULT_MODEL"]
+# Relevance engine (the LLM that scores semantic-filter relevance). The engine
+# talks to any backend via the OpenAI `/v1` API, so all it needs is an endpoint
+# and (maybe) a key - no per-backend "kind" config. ENGINE_BASE_URL is the
+# OpenAI-compatible `/v1` base URL (Ollama, vLLM, OpenAI, llama.cpp, LM Studio,
+# ...) - required, fail fast at startup if unset (it has a sensible default in
+# .env.example). ENGINE_API_KEY is sent as a Bearer token (hosted providers need
+# it; local servers ignore it).
+try:
+    ENGINE_BASE_URL = os.environ["ENGINE_BASE_URL"]
+except KeyError as exc:
+    # Named explicitly (not a raw KeyError) so an upgrade from the pre-rename
+    # config gets the fix, not a cryptic traceback: ENGINE_BASE_URL/ENGINE_MODEL
+    # replaced OLLAMA_URL/OLLAMA_DEFAULT_MODEL.
+    raise ImproperlyConfigured(
+        "ENGINE_BASE_URL is not set. The relevance engine is now any OpenAI-compatible "
+        "/v1 endpoint, and ENGINE_BASE_URL (+ optional ENGINE_MODEL) replaces the old "
+        "OLLAMA_URL / OLLAMA_DEFAULT_MODEL. Set it in apps/core/.env, e.g. "
+        "ENGINE_BASE_URL=http://host.docker.internal:11434/v1"
+    ) from exc
+ENGINE_API_KEY = os.environ.get("ENGINE_API_KEY", "")
+# ENGINE_MODEL is the model to judge with (the fallback when an action leaves
+# `engine.model` empty). NOT required - a generic model default would be wrong
+# (models are backend-specific), so it's left unset and the stack still boots; an
+# `engine.W001` system-check warning flags it and a judge with no model raises a
+# clear EngineRequestRejected. List a backend's models with:
+#   uv run --package openmagpie-core python -m engine.scripts.probe <ENGINE_BASE_URL> [key]
+ENGINE_MODEL = os.environ.get("ENGINE_MODEL", "")
 
 # Webhook-action security gates (consumed by the WebhookAction when it
 # lands). Defaults assume single-tenant self-host with possible internal

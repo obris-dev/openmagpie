@@ -26,7 +26,7 @@
 
 You scan Reddit, Hacker News, and a few RSS feeds looking for someone hitting a problem your product solves or asking a question you can answer well. Getting there while the conversation is happening is how you build a brand and a community around what you know. OpenMagpie watches the threads for you so you spend your time on engagement instead of searching.
 
-You curate sources into a feed, write a natural-language description of what's relevant (for example, "someone frustrated with manual social monitoring and asking for alternatives"), and a local LLM scores each new post against it. Matches go to a webhook or your logs (more integrations coming); everything else is dropped. You read the hits instead of the firehose.
+You curate sources into a feed, write a natural-language description of what's relevant (for example, "someone frustrated with manual social monitoring and asking for alternatives"), and a local LLM run via any OpenAI-compatible runner (e.g. Ollama, vLLM, LM Studio) scores each new post against it. Matches go to a webhook or your logs (more integrations coming); everything else is dropped. You read the hits instead of the firehose.
 
 ## Where it listens
 
@@ -57,16 +57,17 @@ cd openmagpie
 ./scripts/quickstart/run.sh
 ```
 
-Either way it seeds an example feed + watch (a couple of subreddits, a natural-language filter, a `log` delivery) and, once an Ollama is reachable, runs the pipeline once so the first matches print straight to the logs, tagged with the starter's prefix (e.g. `[oss starter]`). Matches show up in the terminal and the CLI activity log, not the web UI yet. Want a different example or a wider lookback? `STARTER=devtools DAYS=7 ./scripts/quickstart/seed.sh`. See [examples/README.md](examples/README.md) for the full list of starters.
+Either way it seeds an example feed + watch (a couple of subreddits, a natural-language filter, a `log` delivery) and, once an LLM is reachable, runs the pipeline once so the first matches print straight to the logs, tagged with the starter's prefix (e.g. `[oss starter]`). Matches show up in the terminal and the CLI activity log, not the web UI yet. Want a different example or a wider lookback? `STARTER=devtools DAYS=7 ./scripts/quickstart/seed.sh`. See [examples/README.md](examples/README.md) for the full list of starters.
 
-### Prereq: an Ollama instance
+### Prereq: an OpenAI-compatible LLM endpoint
 
-OpenMagpie is BYO LLM; the dev stack doesn't bundle one. Point it at an Ollama you control:
+OpenMagpie is BYO LLM; the dev stack doesn't bundle one. Whatever you already run almost certainly works, because **Ollama, vLLM, llama.cpp, and LM Studio all expose an OpenAI-compatible `/v1` API** (so do hosted providers like OpenAI, Together, or Groq). OpenMagpie talks to that `/v1` endpoint with the standard OpenAI client, so you just point `ENGINE_BASE_URL` at it. The quickstart validates your endpoint and points you at the model of your choice.
 
-- **Local (the default).** `OLLAMA_URL=http://host.docker.internal:11434` already points at your local Ollama. If you don't have one: `brew install ollama` (macOS, or see the [linux install](https://ollama.com/download)), then `ollama pull qwen2.5:7b` and `ollama serve`.
-- **Remote (LAN box, GPU server, cloud).** Set `OLLAMA_URL=http://your-host:11434` in `apps/core/.env`.
+- **Local.** Any OpenAI-compatible server on your machine works; point `ENGINE_BASE_URL` at its `/v1`: Ollama (`http://host.docker.internal:11434/v1`), vLLM (`:8000/v1`), LM Studio (`:1234/v1`), or llama.cpp (`:8080/v1`). The shipped default is Ollama's `:11434`. New here and want the quickest start? Install [Ollama](https://ollama.com/download), then `ollama pull qwen2.5:7b && ollama serve`.
+- **Remote (LAN box, GPU server, cloud).** Set `ENGINE_BASE_URL=http://your-host:11434/v1` in `apps/core/.env`.
+- **Hosted API.** Set `ENGINE_BASE_URL=https://api.openai.com/v1` and `ENGINE_API_KEY=...` (local servers leave the key blank).
 
-Set `OLLAMA_DEFAULT_MODEL` to the model you want to judge with. A 7B model judges in roughly 1 to 3 seconds on Apple Silicon or a recent NVIDIA GPU; CPU-only works but is slower.
+Set `ENGINE_MODEL` to the model you want to judge with. A 7B model judges in roughly 1 to 3 seconds on Apple Silicon or a recent NVIDIA GPU; CPU-only works but is slower.
 
 ### Use it
 
@@ -136,7 +137,7 @@ graph TD
     FEED -- "new items" --> WATCH
     WATCH -- "action chain" --> FILTER
     FILTER --> ENGINE
-    ENGINE -. "your LLM" .-> LLM["Ollama (today)<br/>Anthropic / OpenAI (planned)"]
+    ENGINE -. "your LLM" .-> LLM["any OpenAI-compatible /v1 API<br/>Ollama | vLLM | llama.cpp | LM Studio | OpenAI"]
     FILTER -- "passes -> next action" --> DELIVER
 
     DELIVER --> WEBHOOK
@@ -176,7 +177,7 @@ See [AGENTS.md](AGENTS.md) for the design conventions (char pointers, typed-blob
 Social listening is a crowded market (Brand24, Mention, Octolens, Syften, and tools like OutX that pair monitoring with AI-drafted replies). They are all closed SaaS behind a paid plan, a trial, or a sales demo, and the few genuinely free options are basic mention notifiers, not full listening. OpenMagpie is the open, self-hostable exception: run it on your own box with your own model for the cost of the hardware.
 
 - **Open source.** Apache 2.0, the whole stack. Read it, fork it, and extend the connectors and engines yourself.
-- **Bring your own LLM.** Relevance is judged by an LLM you run (Ollama today), so your criteria and your matches never leave your infrastructure.
+- **Bring your own LLM.** Relevance is judged by an LLM you run (via any OpenAI-compatible backend like Ollama, vLLM, llama.cpp, LM Studio etc), so your criteria and your matches stay on your infrastructure when you self-host the model.
 - **Natural-language matching.** You describe what's relevant in natural language and the model scores each new post on meaning.
 - **Auditable.** Every poll, judgement, and delivery is a row you can inspect (`magpie activity summary` / `delivery list`), as a table or `--jsonl` to pipe into `jq` / an LLM, or written to a file with `-o`.
 
@@ -185,7 +186,7 @@ Social listening is a crowded market (Brand24, Mention, Octolens, Syften, and to
 | Layer | Shipped |
 |---|---|
 | Connectors | Reddit (`reddit_subreddit`), RSS/Atom (`rss`) |
-| Engines | Ollama (`ollama`) |
+| Engines | Any OpenAI-compatible `/v1` API: Ollama, vLLM, llama.cpp, LM Studio, OpenAI, ... |
 | Action kinds | `semantic_filter` (LLM-judged), `webhook`, `log` |
 | Delivery modes | instant, digest |
 | Webhook methods | `POST`, `PUT`, `PATCH` |
@@ -218,7 +219,7 @@ apps/
     auth_api/                 signup / login / logout / me + tokens/* + device-flow handshake (DRF)
     sources/                  Connectors (Reddit subreddit, RSS/Atom) + SourcePayload classes + registry
     feeds/                    Feed + Source + FeedItem models + poll orchestrator + item log
-    engine/                   Engine Protocol + OllamaEngine package + registry
+    engine/                   Engine Protocol + OpenAICompatEngine + registry (+ probe)
     watches/                  Watch + WatchFeed + WatchPath + WatchAction + WatchActionRun + WatchActionDelivery
     conf/                     settings (base/local), urls, wsgi
   cli/                        magpie CLI (Typer + httpx + Pydantic); distributed as a standalone wheel
@@ -226,7 +227,7 @@ packages/
   openmagpie-schema/          Pure Pydantic models shared by core + cli (configs, wire types, feed shapes)
 web/                          pnpm workspace: apps/{app,marketing,email-render} (Next.js) + packages/{ui,api-utils,auth,tailwind-config}
 make/                         Per-concern Makefile targets
-scripts/                      quickstart installer (quickstart/{bootstrap,run,seed}.sh) + dev tooling (Docker preflight, git hooks, whitespace/branch/length checks, make-help)
+scripts/                      quickstart installer (quickstart/{bootstrap,preflight,run,seed,tick}.sh) + dev tooling (Docker preflight, git hooks, whitespace/branch/length checks, make-help)
 ```
 
 ## Documentation

@@ -20,6 +20,9 @@ NO_EXECUTOR = "This action type can't be run by the current server."
 ITEM_UNREADABLE = "The source item couldn't be read (its stored format is no longer recognized)."
 CONFIG_INVALID = "This action's configuration is invalid and can't be run."
 ENGINE_UNAVAILABLE = "The configured engine isn't available on this server."
+# The LLM answered, but rejected the request as malformed/unauthorized/not-found
+# (a 4xx retrying can't fix) - a server-config defect, not a transient blip.
+ENGINE_REJECTED = "The LLM rejected the request as misconfigured (verify ENGINE_BASE_URL, ENGINE_MODEL, and ENGINE_API_KEY on the server)."
 WEBHOOK_BLOCKED = "The webhook destination is not allowed by server policy."
 WEBHOOK_REJECTED = "The webhook endpoint rejected the request (check the URL and credentials)."
 WEBHOOK_REDIRECT = "The webhook endpoint returned a redirect; point the URL at its final destination."

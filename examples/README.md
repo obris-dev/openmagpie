@@ -18,7 +18,7 @@ Available starters:
 ```
 
 `run.sh` seeds the `selfhosted-opensource` starter into a local dev account and,
-if your Ollama is reachable, runs one tick so you see matches right away. Run a
+if your LLM is reachable, runs one tick so you see matches right away. Run a
 different starter or a wider lookback on demand:
 
 ```

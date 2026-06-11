@@ -11,7 +11,7 @@ core/
   auth_api/        DRF auth surface: signup / login / logout / me + tokens/* + device-sessions/*
   sources/         Connectors (RedditSubRedditConnector, ...) + SourcePayload hierarchy + per-(source,kind) registry
   feeds/           Feed + Source + FeedItem models, poll orchestrator, item log
-  engine/          Engine Protocol + OllamaEngine + registry
+  engine/          Engine Protocol + OpenAICompatEngine + registry (+ probe)
   watches/         Watch + WatchFeed + WatchPath + WatchAction + WatchActionRun + WatchActionDigestWindow + WatchActionDelivery
   conf/            settings (base + local override), urls, wsgi
 ```

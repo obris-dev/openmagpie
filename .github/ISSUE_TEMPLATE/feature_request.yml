@@ -17,7 +17,7 @@ body:
       label: Area
       options:
         - Connector (Reddit/RSS)
-        - Engine (Ollama)
+        - LLM
         - Watches / actions
         - Webhook delivery
         - CLI

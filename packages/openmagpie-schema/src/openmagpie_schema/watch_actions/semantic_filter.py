@@ -14,7 +14,9 @@ class EngineSpec(BaseModel):
 
     `kind == ""` means "use the server default" ; the server fills it
     from settings and rejects an unregistered kind (policy ; the pure
-    package can't know the registry). `model` is informational.
+    package can't know the registry). `model`, when non-empty, is the
+    per-call model override the engine judges with for this filter (else
+    the engine's server-side default).
     """
 
     kind: str = ""

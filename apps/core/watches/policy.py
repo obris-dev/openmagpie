@@ -72,10 +72,10 @@ def _enforce_engine_registered(config: SemanticFilterConfig) -> None:
     """A pinned `engine.kind` must be registered in this deployment.
 
     Empty kind means "use the server default" (resolved at judge time
-    from settings.ENGINE_DEFAULT_KIND), so only a non-empty pin is
-    checked here. Rejecting at the write boundary means the operator sees
-    a clean 400 naming the bad kind + the available set, instead of every
-    judge cycle 500ing on an unknown engine."""
+    by the registry), so only a non-empty pin is checked here. Rejecting
+    at the write boundary means the operator sees a clean 400 naming the
+    bad kind + the available set, instead of every judge cycle 500ing on
+    an unknown engine."""
     kind = config.engine.kind
     if not kind:
         # Defaulted at runtime ; the default itself is a deploy invariant
@@ -86,5 +86,5 @@ def _enforce_engine_registered(config: SemanticFilterConfig) -> None:
     except KeyError:
         raise PolicyError(
             f"unknown engine kind {kind!r}; registered: {engine_registry.kinds() or '(none)'} "
-            f"(default is {settings.ENGINE_DEFAULT_KIND!r}; leave engine.kind empty to use it)"
+            f"(default is {engine_registry.DEFAULT_KIND!r}; leave engine.kind empty to use it)"
         ) from None
