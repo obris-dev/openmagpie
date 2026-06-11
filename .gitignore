@@ -65,6 +65,3 @@ node_modules/
 # CLI build artifacts
 cli/dist/
 cli/.venv/
-
-# Local CLI output dumps (e.g. `magpie activity list -o file.out`)
-*.out

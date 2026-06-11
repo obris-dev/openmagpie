@@ -49,7 +49,7 @@ Argument rule, uniform across every noun:
 - **A scope flag appears only when the command has no own id to act on** (`list` / `add` / bulk `set`). See the short-flag map below. (`set` = declaratively replace a whole COLLECTION by scope, e.g. `feed source set --feed`; it is NOT the single-resource mutation, which is `edit` by own id. Don't name a one-resource edit `set`.)
 - **Own-id mutations (`get` / `edit` / `delete`) take only the own id; the server resolves the parent and guards account scope** (e.g. `feed source delete <source_id>` deletes by id, with the server confirming the source belongs to a feed you own). The confirm prompt names the resolved resource itself, not its parent, when the wire carries no parent label (e.g. `SourceWire` has no feed name). The parent is a guard, never an id you have to look up first.
 - **`delete` is the single destructive verb on every noun** (`feed` / `watch` / `feed source` / `watch action`). There is no `remove`: a child belongs to exactly one parent and isn't detachable, so removing it from the set IS deleting its row. One verb, predictable for humans and LLM callers.
-- A scope flag is also forced when a resource is not addressable by its own id in the data layer. `WatchAction` is id-addressable, so `watch action delete <action_id>` needs no scope; `Source` is currently feed-scoped. Prefer adding id-only resolution over forcing the caller to supply a scope id.
+- A scope flag is also forced when a resource is not addressable by its own id in the data layer. `WatchAction` and `Source` are both id-addressable (`watch action delete <action_id>` / `feed source delete <source_id>` need no scope, resolved via `/v1/feed-sources/<id>`); for any future resource that isn't, prefer adding id-only resolution over forcing the caller to supply a scope id.
 
 Short flags are decided once here, not per command. A flag gets a short only when it is unambiguous and frequently typed; long-only is fine, and inventing a short for symmetry is not.
 
@@ -61,7 +61,7 @@ Short flags are decided once here, not per command. A flag gets a short only whe
 | `--action` | `-a` | scope |
 | `--state` | `-s` | filter, on subcommands |
 | `--server` | `-s` | global, root callback only (passed before the subcommand). Typer scopes it apart from the subcommand `--state`, so there is no parse clash, but don't mint a third `-s` |
-| `--limit` | `-l` | page size on every list / observability view (rows per fetch; the prompt-paged loop fetches this many per confirmed page, not a grand total). ONE short everywhere (some commands currently use `-n`; consolidate to `-l`, which is free once `--list` is gone, below) |
+| `--limit` | `-l` | page size on every list / observability view (rows per fetch; the prompt-paged loop fetches this many per confirmed page, not a grand total). ONE short everywhere |
 | `--rank` | `-r` | insert position, `watch action add` only |
 | `--dry-run` | `-n` | preview-only, on the create / edit / set mutations |
 | `--yes` | `-y` | skip the confirm prompt; required when stdin is not a TTY so a pipe can't silently mutate |
@@ -70,7 +70,7 @@ Short flags are decided once here, not per command. A flag gets a short only whe
 | `--window` | none | the `summary` preset; long-only (`-w` is `--watch`) |
 | `--format` | none | config-doc output serialization (`yaml`/`json`) on the `template` / `export` commands. NOT the observability format selector (that is `--jsonl`, a data-row stream, not a document) |
 
-`--list` is RETIRED by the reshape, freeing its short: the `summary` vs `list` subcommand split replaces it, freeing `-l` for `--limit`. Until each command is migrated it may still carry the old short; the table above is the target.
+`--list` is RETIRED by the reshape, freeing its short: the `summary` vs `list` subcommand split replaced it, so `-l` is now `--limit` everywhere.
 
 **Every read offers machine output.** Uniformly across `feed` / `watch` / `activity` / `delivery`, every `get` and `list` view renders a human table by default and accepts `--jsonl` (NDJSON: one object per row, or the single object for `get`) + `-o <file>` (write there instead of stdout). New read commands MUST carry both. Single-object `get` and the unpaginated lists (`feed source`, `watch action`, which the server returns in one call) are single-shot; the cursor-paginated lists (`feed`, `watch`, `feed item`, `activity`, `delivery`) page as below.
 
@@ -78,7 +78,7 @@ The paginated views render a human table by default. **Paging follows the termin
 
 Today `activity` and `delivery` are **action-scoped only** (`--action` / `-a`): the runs and deliveries endpoints are addressed by the action's own id in the path, with no watch-level rollup or `?watch=` filter. A watch-scoped observability view (`--watch` on `activity` / `delivery`) needs a new aggregate endpoint and is deferred to Phase 2; until then `-w` is a scope flag for the config commands (`watch action list --watch`) only.
 
-Some current commands predate this and do not follow it yet; they are being migrated. New commands MUST follow the rule above.
+Every noun now follows this shape; new commands MUST too.
 
 ## AppContext
 
@@ -148,16 +148,27 @@ OS / Python runtime details are intentionally OUT: they're noise on a security U
 
 `MagpieClient.get` / `post` accept an optional `headers` parameter for one-off concerns like the device-flow `X-Device-Secret` polling proof. Resource clients in `api/` build those at the call site rather than threading them through the client.
 
-## List output: `console.table`
+## List output: `console.table` + the `--columns` projection
 
-Every `list`-style view (feeds, watches, sources, action chains, run
-activity, feed items) renders through `console.table(rows, columns)` — the
-default styling. Don't hand-roll `console.log(f"  {a} | {b}")` rows.
+`console.table(rows, columns)` is the underlying renderer (labeled header,
+aligned divider, truncation) for every tabular surface; don't hand-roll
+`console.log(f"  {a} | {b}")` rows. Two layers sit on it:
 
-- `columns` is a `list[console.Column[T]]`; each `Column(label, render)`
-  pairs a header label with `render(row) -> str`, formatting straight off
-  the typed wire object (`FeedWire`, `WatchActionRunWire`, ...). Annotate the
-  list with the wire type so the lambdas stay typed.
+- **List views** (feed / watch / feed item / feed source / watch action /
+  activity / delivery) render through the dot-path `--columns` mechanic in
+  `commands/_shared/columns/` (`extract.py` parses a `HEADER:path` token and
+  renders a cell from the row's JSON; `options.py` declares the flag family;
+  `render.py` is the emit, `_emit_columns_paginated` / `_emit_columns_items`).
+  A view declares its defaults as `col("HEADER:path")` specs (an optional width
+  or a `fmt` per column); the table is a thin projection of the same record
+  `--jsonl` emits, so `--columns <paths>` / `--print-columns` / `--transpose`
+  fall out for free.
+- **Detail field tables** (`get` / `summary`, via `_print_detail`) build a
+  small `list[console.Column[T]]` by hand: each `Column(label, render)` pairs a
+  header with `render(row) -> str` off the typed wire object (`FeedWire`,
+  `WatchActionRunWire`, ...). Annotate the list with the wire type so the
+  lambdas stay typed.
+
 - `table` prints a labeled header + aligned dashed divider, pads columns to
   the widest cell so headers line up over values, and returns `False` for an
   empty set so the caller prints its own empty-state message.
@@ -195,7 +206,7 @@ Commands that create / edit server-side resources from operator-authored config 
 
 - `magpie watch create -f watch.yaml`
 - `magpie watch create -f -` (stdin)
-- `magpie watch create` (opens `$EDITOR` on the template via `typer.edit`)
+- `magpie watch create` (opens `$EDITOR` on the template via the stdlib editor helper `_open_editor_or_abort` in `_shared/files.py` - NOT `typer.edit`, which typer 0.26 dropped)
 - `magpie watch template` emits the skeleton to stdout for piping or redirecting
 
 A creating command validates server-side before it mutates: it POSTs once with `?dry_run=true` (server runs the identical serializer/service validation and returns the would-be record without persisting), prints a preview, then prompts to confirm. `--dry-run` stops after the preview; `--yes` skips the prompt and is required when stdin is not a TTY so a pipe can't silently create. Dry-run is a parameter on the real endpoint, not a separate validate route, so the preview's *validation* cannot drift from the create path. It is a validation preview, not a create-success guarantee (persistence can still fail).

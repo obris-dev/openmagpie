@@ -263,9 +263,8 @@ def _edit_seed(detail: FeedView) -> FeedEnvelope:
     body = detail.model_dump()
     # Pop the non-config fields so the seed is editable knobs only: `sources`
     # (see above; edited via `feed source set`/`delete`) and the read-only /
-    # server-computed projections source_count / summary / recent_items (the
-    # item log, read via `feed item list`).
-    for key in ("sources", "source_count", "recent_items", "summary"):
+    # server-computed projections source_count / summary.
+    for key in ("sources", "source_count", "summary"):
         body.pop(key, None)
     return FeedEnvelope.model_validate(body)
 

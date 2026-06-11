@@ -114,6 +114,8 @@ WatchDigestFlushOperation(window, now=now).run()  # emit one digest batch
 
 Each model carries queryable common fields top-level + a `data`/`config`/`result` `JSONField` whose schema is owned by a Pydantic class (registered per `kind`). The shared classes live in `packages/openmagpie-schema` so the server and CLI validate against one definition.
 
+**Convention for those Pydantic classes: a mutable field default is `Field(default_factory=...)`, never a bare `[]` / `{}` / `Model()`.** Pydantic v2 deep-copies bare defaults so they are not a shared-mutable-state bug, but the package is uniform on `default_factory` (see `watch.py`, `feed.py`); keep new fields consistent. Immutable defaults (`0`, `""`, `None`, a `Literal`) stay inline.
+
 - **`Feed.data`** is validated by a Pydantic config keyed off `Feed.kind` (see `feeds.registry`). v1 kind is `"curated"` -> `CuratedFeedConfig` (retention + default_field_map). The actual source set lives on `feeds.Source` rows; each row owns its own watermark. The Feed owns the poll loop.
 - **`WatchAction.config`** is the PURE kind-specific blob; the discriminator `kind` is a sibling column, NOT nested in the blob (k8s-style adjacent tag). Validated by `watches.registry` (kind -> config class): `semantic_filter` -> `SemanticFilterConfig`, `webhook` -> `WebhookConfig`, `log` -> `LogConfig`. Per-kind classes carry a `CONFIG_KIND` ClassVar and no `kind` field. Validation is a registry dict, NOT a Pydantic discriminated union.
 - **`WatchActionRun.result`** is the kind-specific result blob (validated per kind), stored for the run audit: `SemanticFilterResult {passed, score, reason}`, `WebhookResult {http_status}`, `LogResult {rendered}`.

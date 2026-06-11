@@ -98,14 +98,14 @@ class FeedListCreateView(FeedSvcMixin, AccountScopedAPIView):
         )
 
 
-class FeedDetailView(FeedItemSvcMixin, FeedScopedAPIView):
-    """GET / PUT / DELETE /v1/feeds/<id>, all account-scoped. GET is the
-    'sort by new and go' reader (feed + recent items, ?limit)."""
+class FeedDetailView(FeedScopedAPIView):
+    """GET / PUT / DELETE /v1/feeds/<id>, all account-scoped. GET is the feed's
+    CONFIG detail (envelope + summary + sources); the item log is a separate
+    paginated route (`GET /v1/feeds/<id>/items`)."""
 
     def get(self, request, feed_id: str):
-        items = self.feed_item_svc.list_recent_items(self.feed, limit=parse_limit(request))
         return Response(
-            feed_view(self.feed, recent_items=items).model_dump(mode="json"),
+            feed_view(self.feed).model_dump(mode="json"),
             status=status.HTTP_200_OK,
         )
 
@@ -159,7 +159,7 @@ class FeedSourcesView(SourceSvcMixin, FeedScopedAPIView):
     Per-row DELETE lives on `FeedSourceDetailView` so the URL keys the
     target row directly. Single-row add is intentionally absent ; the
     create-time path is the inline `sources:` block on `feed create`,
-    and ongoing mutation is `export-sources -> edit -> set-sources`."""
+    and ongoing mutation is `feed source export -> edit -> feed source set`."""
 
     def get(self, request, feed_id: str):
         return Response(

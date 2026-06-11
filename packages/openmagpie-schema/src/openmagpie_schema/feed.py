@@ -72,7 +72,7 @@ class CuratedFeedConfig(FeedConfig):
     # Item-log retention window. Bounds checked in policy ([1, 365]).
     retention_days: int = 30
     # Connector-readable defaults; row-level `field_map` overrides per key.
-    default_field_map: dict[str, str] = {}
+    default_field_map: dict[str, str] = Field(default_factory=dict)
 
     model_config = {"extra": "ignore"}
 
@@ -100,7 +100,7 @@ class CuratedFeedConfig(FeedConfig):
 
 
 class SourceInput(BaseModel):
-    """One source on a feed-create or set-sources payload.
+    """One source on a feed-create or `feed source set` payload.
 
     `meta` is operator-supplied free-form tags; the recorder copies it
     onto each FeedItem the source produces. `field_map` overrides the
@@ -113,8 +113,8 @@ class SourceInput(BaseModel):
     backfill knob. Server policy rejects future values."""
 
     spec: SourceSpec
-    meta: dict[str, str] = {}
-    field_map: dict[str, str] = {}
+    meta: dict[str, str] = Field(default_factory=dict)
+    field_map: dict[str, str] = Field(default_factory=dict)
     last_event_at: datetime | None = None
 
 
@@ -128,8 +128,8 @@ class SourceWire(BaseModel):
 
     id: str
     spec: SourceSpec
-    meta: dict[str, str] = {}
-    field_map: dict[str, str] = {}
+    meta: dict[str, str] = Field(default_factory=dict)
+    field_map: dict[str, str] = Field(default_factory=dict)
     last_event_at: Any = None  # datetime | None; renderer encodes
     created_at: Any = None  # datetime | None; renderer encodes
 
@@ -182,7 +182,7 @@ class RssEntryPayload(FeedItemPayload):
     kind: Literal["rss_entry"]  # required, so a non-rss dump can't match here
     author: str = ""
     feed_url: str = ""
-    categories: list[str] = []
+    categories: list[str] = Field(default_factory=list)
 
 
 class NewRedditPostPayload(FeedItemPayload):
@@ -243,7 +243,7 @@ class FeedWire(BaseModel):
     next_poll_at: Any = None
     # creator, audit/display only (account-scoped reads, not an ownership filter)
     user_id: str
-    data: ConfigBlob = {}
+    data: ConfigBlob = Field(default_factory=dict)
     created_at: Any = None
 
 
@@ -254,7 +254,7 @@ class FeedListResponse(BaseModel):
     the next page; `next_cursor` is the id to send back, or null when the
     page wasn't full (= no more rows)."""
 
-    items: list[FeedWire] = []
+    items: list[FeedWire] = Field(default_factory=list)
     next_cursor: str | None = None
 
 
@@ -265,21 +265,21 @@ class FeedItemListResponse(BaseModel):
     next page; `next_cursor` is the id to send back, or null when the page wasn't
     full (= no more rows)."""
 
-    items: list[FeedItemWire] = []
+    items: list[FeedItemWire] = Field(default_factory=list)
     next_cursor: str | None = None
 
 
 class FeedView(FeedWire):
-    """`GET /v1/feeds/<id>` - read view: envelope + display `summary` +
-    the recent item log (this is the "sort by new and go" surface; the
-    detail endpoint IS the reader, no separate route needed)."""
+    """`GET /v1/feeds/<id>` - the feed's CONFIG detail: the kind-independent
+    envelope + display `summary` + its currently-attached Source rows. The item
+    log is NOT carried here; it has its own paginated route
+    (`GET /v1/feeds/<id>/items`, the `feed item list` reader)."""
 
-    summary: FeedConfigSummary = FeedConfigSummary()
-    recent_items: list[FeedItemWire] = []
+    summary: FeedConfigSummary = Field(default_factory=FeedConfigSummary)
     # The feed's currently-attached Source rows. Populated on GET-detail
     # so a single call shows everything the operator wants to see; list
     # pages keep their bare wire to avoid per-row joins.
-    sources: list[SourceWire] = []
+    sources: list[SourceWire] = Field(default_factory=list)
     source_count: int = 0
 
 
@@ -291,8 +291,8 @@ class FeedMutationResponse(FeedWire):
     source list without an extra GET."""
 
     id: str | None = None
-    summary: FeedConfigSummary = FeedConfigSummary()
-    sources: list[SourceWire] = []
+    summary: FeedConfigSummary = Field(default_factory=FeedConfigSummary)
+    sources: list[SourceWire] = Field(default_factory=list)
     source_count: int = 0
     dry_run: bool
 
@@ -311,10 +311,10 @@ class SourceSetResult(BaseModel):
 
 
 class SourceSetPayload(BaseModel):
-    """Round-trip file format for `magpie feed export-sources` /
-    `magpie feed set-sources`. Operators or their scrape scripts can
+    """Round-trip file format for `magpie feed source export` /
+    `magpie feed source set`. Operators or their scrape scripts can
     construct this directly; the bare `list[SourceInput]` shape is
     also accepted on input for hand-rolled cases."""
 
     version: Literal["v1"] = "v1"
-    sources: list[SourceInput] = []
+    sources: list[SourceInput] = Field(default_factory=list)

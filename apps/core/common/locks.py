@@ -92,7 +92,7 @@ def poll_lock(feed_id: str) -> AbstractContextManager[LockLease]:
 def feed_set_lock(feed_id: str) -> AbstractContextManager[LockLease]:
     """Serialize concurrent `SourceService.set_sources` on one feed.
 
-    Two operators racing `magpie feed set-sources` on the same feed
+    Two operators racing `magpie feed source set` on the same feed
     each snapshot the existing rows independently and compute
     `removed = existing - desired`. The loser's removed set can drop
     rows the winner just added or kept, and both report success. The

@@ -40,8 +40,10 @@ local-exec: ## Run a command in a container (e.g. make local-exec SVC=core CMD="
 local-manage: ## Run Django manage.py command (e.g. make local-manage CMD=shell)
 	$(MAKE) local-exec SVC=core CMD="uv run --package openmagpie-core python apps/core/manage.py $(CMD)"
 
-local-test: ## Run Django test suite
-	$(MAKE) local-manage CMD=test
+local-test: ## Run Django test suite (auto-discovers every app)
+	# Run from apps/core: the apps are importable as top-level there, so Django's
+	# test discovery finds them all. From the repo-root cwd it finds zero.
+	docker compose exec core sh -c 'cd apps/core && uv run --package openmagpie-core python manage.py test --noinput'
 
 local-makemigrations: ## Generate Django migration files (e.g. make local-makemigrations ARGS="myapp")
 	$(MAKE) local-manage CMD="makemigrations $(ARGS)"

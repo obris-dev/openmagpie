@@ -95,9 +95,8 @@ jobs:
           enable-cache: true
       - name: Sync workspace
         run: uv sync --all-packages --frozen
-      # Bare `test` discovers nothing from the repo-root cwd ; pass the app
-      # labels explicitly (every LOCAL_APP, all of which carry tests).
+      # Run from apps/core so Django's test discovery finds every app (they are
+      # importable as top-level there); no hardcoded app list to drift out of date.
       - name: Tests
-        run: >-
-          uv run --package openmagpie-core python apps/core/manage.py test --noinput
-          common accounts auth_api sources feeds engine watches
+        working-directory: apps/core
+        run: uv run --package openmagpie-core python manage.py test --noinput

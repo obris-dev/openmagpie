@@ -15,7 +15,7 @@ from ...http import ApiError, AuthError
 
 def _handle_api_errors[T](fn: Callable[..., T]) -> Callable[..., T]:
     """Translate the transport failure modes into one clean CLI exit, at
-    the command boundary. Command bodies just call `ac.api.*` directly —
+    the command boundary. Command bodies just call `ac.api.*` directly -
     no thunks. `typer.Exit` (confirm-aborts, the persistence sanity
     guards) is NOT caught, so it propagates normally. `ApiError` goes
     through `_print_api_error` so 400 field errors and structured
@@ -44,7 +44,7 @@ def _print_api_error(e: ApiError) -> None:
     On 400 the body is the serializer's flat `{path: [messages]}` shape
     (`{"data": {"streams[0].spec.kind": ["..."]}}`); walk it and print
     one line per leaf. Non-400 (404/409/5xx) carry a structured
-    `{"error","detail"}`; surface the `detail`/`error` string only —
+    `{"error","detail"}`; surface the `detail`/`error` string only -
     never the whole body, which can carry tokens on other endpoints.
     """
     if e.status == 400 and isinstance(e.body, dict):
