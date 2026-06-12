@@ -1,6 +1,7 @@
 import logging
+import math
 import time
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from datetime import UTC, datetime
 from typing import Any
 
@@ -41,6 +42,65 @@ MAX_PAGES = 10
 # the RSS connector's 5MB ceiling because Reddit pages 100 posts each ;
 # left generous for any rich Atom payloads.
 MAX_BODY_BYTES = 5 * 1024 * 1024
+
+# Reddit rate-limits the anonymous endpoint by IP and answers 429, usually
+# with a Retry-After. That's "slow down", not "broken": retry the SAME page
+# after the wait it asked for (exponential fallback when the header is
+# absent or unparseable) instead of aborting the source's cycle, which
+# would also roll straight into hammering the sibling subreddit sources.
+# Exhausted retries fall through to `raise_for_status()`, the existing
+# recoverable per-source error path. The cap keeps a hostile / buggy
+# header from stalling a poll worker for minutes.
+MAX_RATE_LIMIT_RETRIES = 5
+RATE_LIMIT_BACKOFF_BASE_SECONDS = 2.0  # 2s..32s over the 5 retries when Retry-After is absent
+RATE_LIMIT_DELAY_CAP_SECONDS = 60.0
+
+# Backoff sleeps tick the caller's `heartbeat` at this cadence so the poll
+# lease renews DURING the wait, not just between sources (the lease detects
+# dead holders; a deliberate wait is alive). Far inside the lease window
+# (POLL_LOCK_TIMEOUT_SECONDS, 600s), so even a worst-case stack of full
+# 60s waits never lets the lease lapse mid-source.
+HEARTBEAT_SLEEP_CHUNK_SECONDS = 15.0
+
+
+def _rate_limit_delay(retry_after: str | None, attempt: int) -> float:
+    """Seconds to wait before retrying a 429'd page: the numeric Retry-After
+    when Reddit sent one, else exponential in the attempt number. Retry-After's
+    HTTP-date form parses as non-numeric and falls back to the exponential.
+
+    The header value is accepted only when finite and positive. "nan" must be
+    screened explicitly: float("nan") parses, every comparison against it is
+    False (so a `<= 0` guard passes it and `min(nan, cap)` returns nan, since
+    min keeps the first argument on a False comparison), and time.sleep(nan)
+    then raises a ValueError that is OUTSIDE the polling orchestrator's
+    recoverable set - aborting the feed's whole cycle, every cycle."""
+    delay: float | None = None
+    if retry_after:
+        try:
+            parsed = float(retry_after)
+        except ValueError:
+            parsed = None
+        if parsed is not None and math.isfinite(parsed) and parsed > 0:
+            delay = parsed
+    if delay is None:
+        delay = RATE_LIMIT_BACKOFF_BASE_SECONDS * (2**attempt)
+    return min(delay, RATE_LIMIT_DELAY_CAP_SECONDS)
+
+
+def _sleep_with_heartbeat(total: float, heartbeat: Callable[[], bool] | None) -> None:
+    """Sleep `total` seconds, ticking `heartbeat` every chunk so the
+    caller's poll lease renews through the wait. The return value is
+    deliberately ignored (see the Connector.poll contract). No heartbeat
+    (direct calls / tests) = one plain sleep."""
+    if heartbeat is None:
+        time.sleep(total)
+        return
+    remaining = total
+    while remaining > 0:
+        chunk = min(remaining, HEARTBEAT_SLEEP_CHUNK_SECONDS)
+        time.sleep(chunk)
+        remaining -= chunk
+        heartbeat()
 
 
 def _entry_published(entry: Any) -> datetime | None:
@@ -93,11 +153,50 @@ class RedditSubRedditConnector(BaseConnector[RedditSubredditSourceSpec]):
     # payload. Reddit has no cheaper exact-count path, so we don't
     # override it.
 
+    def _get_page(
+        self,
+        client: httpx.Client,
+        url: str,
+        params: dict[str, str | int],
+        heartbeat: Callable[[], bool] | None,
+    ) -> bytes:
+        """GET one /new.rss page, sleeping out 429s (see the rate-limit
+        constants above) with the poll lease heartbeat ticking through each
+        wait. Any other status raises via `raise_for_status`, and so does a
+        429 once the retries are exhausted, landing both in the polling
+        orchestrator's recoverable per-source path - which leaves the
+        source's watermark UNTOUCHED, so nothing is lost to a throttled
+        cycle ; the next cycle re-reads from the same watermark.
+
+        The retry itself logs INFO: a honored rate limit is the system
+        working, not a fault, and must not page anyone. The fault signal
+        (retries exhausted) is the orchestrator's per-source WARNING, fed
+        by the raise here."""
+        attempt = 0
+        while True:
+            with client.stream("GET", url, params=params) as response:
+                if response.status_code != 429 or attempt >= MAX_RATE_LIMIT_RETRIES:
+                    response.raise_for_status()
+                    return read_response_capped(response, max_bytes=MAX_BODY_BYTES, url_label=url)
+                delay = _rate_limit_delay(response.headers.get("Retry-After"), attempt)
+            # Sleep AFTER the `with` closes the 429 response, so the wait
+            # never pins the streamed connection open.
+            logger.info(
+                "%s rate limited (429); retrying in %.0fs (attempt %d/%d)",
+                url,
+                delay,
+                attempt + 1,
+                MAX_RATE_LIMIT_RETRIES,
+            )
+            _sleep_with_heartbeat(delay, heartbeat)
+            attempt += 1
+
     def poll(
         self,
         spec: RedditSubredditSourceSpec,
         since: datetime | None,
         field_map: dict[str, str] | None = None,
+        heartbeat: Callable[[], bool] | None = None,
     ) -> Iterator[NewRedditPostPayload]:
         # Reddit Atom carries fixed, non-overridable fields ; the
         # connector ignores `field_map` (the Connector contract
@@ -108,7 +207,12 @@ class RedditSubRedditConnector(BaseConnector[RedditSubredditSourceSpec]):
         del field_map
         subreddit = spec.subreddit
         if not subreddit:
-            raise ValueError(f"RedditSubredditSourceSpec missing subreddit: {spec}")
+            # ConnectorParseError, NOT ValueError: only _RECOVERABLE_ERRORS
+            # degrade to a failed source at the polling seam. A bare
+            # ValueError would abort the WHOLE feed cycle on one bad row
+            # (skipping every later source and update_poll_state), exactly
+            # what the per-source contract exists to prevent.
+            raise ConnectorParseError(f"RedditSubredditSourceSpec missing subreddit: {spec}")
 
         # `/new` is sorted newest -> oldest. Reddit has no server-side `since`
         # filter; the early-return on strict `payload.occurred_at < since` works
@@ -135,9 +239,7 @@ class RedditSubRedditConnector(BaseConnector[RedditSubredditSourceSpec]):
                 if after:
                     params["after"] = after
 
-                with client.stream("GET", url, params=params) as response:
-                    response.raise_for_status()
-                    body = read_response_capped(response, max_bytes=MAX_BODY_BYTES, url_label=url)
+                body = self._get_page(client, url, params, heartbeat)
 
                 parsed = feedparser.parse(body)
                 # Gate on `not version`: real feeds set `version`

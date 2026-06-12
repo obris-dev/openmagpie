@@ -101,36 +101,30 @@ class _PolledSource:
 
     Keeps the poll loop streaming (no list materialization) while still
     surfacing the count + watermark the caller needs for progress + the
-    per-source watermark advance. A recoverable error while pulling the
-    next payload (one malformed payload, a paging hiccup) skips that
-    one item ; the rest of the source's items still flow through to
-    record_items.
+    per-source watermark advance.
+
+    Failure semantics: ANY error while pulling the next payload propagates
+    to the per-source handler ; the source counts as failed and its
+    watermark stays put. No partial-success arm, for two reasons. A
+    connector `poll()` is a generator, so the error CLOSES it ; nothing
+    more can flow this cycle no matter what we do here. And advancing the
+    watermark over a partial stream LOSES DATA on newest-first sources
+    (Reddit /new): the prefix that flowed is the newest posts, so a
+    watermark moved to its head strands every unreached older-but-new post
+    below it, permanently. Keeping the watermark makes the failed cycle
+    free: the next cycle re-reads from the same point and the external_id
+    dedup absorbs anything that was already recorded. A CLEAN end with
+    zero observed (a quiet source, nothing past the watermark) raises
+    nothing and stays a success.
     """
 
     def __init__(self, payloads: Iterator[SourcePayload], *, initial_newest: datetime) -> None:
         self._payloads = payloads
         self.newest = _ensure_aware(initial_newest)
         self.observed = 0
-        self.dropped = 0
 
     def __iter__(self) -> Iterator[SourcePayload]:
-        payload_iter = iter(self._payloads)
-        while True:
-            try:
-                payload = next(payload_iter)
-            except StopIteration:
-                return
-            except _RECOVERABLE_ERRORS as exc:
-                # Per-payload guard: a single malformed payload (or a
-                # transient HTTP hiccup mid-pagination) skips one item
-                # instead of aborting the rest of the source this cycle.
-                self.dropped += 1
-                logger.warning(
-                    "dropped payload: %s: %s",
-                    type(exc).__name__,
-                    exc,
-                )
-                continue
+        for payload in self._payloads:
             self.observed += 1
             occurred_at = _ensure_aware(payload.occurred_at)
             if occurred_at > self.newest:
@@ -275,8 +269,11 @@ class FeedPollOperation:
         don't read field_map accept and ignore it."""
         field_map = {**self.config.default_field_map, **(source.field_map or {})}
         connector = source_registry.get(spec.kind)
+        # heartbeat: the lease tick the run loop fires between sources, ALSO
+        # handed to the connector so a long intentional wait inside one
+        # source (rate-limit backoff sleeps) keeps renewing the poll lease.
         payload_iter = _PolledSource(
-            connector.poll(spec, since=source.last_event_at, field_map=field_map),
+            connector.poll(spec, since=source.last_event_at, field_map=field_map, heartbeat=self.heartbeat),
             initial_newest=source.last_event_at,
         )
         recorded = self.feed_item_svc.record_items(

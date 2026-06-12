@@ -1,4 +1,4 @@
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from datetime import datetime
 from typing import Protocol
 
@@ -66,6 +66,7 @@ class Connector[SpecT: BaseModel](Protocol):
         spec: SpecT,
         since: datetime | None,
         field_map: dict[str, str] | None = None,
+        heartbeat: Callable[[], bool] | None = None,
     ) -> Iterator[SourcePayload]:
         """Yield typed SourcePayloads for one source, newer than `since`.
 
@@ -74,7 +75,17 @@ class Connector[SpecT: BaseModel](Protocol):
         Source row's `field_map` (row wins per key) and passes the
         result. Connectors that don't read it (e.g. Reddit) accept and
         ignore. Recognized keys are per-connector; unknown keys are
-        silently dropped. None == empty dict."""
+        silently dropped. None == empty dict.
+
+        `heartbeat` is a liveness tick for long INTENTIONAL waits (e.g.
+        sleeping out a rate limit): call it every several seconds mid-wait
+        so the orchestrator can renew its poll lease ; the lease detects
+        dead holders, and a deliberate wait is alive. Connectors IGNORE
+        its return value: lease loss is handled at the orchestrator's
+        between-source seam, renewing a lost lease is a no-op, and the
+        worst case of finishing the source anyway is redundant idempotent
+        work. Connectors with no long waits accept and ignore. None == no
+        liveness to report (direct calls / tests)."""
         ...
 
     def count(
@@ -124,5 +135,6 @@ class BaseConnector[SpecT: BaseModel]:
         spec: SpecT,
         since: datetime | None,
         field_map: dict[str, str] | None = None,
+        heartbeat: Callable[[], bool] | None = None,
     ) -> Iterator[SourcePayload]:  # pragma: no cover - subclass responsibility
         raise NotImplementedError

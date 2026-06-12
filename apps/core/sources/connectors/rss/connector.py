@@ -11,7 +11,7 @@ import ipaddress
 import logging
 import socket
 import ssl
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from datetime import datetime
 
 import feedparser
@@ -188,6 +188,9 @@ class RssConnector(ChallengeBypassMixin, BaseConnector[RssSourceSpec]):
         spec: RssSourceSpec,
         since: datetime | None,
         field_map: dict[str, str] | None = None,
+        # Accepted per the Connector contract; unused, this connector has no
+        # long waits to tick a heartbeat through (single fetch, no retry sleeps).
+        heartbeat: Callable[[], bool] | None = None,
     ) -> Iterator[RssEntryPayload]:
         field_map = field_map or {}
 

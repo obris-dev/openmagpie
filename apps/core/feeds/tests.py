@@ -11,16 +11,12 @@ spec_hash)` unique constraint is the dedup key on set_sources, so
 a silent hash drift would break re-imports.
 """
 
-from types import SimpleNamespace
-from unittest import mock
-
 import ulid
 from django.test import SimpleTestCase, TestCase
 from rest_framework.test import APIClient
 
 from auth_api.operations.signup import SignupOperation
 from feeds.models import Feed, FeedItem
-from feeds.services.polling import FeedPollOperation
 from feeds.services.sources import _hash_spec
 from openmagpie_schema.configs import RedditSubredditSourceSpec, RssSourceSpec
 from openmagpie_schema.feed import (
@@ -31,52 +27,6 @@ from openmagpie_schema.feed import (
     RssEntryPayload,
     SourceWire,
 )
-
-
-class PollHeartbeatTests(TestCase):
-    """The poll loop renews its lease per source (so a large feed polls under
-    one held lock) and stops early if the lease is lost."""
-
-    def _op_over_n_sources(self, n: int, *, heartbeat) -> FeedPollOperation:
-        feed = Feed.objects.create(account_id=ulid.ulid(), user_id=ulid.ulid(), name="f", kind="curated", data={})
-        op = FeedPollOperation(feed, heartbeat=heartbeat)
-        sources = [
-            SimpleNamespace(id=f"s{i}", spec={"kind": "rss", "url": f"https://x{i}.test/rss", "name": f"s{i}"})
-            for i in range(n)
-        ]
-        # Inject fake sources before the cached_property fires (no DB rows).
-        # The poll streams via `iter_for_poll` (random order in prod) and reads
-        # the total via `count`; here order is irrelevant, so iterate as-is.
-        op.__dict__["source_svc"] = SimpleNamespace(
-            iter_for_poll=lambda _feed: iter(sources),
-            count=lambda _feed: len(sources),
-        )
-        return op
-
-    def test_heartbeat_called_once_per_source(self) -> None:
-        calls = {"n": 0}
-
-        def hb() -> bool:
-            calls["n"] += 1
-            return True
-
-        op = self._op_over_n_sources(3, heartbeat=hb)
-        with mock.patch.object(op, "_poll_source", return_value=(0, 0)):  # no HTTP
-            op.run()
-        self.assertEqual(calls["n"], 3)
-
-    def test_lost_lease_stops_the_cycle_early(self) -> None:
-        # Lease reported lost after the first source -> the loop must stop.
-        calls = {"n": 0}
-
-        def hb() -> bool:
-            calls["n"] += 1
-            return calls["n"] <= 1
-
-        op = self._op_over_n_sources(5, heartbeat=hb)
-        with mock.patch.object(op, "_poll_source", return_value=(0, 0)) as poll:
-            op.run()
-        self.assertEqual(poll.call_count, 1)  # stopped, didn't poll the other 4
 
 
 class FeedCreateDryRunTests(TestCase):

@@ -2,15 +2,18 @@ from typing import Literal, get_args, get_origin
 from unittest import mock
 
 import feedparser
+import httpx
 from django.test import SimpleTestCase
 from pydantic import BaseModel
 
-from openmagpie_schema.configs import RssSourceSpec
+from openmagpie_schema.configs import RedditSubredditSourceSpec, RssSourceSpec
 from openmagpie_schema.feed import FeedItemData
 from sources import (
     payload_registry,
     registry,  # noqa: F401  pulls in the connectors, which self-register their payloads
 )
+from sources.connectors.base import ConnectorParseError
+from sources.connectors.reddit.connector import RedditSubRedditConnector
 from sources.connectors.rss.connector import RssConnector, _unwrap_xml_viewer
 
 # A minimal RSS feed and the Chromium XML-viewer HTML wrapper FlareSolverr
@@ -86,6 +89,111 @@ class ChallengeBypassRecoveryTests(SimpleTestCase):
         ):
             payloads = list(RssConnector().poll(spec, since=None))
         self.assertEqual([p.title for p in payloads], ["One", "Two"])
+
+
+class RedditRateLimitBackoffTests(SimpleTestCase):
+    """The Reddit connector sleeps out 429s instead of aborting the source:
+    Retry-After drives the wait when present, exponential backoff when not,
+    the poll-lease heartbeat ticks through each wait, and exhausted retries
+    surface as the normal HTTPStatusError so the polling orchestrator's
+    recoverable per-source path stays the one fault signal."""
+
+    _SPEC = RedditSubredditSourceSpec(kind="reddit_subreddit", subreddit="devops")
+    # Valid-but-empty Atom: exercises the fetch/retry seam without needing
+    # full Reddit entry fixtures (poll returns no payloads on an empty page).
+    _EMPTY_ATOM = b'<?xml version="1.0"?><feed xmlns="http://www.w3.org/2005/Atom"></feed>'
+
+    def _poll_with(
+        self,
+        responses: list[httpx.Response],
+        sleeps: list[float] | None = None,
+        heartbeat=None,
+    ) -> tuple[list, list[float]]:
+        """Run one poll against a canned response sequence, capturing the
+        backoff sleeps. Returns (payloads, sleep durations). Pass `sleeps`
+        to own the capture list when the poll is expected to raise."""
+        queue = list(responses)
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            return queue.pop(0)
+
+        transport = httpx.MockTransport(handler)
+        real_client = httpx.Client
+        captured: list[float] = sleeps if sleeps is not None else []
+        with (
+            mock.patch(
+                "sources.connectors.reddit.connector.httpx.Client",
+                lambda **kw: real_client(transport=transport, **kw),
+            ),
+            mock.patch("sources.connectors.reddit.connector.time.sleep", side_effect=captured.append),
+        ):
+            payloads = list(RedditSubRedditConnector().poll(self._SPEC, since=None, heartbeat=heartbeat))
+        return payloads, captured
+
+    def test_retry_after_drives_the_wait_then_page_succeeds(self) -> None:
+        payloads, sleeps = self._poll_with(
+            [
+                httpx.Response(429, headers={"Retry-After": "3"}),
+                httpx.Response(200, content=self._EMPTY_ATOM),
+            ]
+        )
+        self.assertEqual(payloads, [])
+        self.assertEqual(sleeps, [3.0])
+
+    def test_unusable_retry_after_falls_back_to_exponential(self) -> None:
+        payloads, sleeps = self._poll_with(
+            [
+                httpx.Response(429),
+                httpx.Response(429, headers={"Retry-After": "Wed, 21 Oct 2026 07:28:00 GMT"}),
+                # float("nan") PARSES; without the isfinite screen it sails
+                # through every comparison into time.sleep(nan), whose
+                # ValueError is outside the recoverable set and aborts the
+                # feed's whole cycle. "inf" likewise must not become a wait.
+                httpx.Response(429, headers={"Retry-After": "nan"}),
+                httpx.Response(429, headers={"Retry-After": "inf"}),
+                httpx.Response(429, headers={"Retry-After": "-5"}),
+                httpx.Response(200, content=self._EMPTY_ATOM),
+            ]
+        )
+        self.assertEqual(payloads, [])
+        # Absent, HTTP-date, nan, inf, negative: every unusable header takes
+        # the exponential arm, base * 2^attempt, capped at the delay ceiling.
+        self.assertEqual(sleeps, [2.0, 4.0, 8.0, 16.0, 32.0])
+
+    def test_exhausted_retries_raise_http_status_error(self) -> None:
+        from sources.connectors.reddit.connector import MAX_RATE_LIMIT_RETRIES
+
+        with self.assertRaises(httpx.HTTPStatusError):
+            self._poll_with([httpx.Response(429, headers={"Retry-After": "1"})] * (MAX_RATE_LIMIT_RETRIES + 1))
+
+    def test_missing_subreddit_raises_a_recoverable_error(self) -> None:
+        # ConnectorParseError is in the polling seam's _RECOVERABLE_ERRORS,
+        # so one bad spec row degrades to a failed source; a bare ValueError
+        # here would abort the whole feed cycle for every later source.
+        spec = RedditSubredditSourceSpec(kind="reddit_subreddit", subreddit="")
+        with self.assertRaises(ConnectorParseError):
+            list(RedditSubRedditConnector().poll(spec, since=None))
+
+    def test_heartbeat_ticks_through_the_wait(self) -> None:
+        # A 60s wait sleeps in HEARTBEAT_SLEEP_CHUNK_SECONDS (15s) chunks,
+        # ticking the heartbeat after each so the poll lease renews DURING
+        # the backoff, not just between sources.
+        ticks = {"n": 0}
+
+        def hb() -> bool:
+            ticks["n"] += 1
+            return True
+
+        payloads, sleeps = self._poll_with(
+            [
+                httpx.Response(429, headers={"Retry-After": "60"}),
+                httpx.Response(200, content=self._EMPTY_ATOM),
+            ],
+            heartbeat=hb,
+        )
+        self.assertEqual(payloads, [])
+        self.assertEqual(sleeps, [15.0, 15.0, 15.0, 15.0])
+        self.assertEqual(ticks["n"], 4)
 
 
 class FeedItemPayloadParityTests(SimpleTestCase):
