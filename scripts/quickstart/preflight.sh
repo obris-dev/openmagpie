@@ -78,6 +78,7 @@ else
 fi
 
 # Docker: installed -> Compose plugin -> daemon running. Name the failing stage.
+docker_ok=""
 if ! command -v docker >/dev/null 2>&1; then
     miss "Docker" "$(docker_install_hint)"
 elif ! docker compose version >/dev/null 2>&1; then
@@ -93,6 +94,57 @@ elif compose_too_old; then
         "Compose < ${COMPOSE_MIN_MAJOR}.${COMPOSE_MIN_MINOR} hangs 'up --wait' on the one-shot core-setup. Update Docker Desktop / the Compose plugin: $(docker_install_hint)"
 else
     pass "Docker + Compose ${compose_ver:-} (daemon running)"
+    docker_ok=1
+fi
+
+# Registry access for the ghcr.io images the stack pulls. SILENT when fine
+# (no checklist line): this isn't a tool to install, it's machine state
+# that's almost always healthy. The failure it catches: a stored-but-stale
+# `docker login ghcr.io` credential shadows anonymous pulls of PUBLIC
+# images - ghcr answers the token fetch with 403 instead of falling back -
+# and without this check that surfaces minutes later, mid
+# `docker compose up --build`, with no hint that `docker logout ghcr.io`
+# is the fix. The probe is manifest metadata only (no pull); an
+# already-cached image skips it (compose won't hit the registry for it);
+# and ONLY the auth signature fails the preflight - any other probe
+# failure (offline, registry blip) stays silent, so a flaky network can't
+# false-block a run whose images may all be cached anyway.
+# The ghcr.io image refs in docker-compose.yml, one per line (quoted or bare).
+ghcr_images() {
+    sed -n 's/^[[:space:]]*image:[[:space:]]*["'\'']\{0,1\}\(ghcr\.io[^"'\''[:space:]]*\).*/\1/p' "$1" | sort -u
+}
+
+# Probe one image's manifest (metadata only, no pull). Exits with docker's
+# status and emits the ERROR text on stdout: `2>&1` routes stderr into the
+# capture while `>/dev/null` discards the manifest JSON - the redirection
+# ORDER is load-bearing - so a caller gets reachability and the failure
+# text from a single call.
+ghcr_manifest_error() {
+    # shellcheck disable=SC2069  # stderr-only on purpose, not a botched "both"
+    docker manifest inspect "$1" 2>&1 >/dev/null
+}
+
+if [ -n "$docker_ok" ]; then
+    repo_root="$(cd "$(dirname "$0")/../.." && pwd)"
+    compose_yml="$repo_root/docker-compose.yml"
+    if [ -f "$compose_yml" ]; then
+        # Image refs are single words (no spaces), so for-over-words is safe
+        # here ; a `| while read` loop would subshell away `fixes`.
+        # shellcheck disable=SC2013
+        for img in $(ghcr_images "$compose_yml"); do
+            if docker image inspect "$img" >/dev/null 2>&1; then
+                continue  # cached locally; compose won't hit the registry
+            fi
+            if probe_err="$(ghcr_manifest_error "$img")"; then
+                continue  # anonymously reachable; nothing to say
+            fi
+            case "$probe_err" in
+                *403* | *unauthorized* | *denied* | *"failed to authorize"*)
+                    miss "registry access: $img" \
+                        "A stored Docker login for ghcr.io is shadowing anonymous pulls of public images (403 on the token fetch). Clear it: docker logout ghcr.io" ;;
+            esac
+        done
+    fi
 fi
 
 # uv lands in ~/.local/bin by default, which may not be on PATH in this shell.
