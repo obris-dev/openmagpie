@@ -21,12 +21,15 @@ from .files import _maybe_to_file
 
 def _print_detail(header: str, fields: list[tuple[str, str]]) -> None:
     """A key/value detail table (the `get` views' shape): a header line then a
-    2-column FIELD / VALUE table. Shared by the activity / delivery `get`
-    renderers ; a caller adds any extras (e.g. a delivery's request payload)
-    after."""
+    2-column FIELD / VALUE table. Shared by the activity / delivery / action
+    `get` renderers ; a caller adds any extras (e.g. a delivery's request
+    payload) after. VALUE is uncapped (width=0): a `get` is the drill-down END
+    of the list -> get path, so it shows scalar facts (a reason, a url) in
+    full and lets the terminal soft-wrap ; truncation + its escape hatches
+    (`--transpose`, `--jsonl`) belong to the list views."""
     cols: list[console.Column[tuple[str, str]]] = [
         console.Column("FIELD", lambda kv: kv[0], width=12),
-        console.Column("VALUE", lambda kv: kv[1]),
+        console.Column("VALUE", lambda kv: kv[1], width=0),
     ]
     console.header(header)
     console.table(fields, cols)

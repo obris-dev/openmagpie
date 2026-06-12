@@ -268,7 +268,11 @@ def _print_watch(obj: WatchMutationResponse | WatchView, title: str) -> None:
     ]
     config_columns: list[console.Column[tuple[str, str]]] = [
         console.Column("FIELD", lambda kv: kv[0], width=16),
-        console.Column("VALUE", lambda kv: kv[1], width=64),
+        # Uncapped: `feeds` is comma-joined feed ids, and there is no other
+        # command that lists a watch's feed ids in full, so hiding them behind
+        # an ellipsis strands the user. (Unlike feed get's `sources`, which is
+        # a deliberate summary backed by `feed source list`.)
+        console.Column("VALUE", lambda kv: kv[1], width=0),
     ]
     console.table(config_rows, config_columns)
     if not obj.actions:
