@@ -9,6 +9,18 @@ and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2
 
 ### Added
 
+- Personal access tokens for headless / no-browser CLI login. Mint one on the
+  server with the `issue_cli_token` management command (on the local stack:
+  `make local-manage CMD="issue_cli_token --email <e> --name <n>"`), then sign in
+  with `magpie auth login --token` (reads the token from piped stdin or a hidden
+  prompt, never argv; persisted to `~/.magpie` at `0600`). For CI, set
+  `MAGPIE_TOKEN=mgp_...` in the environment instead: it's read as an ambient credential
+  on every request (precedence over a stored login, never persisted), the `GH_TOKEN`
+  pattern, no login step. Tokens are hashed at rest, named,
+  and individually revocable via `magpie auth token list` / `create` / `revoke` or
+  `DELETE /v1/auth/cli-tokens/<id>`; a token can't mint another token (browser
+  login required to create). This unblocks running magpie on a box where the
+  device-flow URL (the web app on `:3001`) is not reachable.
 - One-command quickstart, replacing `make quickstart` / `make local-seed`.
   `curl -fsSL https://openmagpie.ai | sh` clones the repo and runs the make-free
   installer (`scripts/quickstart/run.sh`): it checks Docker, builds the stack,

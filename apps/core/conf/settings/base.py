@@ -202,7 +202,11 @@ REST_FRAMEWORK = {
     # Our custom auth (Bearer OR auth_token cookie) is the only auth scheme
     # in v0; permission gating is per-view via `IsAuthenticated`. No DRF
     # session auth, so CSRF is not enforced on our APIViews.
+    # Order matters: the PAT class owns the `mgp_` bearer prefix and
+    # returns None for everything else, so non-PAT bearers + cookies fall
+    # through to BearerOrCookieAuthentication.
     "DEFAULT_AUTHENTICATION_CLASSES": [
+        "auth_api.authentication.PersonalAccessTokenAuthentication",
         "auth_api.authentication.BearerOrCookieAuthentication",
     ],
     "DEFAULT_PERMISSION_CLASSES": [],

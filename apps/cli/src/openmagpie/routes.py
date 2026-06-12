@@ -41,6 +41,13 @@ class auth:
         refresh = f"{_AUTH}/tokens/refresh"
         revoke = f"{_AUTH}/tokens/revoke"
 
+    # Personal access tokens (long-lived CLI credentials).
+    cli_tokens = f"{_AUTH}/cli-tokens"
+
+    @staticmethod
+    def cli_token(token_id: str) -> str:
+        return f"{_AUTH}/cli-tokens/{token_id}"
+
 
 class feeds:
     """`/v1/feeds/*` routes the CLI consumes."""

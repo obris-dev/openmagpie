@@ -92,6 +92,20 @@ class Config(BaseModel):
         if user is not None:
             self.user = user
 
+    def apply_personal_access_token(self, token: str) -> None:
+        """Store a long-lived personal access token as the credential.
+
+        Unlike `apply_credentials`, there's no refresh token (PATs don't
+        rotate) and no tracked expiry: the server is the source of truth,
+        and an expired/revoked PAT surfaces as a 401 on the next call. The
+        empty refresh token is also what makes the http layer send the PAT
+        directly instead of trying to refresh it. Caller persists via
+        `save()` and sets `user` from the validating `/me` call.
+        """
+        self.access_token = token
+        self.refresh_token = None
+        self.token_expires_at = None
+
     def clear_credentials(self) -> None:
         """Zero out the bearer-auth fields in place. Doesn't touch the file."""
         self.access_token = None

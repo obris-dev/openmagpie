@@ -29,20 +29,21 @@ from accounts.services import UserService
 from common.locks import refresh_token_lock
 
 from .auth_backends import extract_request_token
+from .authentication import request_is_cli_token
 from .constants import AuthErrorCode
 from .cookies import delete_auth_cookie, set_auth_cookie
 from .operations import EmailAlreadyExists, SignupOperation
 from .serializers import (
+    CliTokenCreateSerializer,
+    CliTokenSerializer,
     LoginSerializer,
     RefreshSerializer,
     SignupSerializer,
     TokenPairSerializer,
     UserSerializer,
 )
-from .services.tokens import (
-    mint_token_pair_for_user,
-    revoke_access_token,
-)
+from .services.cli_tokens import CliTokenService
+from .services.tokens import TokenService
 
 
 def _err(code: AuthErrorCode, detail: str, status_code: int) -> Response:
@@ -56,7 +57,7 @@ def _browser_auth_response(user: User, *, status_code: int = status.HTTP_200_OK)
     cookie carries the access token and the browser doesn't need raw
     rotation material.
     """
-    access, _refresh, ttl = mint_token_pair_for_user(user)
+    access, _refresh, ttl = TokenService.Global.mint_pair(user)
     response = Response({"user": UserSerializer(user).data}, status=status_code)
     set_auth_cookie(response, access.token, max_age=ttl)
     return response
@@ -146,7 +147,7 @@ class LogoutView(APIView):
         _ = request.user
         token_value = extract_request_token(request._request)
         if token_value:
-            revoke_access_token(token_value)
+            TokenService.Global.revoke(token_value)
         response = Response({"detail": "logged out"})
         delete_auth_cookie(response)
         return response
@@ -210,7 +211,7 @@ class TokensRefreshView(APIView):
             # neither does.
             with transaction.atomic():
                 rt.revoke()
-                access, new_refresh, ttl = mint_token_pair_for_user(rt.user)
+                access, new_refresh, ttl = TokenService.Global.mint_pair(rt.user)
             return Response(TokenPairSerializer.build(rt.user, access, new_refresh, ttl).data)
 
 
@@ -226,8 +227,64 @@ class TokensRevokeView(APIView):
     def post(self, request):
         token_value = extract_request_token(request._request)
         if token_value:
-            revoke_access_token(token_value)
+            TokenService.Global.revoke(token_value)
         return Response({"detail": "revoked"})
+
+
+class CliTokensView(APIView):
+    """`/v1/auth/cli-tokens`, personal access tokens for the current user.
+
+    POST mints one (returning the raw token ONCE); GET lists the active
+    ones (metadata only). Both require an authenticated user; the headless
+    cold-start path uses the `issue_cli_token` management command instead.
+
+    POST additionally rejects PAT-authenticated requests: a personal
+    access token can't mint other tokens, or a leaked PAT could bootstrap
+    fresh credentials that outlive its own revocation (GitHub blocks
+    PAT->PAT creation for the same reason).
+    """
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+        if request_is_cli_token(request):
+            return _err(
+                AuthErrorCode.PAT_CANNOT_MINT,
+                "personal access tokens can't mint other tokens; sign in with the browser "
+                "login, or use the issue_cli_token command on the server",
+                status.HTTP_403_FORBIDDEN,
+            )
+        serializer = CliTokenCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        token, raw_token = CliTokenService.Global.mint(
+            request.user,
+            name=serializer.validated_data["name"],
+            expires_in_days=serializer.validated_data.get("expires_in_days"),
+        )
+        # Serialize the model once (keeps the field list in CliTokenSerializer)
+        # and tack on the one-time raw token, which the model doesn't carry.
+        body = CliTokenSerializer(token).data
+        body["token"] = raw_token
+        return Response(body, status=status.HTTP_201_CREATED)
+
+    def get(self, request):
+        tokens = CliTokenService.Global.list_for_user(request.user)
+        return Response(CliTokenSerializer(tokens, many=True).data)
+
+
+class CliTokenDetailView(APIView):
+    """DELETE /v1/auth/cli-tokens/{id}, revoke one of the user's tokens."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def delete(self, request, token_id: str):
+        if not CliTokenService.Global.revoke(request.user, token_id):
+            return _err(
+                AuthErrorCode.NOT_FOUND,
+                "no such token for this user",
+                status.HTTP_404_NOT_FOUND,
+            )
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class WhoamiView(APIView):

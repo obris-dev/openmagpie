@@ -1,3 +1,4 @@
-from .tokens import mint_token_pair_for_user, revoke_access_token
+from .cli_tokens import CliTokenService
+from .tokens import TokenService
 
-__all__ = ["mint_token_pair_for_user", "revoke_access_token"]
+__all__ = ["CliTokenService", "TokenService"]

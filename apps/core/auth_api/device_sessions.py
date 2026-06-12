@@ -42,7 +42,7 @@ from common.web_urls import AUTH_DEVICE, app_url
 from .constants import AuthErrorCode, DeviceSessionStatus
 from .device_session_store import DeviceSessionClient, DeviceSessionState, Store
 from .serializers import TokenPairSerializer
-from .services.tokens import mint_token_pair_for_user
+from .services.tokens import TokenService
 
 _DEVICE_SECRET_HEADER = "X-Device-Secret"
 _DEVICE_SECRET_META_KEY = "HTTP_X_DEVICE_SECRET"
@@ -261,7 +261,7 @@ class DeviceSessionCompleteView(APIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        access, refresh, ttl = mint_token_pair_for_user(request.user)
+        access, refresh, ttl = TokenService.Global.mint_pair(request.user)
         token_pair = TokenPairSerializer.build(request.user, access, refresh, ttl).data
         Store.put(
             session_id,

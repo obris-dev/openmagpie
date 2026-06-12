@@ -19,6 +19,17 @@ urlpatterns = [
         views.TokensRevokeView.as_view(),
         name="auth_tokens_revoke",
     ),
+    # Personal access tokens (long-lived CLI credentials).
+    api_path(
+        "cli-tokens",
+        views.CliTokensView.as_view(),
+        name="auth_cli_tokens",
+    ),
+    api_path(
+        "cli-tokens/<str:token_id>",
+        views.CliTokenDetailView.as_view(),
+        name="auth_cli_token_detail",
+    ),
     # CLI ↔ browser handshake.
     api_path(
         "device-sessions",

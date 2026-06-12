@@ -16,8 +16,9 @@ from contextvars import ContextVar, Token
 import httpx
 
 from .api import Api
-from .api.auth import TokenPair
+from .api.auth import AuthUser, TokenPair
 from .config import Config, UserInfo, load, save
+from .constants import is_personal_access_token
 from .http import ApiError, MagpieClient
 
 
@@ -55,6 +56,40 @@ class AppContext:
         )
         save(self.config)
 
+    def sign_in_with_token(self, raw_token: str) -> AuthUser:
+        """Validate a personal access token and persist it as the session.
+
+        Stages the PAT as the sole credential FIRST (no refresh token, no
+        expiry) so the validating `/me` call sends the PAT itself and the
+        http layer never tries to rotate a previous session's token, then
+        confirms it by fetching the user and writes the config. Raises
+        `AuthError` if the server rejects the token.
+
+        On failure the prior in-memory credentials are restored, so a
+        rejected token never leaves the context half-authenticated (the
+        staged dead token paired with the old user).
+        """
+        prior = (
+            self.config.access_token,
+            self.config.refresh_token,
+            self.config.token_expires_at,
+            self.config.user,
+        )
+        self.config.apply_personal_access_token(raw_token)
+        try:
+            me = self.api.auth.me()  # raises AuthError on a bad/revoked token
+        except Exception:
+            (
+                self.config.access_token,
+                self.config.refresh_token,
+                self.config.token_expires_at,
+                self.config.user,
+            ) = prior
+            raise
+        self.config.user = UserInfo(id=me.id, email=me.email, account_id=me.account_id)
+        save(self.config)
+        return me
+
     def sign_out(self) -> bool:
         """End the session. Local cleanup ALWAYS runs; returns True if
         server-side revocation also succeeded, False if it failed
@@ -65,9 +100,15 @@ class AppContext:
         load-bearing step. Callers should surface a warning on False
         so the user knows the token may still be live until natural
         expiry.
+
+        A personal access token is NOT revoked here: it's a durable
+        credential the operator may reuse on other boxes, so logout only
+        forgets it locally. Explicit `auth token revoke` (or the server
+        command) ends a PAT's life.
         """
         server_ok = True
-        if self.config.access_token:
+        token = self.config.access_token
+        if token and not is_personal_access_token(token):
             try:
                 self.api.auth.tokens.revoke()
             except (ApiError, httpx.HTTPError):

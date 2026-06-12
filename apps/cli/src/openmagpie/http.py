@@ -20,7 +20,7 @@ import httpx
 
 from . import __version__, routes
 from .config import Config, UserInfo, save
-from .constants import AUTHORIZATION_HEADER, BEARER_SCHEME
+from .constants import AUTHORIZATION_HEADER, BEARER_SCHEME, TOKEN_ENV_VAR
 
 REFRESH_LEEWAY_SECONDS = 5 * 60
 
@@ -112,12 +112,36 @@ class MagpieClient:
     def __exit__(self, *exc_info: Any) -> None:
         self.close()
 
+    def _ambient_token(self) -> str | None:
+        """A `MAGPIE_TOKEN` from the environment, or None.
+
+        Ambient credential: read per request, takes precedence over the
+        stored login, never persisted. The standard "token in an
+        environment" pattern, so a box can `export MAGPIE_TOKEN=...` and
+        skip `auth login` entirely.
+
+        Whatever value it holds is sent as-is and NEVER refreshed, so it
+        should be a long-lived PAT (`mgp_...`). A short-lived session
+        access token would work here only until it expires, then 401 with
+        no recovery (unlike a login-stored session token, which rotates).
+        """
+        return os.environ.get(TOKEN_ENV_VAR) or None
+
+    def _bearer_token(self) -> str | None:
+        return self._ambient_token() or self.config.access_token
+
     def _auth_headers(self) -> dict[str, str]:
-        if self.config.access_token:
-            return {AUTHORIZATION_HEADER: f"{BEARER_SCHEME} {self.config.access_token}"}
+        token = self._bearer_token()
+        if token:
+            return {AUTHORIZATION_HEADER: f"{BEARER_SCHEME} {token}"}
         return {}
 
     def _ensure_fresh_token(self) -> None:
+        # An ambient MAGPIE_TOKEN is used as-is, never rotated (it isn't
+        # ours to refresh, and refreshing would touch the stored login we
+        # are deliberately overriding).
+        if self._ambient_token():
+            return
         if not self.config.refresh_token:
             return
         if not self.config.access_token_expired(leeway_seconds=REFRESH_LEEWAY_SECONDS):
@@ -174,8 +198,18 @@ class MagpieClient:
         path: str,
         *,
         params: dict[str, Any] | None = None,
+        with_auth: bool = True,
         headers: dict[str, str] | None = None,
     ) -> Any:
+        if not with_auth:
+            # Skip the stored bearer entirely. Used by the device-flow poll,
+            # which is a (re-)login operation authenticated by X-Device-Secret,
+            # not the bearer: attaching a stale/revoked credential here would
+            # get the poll itself rejected with 401 before the device secret
+            # is ever checked.
+            merged = dict(headers) if headers else {}
+            resp = self._client.get(path, headers=merged, params=params)
+            return _handle(resp)
         return self._authed_request("GET", path, params=params, headers=headers)
 
     def post(
@@ -247,7 +281,10 @@ class MagpieClient:
 
         self._ensure_fresh_token()
         resp = issue()
-        if resp.status_code == 401 and self.config.refresh_token:
+        # Don't refresh on behalf of an ambient MAGPIE_TOKEN: it has no
+        # refresh token and we'd be rotating the stored login we're
+        # overriding. A 401 on an ambient token just surfaces as AuthError.
+        if resp.status_code == 401 and not self._ambient_token() and self.config.refresh_token:
             self._refresh()
             resp = issue()
         return _handle(resp)

@@ -80,6 +80,20 @@ magpie watch create                          # opens $EDITOR on a watch template
 magpie activity summary --action <action_id> # per-state run breakdown for any action (filter, webhook, log)
 ```
 
+On a headless box (a server you SSH into, no browser), skip the device flow and use a personal access token. Mint one on the server, then sign in with it on the box, the token is pasted (stdin or a hidden prompt, never the command line) and stored in `~/.magpie` at `0600`, persisting across sessions:
+
+```bash
+# on the server (the issue_cli_token management command, via the local stack):
+make local-manage CMD="issue_cli_token --email you@example.com --name my-box"
+# then, on the box:
+magpie auth login --token   # paste the printed token at the prompt
+```
+
+For CI or an ephemeral box, set `MAGPIE_TOKEN=mgp_...` in the environment instead: it's
+read on every request, takes precedence over a stored login, and is never persisted (the
+`GH_TOKEN` pattern), so no login step. Manage tokens with `magpie auth token list` /
+`create` / `revoke` (minting needs a browser login; a token can't mint another).
+
 A watch's `actions:` chain typically starts with a `semantic_filter` (your natural-language criteria + threshold) followed by a `webhook` or `log` delivery. Pick a backfill window when you create the feed and the first `make local-tick` scores real posts against your criteria immediately, with no wait for the scheduler.
 
 Full command list: the [magpie CLI reference](apps/cli/README.md). The dev loop runs through `make`: see [make/README.md](make/README.md) or `make help`.

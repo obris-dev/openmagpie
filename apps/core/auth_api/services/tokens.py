@@ -1,4 +1,4 @@
-"""Mint OAuth Toolkit token pairs for our own auth endpoints.
+"""Mint / revoke OAuth Toolkit token pairs for our own auth endpoints.
 
 We don't use OAuth Toolkit's grant flows directly, signup/login mint tokens
 inline against a single bootstrap `Application` ("magpie-cli"). Toolkit's
@@ -7,9 +7,11 @@ because exposing it would let anyone POST a password / client_credentials
 grant and bypass our login/audit pipeline. Only the Toolkit models are in
 play here, as a typed storage layer for the tokens.
 
-`mint_token_pair_for_user(user)` is the single seam: signup, login, refresh
-and device-flow completion all funnel through it so the token shape stays
-identical across surfaces.
+`TokenService.Global.mint_pair(user)` is the single seam: signup, login,
+refresh and device-flow completion all funnel through it so the token shape
+stays identical across surfaces. These are system-level operations (the
+session credential is user-scoped, not account-scoped), so they live under
+`Global`, paralleling `CliTokenService`.
 """
 
 import secrets
@@ -44,56 +46,65 @@ def get_cli_application() -> Application:
     return AppModel.objects.get(name=CLI_APPLICATION_NAME)
 
 
-@transaction.atomic
-def revoke_access_token(token_value: str) -> None:
-    """Revoke the named access token + its refresh-token pair.
+class TokenService:
+    """OAuth session token-pair lifecycle (browser cookie + CLI bearer).
 
-    No-op if the token doesn't exist or is already revoked. Called from
-    /v1/auth/logout so a CLI logout (or a logged-out browser) actually
-    invalidates the credentials server-side, not just locally.
+    All system-level (the credential is user-scoped, not account-scoped),
+    so under `Global`. Mirrors `CliTokenService`."""
 
-    Atomic + row-locked: two concurrent logouts for the same token (a
-    user clicking logout twice, or a parallel CLI revoke + browser
-    logout) would otherwise race on "is the refresh already revoked"
-    and one could try to revoke after the other had deleted the access
-    row, producing an inconsistent half-state. The `select_for_update`
-    serializes them; the second caller sees the access row gone and
-    no-ops cleanly.
-    """
-    try:
-        access = AccessToken.objects.select_for_update().get(token=token_value)
-    except AccessToken.DoesNotExist:
-        return
-    try:
-        refresh = RefreshToken.objects.select_for_update().get(access_token=access)
-    except RefreshToken.DoesNotExist:
-        refresh = None
-    if refresh is not None and refresh.revoked is None:
-        refresh.revoke()
-    access.delete()
+    class Global:
+        @staticmethod
+        @transaction.atomic
+        def revoke(token_value: str) -> None:
+            """Revoke the named access token + its refresh-token pair.
 
+            No-op if the token doesn't exist or is already revoked. Called
+            from /v1/auth/logout so a CLI logout (or a logged-out browser)
+            actually invalidates the credentials server-side, not just
+            locally.
 
-def mint_token_pair_for_user(user) -> tuple[AccessToken, RefreshToken, int]:
-    """Create a fresh (access, refresh) pair against the CLI application.
+            Atomic + row-locked: two concurrent logouts for the same token
+            (a user clicking logout twice, or a parallel CLI revoke +
+            browser logout) would otherwise race on "is the refresh already
+            revoked" and one could try to revoke after the other had deleted
+            the access row, producing an inconsistent half-state. The
+            `select_for_update` serializes them; the second caller sees the
+            access row gone and no-ops cleanly.
+            """
+            try:
+                access = AccessToken.objects.select_for_update().get(token=token_value)
+            except AccessToken.DoesNotExist:
+                return
+            try:
+                refresh = RefreshToken.objects.select_for_update().get(access_token=access)
+            except RefreshToken.DoesNotExist:
+                refresh = None
+            if refresh is not None and refresh.revoked is None:
+                refresh.revoke()
+            access.delete()
 
-    Returns the two Toolkit rows plus `expires_in` seconds, sufficient to
-    build the response body the web + CLI clients expect.
-    """
-    application = get_cli_application()
-    ttl = _access_ttl_seconds()
-    now = timezone.now()
+        @staticmethod
+        def mint_pair(user) -> tuple[AccessToken, RefreshToken, int]:
+            """Create a fresh (access, refresh) pair against the CLI application.
 
-    access = AccessToken.objects.create(
-        user=user,
-        application=application,
-        token=secrets.token_urlsafe(48),
-        expires=now + timedelta(seconds=ttl),
-        scope=" ".join(settings.OAUTH2_PROVIDER.get("DEFAULT_SCOPES", ["read", "write"])),
-    )
-    refresh = RefreshToken.objects.create(
-        user=user,
-        application=application,
-        token=secrets.token_urlsafe(48),
-        access_token=access,
-    )
-    return access, refresh, ttl
+            Returns the two Toolkit rows plus `expires_in` seconds, sufficient
+            to build the response body the web + CLI clients expect.
+            """
+            application = get_cli_application()
+            ttl = _access_ttl_seconds()
+            now = timezone.now()
+
+            access = AccessToken.objects.create(
+                user=user,
+                application=application,
+                token=secrets.token_urlsafe(48),
+                expires=now + timedelta(seconds=ttl),
+                scope=" ".join(settings.OAUTH2_PROVIDER.get("DEFAULT_SCOPES", ["read", "write"])),
+            )
+            refresh = RefreshToken.objects.create(
+                user=user,
+                application=application,
+                token=secrets.token_urlsafe(48),
+                access_token=access,
+            )
+            return access, refresh, ttl

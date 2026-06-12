@@ -124,6 +124,10 @@ Login using:
   Email:     ${KEY}${seed_email}${OFF}
   Password:  ${KEY}${seed_password}${OFF}
 
+On a headless box (no browser or installing on a remote instance)? Mint a token and sign in with it:
+  ${KEY}make local-manage CMD="issue_cli_token --email ${seed_email} --name my-box"${OFF}
+  ${KEY}magpie auth login --token${OFF}   # paste the printed token at the prompt
+
 Run the pipeline: ${KEY}make local-tick${OFF} (once) or ${KEY}make up-jobs${OFF} (background).
 More in the README ("Running it continuously") and \`make help\`.
 EOF

@@ -36,6 +36,8 @@ class AuthErrorCode(StrEnum):
     EMAIL_TAKEN = "email_taken"
     INVALID_CREDENTIALS = "invalid_credentials"
     NOT_AUTHENTICATED = "not_authenticated"
+    NOT_FOUND = "not_found"
+    PAT_CANNOT_MINT = "pat_cannot_mint"
     MISSING_REFRESH_TOKEN = "missing_refresh_token"
     INVALID_REFRESH_TOKEN = "invalid_refresh_token"
     REVOKED_REFRESH_TOKEN = "revoked_refresh_token"

@@ -15,6 +15,7 @@ from rest_framework import serializers
 from accounts.services import AccountService
 
 from .constants import BEARER_TOKEN_TYPE
+from .services.cli_tokens import MAX_EXPIRY_DAYS, MIN_EXPIRY_DAYS
 
 # ── Input ──────────────────────────────────────────────────────────────
 
@@ -45,7 +46,32 @@ class RefreshSerializer(serializers.Serializer):
     refresh_token = serializers.CharField()
 
 
+class CliTokenCreateSerializer(serializers.Serializer):
+    """Body for `POST /v1/auth/cli-tokens`."""
+
+    name = serializers.CharField(max_length=255, trim_whitespace=True)
+    # Optional bound; omitted / null means "never expires" (the default).
+    # Bounds shared with `CliTokenService.Global.mint` so the two can't drift.
+    expires_in_days = serializers.IntegerField(
+        required=False, allow_null=True, min_value=MIN_EXPIRY_DAYS, max_value=MAX_EXPIRY_DAYS
+    )
+
+
 # ── Output ─────────────────────────────────────────────────────────────
+
+
+class CliTokenSerializer(serializers.Serializer):
+    """Metadata wire shape for a `CliToken`. NEVER carries the raw token
+    or its hash, list/read responses are safe to log. The create response
+    is this shape plus a one-time `token` field the view tacks on (the
+    model doesn't store the raw token)."""
+
+    id = serializers.CharField()
+    name = serializers.CharField()
+    last_four = serializers.CharField()
+    created_at = serializers.DateTimeField()
+    last_used_at = serializers.DateTimeField(allow_null=True)
+    expires_at = serializers.DateTimeField(allow_null=True)
 
 
 class UserSerializer(serializers.Serializer):

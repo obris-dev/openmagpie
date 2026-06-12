@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import getpass
+import os
+import sys
 import time
 import webbrowser
 from urllib.parse import urlparse
@@ -11,10 +14,17 @@ import typer
 
 from .. import console
 from ..api.auth import DeviceSessionCompleted, DeviceSessionExpired
+from ..constants import TOKEN_ENV_VAR, is_personal_access_token
 from ..context import app_config, app_ctx
 from ..http import ApiError, AuthError
+from .auth_token import token_app
 
 auth_app = typer.Typer(no_args_is_help=True)
+
+
+def _ambient_token_set() -> bool:
+    return bool(os.environ.get(TOKEN_ENV_VAR))
+
 
 POLL_INTERVAL_SECONDS = 2.0
 # Small grace window past the server-reported `expires_in` to give the
@@ -56,15 +66,82 @@ def _safe_authorize_url(authorize_url: str, server_url: str) -> bool:
     return a.hostname.lower() == s.hostname.lower()
 
 
+def _read_token_secret() -> str:
+    """Get the PAT without ever putting it in argv.
+
+    Piped stdin (`echo $TOK | magpie auth login --token`) -> a hidden
+    interactive prompt. Returns "" if neither is available. `MAGPIE_TOKEN`
+    is deliberately NOT a source here: when it's set, `login` refuses (it's
+    the ambient credential, used directly, no login needed).
+    """
+    if not sys.stdin.isatty():
+        # Piped / redirected: take the first line.
+        return sys.stdin.readline().strip()
+    try:
+        return getpass.getpass("Personal access token: ").strip()
+    except (EOFError, KeyboardInterrupt):
+        # Ctrl-D / Ctrl-C at the prompt: exit cleanly (130 = 128 + SIGINT),
+        # matching the device-flow handler, not a raw traceback.
+        console.warn("\nCancelled.")
+        raise typer.Exit(code=130) from None
+
+
+def _login_with_token() -> None:
+    """Sign in with a personal access token (the headless path)."""
+    ac = app_ctx()
+    secret = _read_token_secret()
+    if not secret:
+        console.error("No token provided. Pipe the token on stdin, or run interactively to be prompted.")
+        raise typer.Exit(code=1)
+    try:
+        me = ac.sign_in_with_token(secret)
+    except AuthError:
+        console.error(
+            "That token was rejected. Mint a new one on the server, or "
+            "`magpie auth token create` if you're already signed in elsewhere."
+        )
+        raise typer.Exit(code=1) from None
+    except ApiError as e:
+        console.error(f"Couldn't reach server at {ac.config.server_url} (HTTP {e.status}).")
+        raise typer.Exit(code=1) from None
+    except httpx.HTTPError as e:
+        console.error(f"Couldn't reach the server ({type(e).__name__}). Check your network or server URL.")
+        raise typer.Exit(code=1) from None
+    _print_signed_in(me.email)
+
+
 @auth_app.command("login")
 def login(
+    token: bool = typer.Option(
+        False,
+        "--token",
+        help=(
+            "Sign in with a personal access token instead of the browser "
+            "device flow. The token is read from piped stdin or a hidden "
+            "prompt (never the command line)."
+        ),
+    ),
     no_browser: bool = typer.Option(
         False,
         "--no-browser",
         help="Don't try to launch a browser; just print the URL.",
     ),
 ) -> None:
-    """Sign in via the browser device-flow handshake."""
+    """Sign in via the browser device-flow handshake (or a token with --token)."""
+    if _ambient_token_set():
+        # gh-style refusal: an ambient token is used on every request and
+        # overrides any stored login, so logging in would be a no-op (and
+        # silently ignore piped/prompted input). Make the operator choose.
+        console.error(
+            f"{TOKEN_ENV_VAR} is set in your environment; it's already used for every "
+            f"request and overrides a stored login. Unset it (`unset {TOKEN_ENV_VAR}`) "
+            "to log in, or just run magpie as-is."
+        )
+        raise typer.Exit(code=1)
+    if token:
+        _login_with_token()
+        return
+
     ac = app_ctx()
 
     try:
@@ -154,14 +231,20 @@ def login(
 def status() -> None:
     """Show the currently signed-in identity."""
     ac = app_ctx()
-    if not ac.config.is_authenticated:
+    ambient = _ambient_token_set()
+    # An ambient MAGPIE_TOKEN authenticates even with no stored login, so
+    # `is_authenticated` (config-only) isn't the whole picture.
+    if not ambient and not ac.config.is_authenticated:
         console.error("Not authenticated.")
         raise typer.Exit(code=1)
 
     try:
         me = ac.api.auth.me()
     except AuthError:
-        console.error("Stored credentials are no longer valid. Run `magpie auth login` again.")
+        if ambient:
+            console.error(f"The {TOKEN_ENV_VAR} in your environment was rejected. Check the token, or unset it.")
+        else:
+            console.error("Stored credentials are no longer valid. Run `magpie auth login` again.")
         raise typer.Exit(code=1) from None
     except ApiError as e:
         console.error(f"Couldn't reach the server cleanly (HTTP {e.status}). Try again or check the server status.")
@@ -174,17 +257,48 @@ def status() -> None:
     if me.account_id:
         console.log(f"Account:     {me.account_id}")
     console.log(f"Server:      {ac.config.server_url}")
+    if ambient:
+        console.log(f"Auth:        {TOKEN_ENV_VAR} (environment)")
+        if ac.config.is_authenticated:
+            # There's also a stored login, but the env token wins every request.
+            console.log(f"             (a stored login is shadowed; `unset {TOKEN_ENV_VAR}` to use it)")
+    elif is_personal_access_token(ac.config.access_token):
+        console.log("Auth:        personal access token")
 
 
 @auth_app.command("logout")
 def logout() -> None:
-    """Clear locally stored credentials and revoke server-side."""
-    if not app_config().is_authenticated:
-        console.log("Not signed in; nothing to clear.")
+    """Clear locally stored credentials (revokes a session token server-side)."""
+    cfg = app_config()
+    # An ambient MAGPIE_TOKEN is managed in the environment, not by us:
+    # logout can't clear it, and it keeps authenticating until unset.
+    if _ambient_token_set():
+        console.warn(
+            f"{TOKEN_ENV_VAR} is set in your environment and will keep authenticating you. "
+            f"Unset it (`unset {TOKEN_ENV_VAR}`) to log out."
+        )
+    if not cfg.is_authenticated:
+        console.log("No stored login to clear.")
         return
-    if not app_ctx().sign_out():
+    was_pat = is_personal_access_token(cfg.access_token)
+    revoked_server_side = app_ctx().sign_out()
+    if not revoked_server_side:
         console.warn(
             "Couldn't reach server to revoke the token. Local credentials "
             "cleared, but the token may stay valid until it expires naturally."
         )
-    console.success("Logged out.")
+    if was_pat:
+        # A PAT isn't revoked on logout (it's a durable, reusable credential).
+        console.success(
+            "Local credentials cleared. The personal access token is still "
+            "valid; revoke it with `magpie auth token revoke <id>`."
+        )
+    elif revoked_server_side:
+        console.success("Logged out.")
+    else:
+        # Server revoke failed (warned above); don't contradict it with an
+        # unqualified "Logged out."
+        console.success("Local credentials cleared.")
+
+
+auth_app.add_typer(token_app, name="token")

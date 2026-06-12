@@ -99,7 +99,7 @@ WatchDigestFlushOperation(window, now=now).run()  # emit one digest batch
 
 ## Scoping
 
-- **Every domain model carries `account_id` + `user_id`.** `User` and `Account` themselves are exempt; they *are* those entities.
+- **Every domain model carries `account_id` + `user_id`.** `User` and `Account` themselves are exempt; they *are* those entities. **Auth credentials are also exempt from `account_id`**: `auth_api.CliToken` (the CLI personal access token) carries only `user_id`, because it authenticates a *user*, not an account, the active account is resolved per request from the user's primary account, exactly like the OAuth session token. Pinning an account into the credential would diverge from how sessions behave.
 - **Every account-scoped service query filters by `self.account_id`.** Cross-tenant data leakage is impossible by construction. The only escape hatch is `<Service>.Global.*` for explicit system-level ops.
 - **Unique constraints are `account_id`-first** so an account-scoped read rides the constraint's backing index as a left-prefix. As shipped: `(account_id, watch_id, feed_id)` on WatchFeed; `(account_id, path_id, rank)` on WatchAction; `(account_id, watch_id, action_id, feed_item_id)` on WatchActionRun; `(account_id, action_id)` on WatchActionDigestWindow. The `(state, scheduled_at)` drain index on WatchActionRun is deliberately account-agnostic (the drain is a global scan).
 
@@ -264,6 +264,7 @@ When persisting structured state in `django.core.cache`:
 - **Browser** holds the access-token value in an HttpOnly `auth_token` cookie set by `auth_api.cookies.set_auth_cookie`. We do NOT use Django's session middleware for auth; the cookie literally carries the OAuth `AccessToken.token` value.
 - **CLI** holds the same kind of value in `~/.magpie/config.json` and sends it as `Authorization: Bearer <token>`.
 - **Lookup** is unified: `auth_api.authentication.BearerOrCookieAuthentication` checks the Bearer header first, then the `auth_token` cookie. Registered globally via `REST_FRAMEWORK.DEFAULT_AUTHENTICATION_CLASSES`.
+- **Personal access tokens** (`auth_api.CliToken`, the headless CLI login) are a third credential, a long-lived `mgp_...` bearer, hashed at rest. `PersonalAccessTokenAuthentication` is registered *ahead* of `BearerOrCookieAuthentication`: it owns the `mgp_` prefix and returns `None` for everything else, so non-PAT bearers + cookies fall through. A PAT-authed request carries `request.auth == CLI_TOKEN_AUTH`, which views use to forbid PAT-only-disallowed actions (minting more tokens).
 
 ### Auth URL surface
 
@@ -275,6 +276,10 @@ When persisting structured state in `django.core.cache`:
 
 /v1/auth/tokens/refresh                  POST   CLI      rotate bearer pair
 /v1/auth/tokens/revoke                   POST   CLI      bearer "logout"
+
+/v1/auth/cli-tokens                      GET    either   list the user's personal access tokens
+/v1/auth/cli-tokens                      POST   session  mint a PAT (rejects PAT auth: no PAT->PAT)
+/v1/auth/cli-tokens/{id}                 DELETE either   revoke one PAT (owner-scoped)
 
 /v1/auth/device-sessions                 POST   CLI      start handshake
 /v1/auth/device-sessions/{id}            GET    CLI      poll (header: X-Device-Secret)

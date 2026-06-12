@@ -18,7 +18,7 @@ uv tool install --editable .
 ## Quickstart
 
 ```bash
-magpie auth login            # browser device flow
+magpie auth login            # browser device flow (headless? see auth in Commands)
 magpie feed create           # opens $EDITOR on a feed template (sources + retention)
 magpie watch create          # opens $EDITOR on a watch template (feeds + action chain)
 ```
@@ -29,7 +29,8 @@ Create a feed of sources to watch, then a watch that subscribes to it and runs a
 
 | Command | What it does |
 |---|---|
-| `magpie auth login` / `logout` / `status` | Device-flow sign-in; identity check |
+| `magpie auth login` / `logout` / `status` | Device-flow sign-in. `--token` for a headless personal-access-token login (token read from piped stdin or a hidden prompt, never argv; persisted to `~/.magpie`). Or set `MAGPIE_TOKEN` in the environment as an ambient credential, read on every request, precedence over a stored login, never persisted (CI / ephemeral, no login step; `login` refuses while it's set). `status` shows identity; `logout` clears a stored login |
+| `magpie auth token create` / `list` / `revoke` | Personal access tokens for headless login: `create --name [--expires-in-days]` mints one (shown once), `list` the active ones (secret never shown), `revoke <id>` ends one. Minting needs a browser login; a token can't mint another |
 | `magpie feed create` / `list` / `get` / `edit` / `delete` | Curated source streams: `get` shows one feed's definition (config + retention), `list` all feeds |
 | `magpie feed source list` / `set` / `export` / `delete` / `get` / `template` | A feed's source set: `list` / `set` / `export` take `--feed <id>`; `delete` / `get` take the source's own id (the feed is resolved + confirmed for you); `template` emits a skeleton |
 | `magpie feed item list` / `get` | A feed's items (read-only, server-produced): `list --feed <id>` the recent item stream, `get <item_id>` one item in full. No create / edit / delete |

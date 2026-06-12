@@ -11,6 +11,7 @@ both sides together when the contract changes.
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Literal
 
 from pydantic import BaseModel
@@ -66,6 +67,24 @@ class DeviceSessionCompleted(TokenPair):
 DeviceSessionPoll = DeviceSessionPending | DeviceSessionCompleted | DeviceSessionExpired
 
 
+class CliToken(BaseModel):
+    """Metadata for one personal access token. Never carries the raw
+    secret; only the mint response (`CliTokenCreated`) does, once."""
+
+    id: str
+    name: str
+    last_four: str
+    created_at: datetime
+    last_used_at: datetime | None = None
+    expires_at: datetime | None = None
+
+
+class CliTokenCreated(CliToken):
+    """`POST` response: metadata plus the raw `token`, shown once."""
+
+    token: str
+
+
 class TokensApi:
     """Resource client for `/v1/auth/tokens/*`, bearer lifecycle."""
 
@@ -80,12 +99,34 @@ class TokensApi:
         self._http.post(routes.auth.tokens.revoke)
 
 
+class CliTokensApi:
+    """Resource client for `/v1/auth/cli-tokens`, personal access tokens."""
+
+    def __init__(self, http: MagpieClient) -> None:
+        self._http = http
+
+    def create(self, *, name: str, expires_in_days: int | None = None) -> CliTokenCreated:
+        body: dict[str, object] = {"name": name}
+        if expires_in_days is not None:
+            body["expires_in_days"] = expires_in_days
+        raw = self._http.post(routes.auth.cli_tokens, json_body=body)
+        return CliTokenCreated.model_validate(raw)
+
+    def list(self) -> list[CliToken]:
+        raw = self._http.get(routes.auth.cli_tokens)
+        return [CliToken.model_validate(t) for t in raw]
+
+    def revoke(self, token_id: str) -> None:
+        self._http.delete(routes.auth.cli_token(token_id))
+
+
 class AuthApi:
     """Resource client for `/v1/auth/*`."""
 
     def __init__(self, http: MagpieClient) -> None:
         self._http = http
         self.tokens = TokensApi(http)
+        self.cli_tokens = CliTokensApi(http)
 
     def create_device_session(self) -> DeviceSessionCreated:
         raw = self._http.post(
@@ -101,6 +142,10 @@ class AuthApi:
     def poll_device_session(self, session_id: str, *, device_secret: str) -> DeviceSessionPoll:
         raw = self._http.get(
             routes.auth.device_session(session_id),
+            # (Re-)login: authenticated by the device secret, NOT the stored
+            # bearer. Sending a stale/revoked credential here would get the
+            # poll rejected with 401 before the device secret is checked.
+            with_auth=False,
             headers={"X-Device-Secret": device_secret},
         )
         status = raw.get("status")
