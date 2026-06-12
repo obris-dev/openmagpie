@@ -19,6 +19,10 @@
 
 ---
 
+<p align="center">
+  <img src="assets/cli-tour.gif" alt="magpie CLI tour: the feed's sources, the watch's semantic filter, then the matches with scores and links" width="900">
+</p>
+
 > [!TIP]
 > **CLI not for you?** A UI / hosted version is on the way. Star the repo for updates, or join the waitlist at [openmagpie.ai](https://www.openmagpie.ai/).
 

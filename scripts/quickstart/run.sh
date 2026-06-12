@@ -129,7 +129,10 @@ On a headless box (no browser or installing on a remote instance)? Mint a token 
   ${KEY}magpie auth login --token${OFF}   # paste the printed token at the prompt
 
 Run the pipeline: ${KEY}make local-tick${OFF} (once) or ${KEY}make up-jobs${OFF} (background).
-More in the README ("Running it continuously") and \`make help\`.
+
+Learn more:
+  ${KEY}examples/README.md${OFF}   how a starter works (feed -> watch -> matches), more starters
+  ${KEY}make help${OFF}            every local command
 EOF
 
 # The magpie lines above assume the best-effort CLI install landed. A missing uv

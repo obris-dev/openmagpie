@@ -1,0 +1,77 @@
+# VHS tape template for the README's CLI tour (https://github.com/charmbracelet/vhs).
+#
+# Not runnable as-is: the __FEED_ID__ / __WATCH_ID__ / __ACTION_ID__ / __RUN_ID__
+# placeholders are the ids of a seeded watch on YOUR running stack, so they are
+# resolved at record time. Render + record with scripts/demo/cli-record.sh,
+# never with `vhs` directly on this file.
+#
+# __PAGER__ marks where the `activity list` pager prompt is answered. The CLI
+# prompt-pages on a TTY (which a VHS shell is) whenever a next page exists, so
+# the renderer swaps the marker for a `Type "n"` answer when one will, and
+# drops it when one won't; either way the next narration line lands in the
+# shell, not the prompt.
+#
+# The narrative is the post-quickstart tour, in pipeline order: feeds (your
+# sources), the watch and its semantic filter (what reads them), then the
+# activity log (what matched, with scores and links). Every id a command takes
+# is on screen first, in the table of the `list` that precedes it, so the tour
+# reads as something the viewer could retype. The typed `#` lines are on-screen
+# narration; bash ignores them.
+
+Output assets/cli-tour.gif
+
+Require magpie
+
+Set Shell bash
+Set FontSize 15
+Set Width 1500
+Set Height 800
+Set Padding 16
+Set TypingSpeed 30ms
+Set Theme "Catppuccin Mocha"
+
+Type "# Welcome to the magpie CLI"
+Enter
+Sleep 1.5s
+
+Type "# A feed is a set of sources polled for new posts"
+Enter
+Sleep 1.5s
+Type "magpie feed list"
+Enter
+Sleep 3s
+Type "magpie feed get __FEED_ID__"
+Enter
+Sleep 4s
+
+Type "# A watch reads its feeds through a chain of actions"
+Enter
+Sleep 1.5s
+Type "magpie watch list"
+Enter
+Sleep 3s
+Type "magpie watch action list --watch __WATCH_ID__"
+Enter
+Sleep 4s
+
+Type "# The semantic filter: what to look for in plain language, plus the minimum score to match"
+Enter
+Sleep 2.5s
+Type "magpie watch action get __ACTION_ID__"
+Enter
+Sleep 5s
+
+Type "# Your LLM scores each new post against those instructions. These cleared the bar:"
+Enter
+Sleep 1.5s
+Type "magpie activity list --action __ACTION_ID__ --state succeeded --limit 5 --columns run.id,run.result.score,feed_item.title,feed_item.url"
+Enter
+Sleep 5s
+__PAGER__
+
+Type "# One match in full: the source link, the score, and why the model said yes"
+Enter
+Sleep 1.5s
+Type "magpie activity get __RUN_ID__"
+Enter
+Sleep 10s
