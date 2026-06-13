@@ -96,11 +96,31 @@ configure_engine() {
 
     _cur_url="$(env_get_default ENGINE_BASE_URL)"
     # Default to a reachable local endpoint if one's up, else the current .env
-    # value (normalized to localhost for the host-side probe + prompt).
-    _default="$(engine_find_local)"
+    # value (normalized to localhost for the host-side probe + prompt). Keep
+    # whether the probe FOUND anything: the intro must say which situation the
+    # user is in, because the pre-filled default looks identical either way
+    # and a user with no LLM running otherwise retries URL variants against
+    # nothing (a real support case).
+    _found_local="$(engine_find_local)"
+    _default="$_found_local"
     [ -n "$_default" ] || _default="$(engine_url_for_probe "$_cur_url")"
 
-    printf '\n%s\n' "Where is your LLM running? We need the URL of an OpenAI-compatible /v1 endpoint (e.g. Ollama, vLLM, LM Studio, llama.cpp, or OpenAI itself)."
+    # Color the copy-paste bits (URLs, commands), same convention as run.sh's
+    # summary. The tty guard above already returned on non-interactive runs,
+    # so stdout here is a terminal.
+    _KEY=$(printf '\033[1;36m'); _BOLD=$(printf '\033[1m'); _OFF=$(printf '\033[0m')
+
+    printf '\n%s\n' "${_BOLD}Where is your LLM running?${_OFF}"
+    printf '%s\n' "  OpenMagpie scores posts with YOUR LLM, over an ${_KEY}OpenAI-compatible /v1${_OFF} endpoint."
+    if [ -n "$_found_local" ]; then
+        printf '%s\n' "  Found a local server at ${_KEY}${_found_local}${_OFF}; press Enter to use it."
+    else
+        printf '%s\n' "  No local server answered on the usual ports (Ollama 11434, vLLM 8000, LM Studio 1234, llama.cpp 8080),"
+        printf '%s\n' "  so the default below is only a suggestion. Your options:"
+        printf '%s\n' "    - run one locally: install Ollama (${_KEY}https://ollama.com/download${_OFF}), run ${_KEY}ollama pull qwen2.5:7b${_OFF}, then press Enter here"
+        printf '%s\n' "    - use a hosted API: paste its base URL, e.g. ${_KEY}https://api.openai.com/v1${_OFF}, and give your API key at the key prompt"
+        printf '%s\n' "    - type ${_KEY}skip${_OFF} to set this up later (the stack still boots; nothing gets scored until an LLM is configured)"
+    fi
     _skipped=0
     while : ; do
         printf '  URL [%s]: ' "$_default" > /dev/tty
@@ -163,7 +183,20 @@ configure_engine() {
             */v1 | */v1/) ;;
             *) printf '      - path: OpenAI base URLs end in /v1\n' > /dev/tty ;;
         esac
-        printf '      - and that the server is running and reachable from this machine\n' > /dev/tty
+        printf '      - is the server running and reachable from this machine?\n' > /dev/tty
+        # The "no LLM at all" exit ramp. When nothing was detected, the intro
+        # already listed the options a few lines up, so a pointer avoids
+        # repeating them under every retry; when a server WAS found, the
+        # intro showed only "Found a local server", so this block is the one
+        # place the options can appear (the found-then-died case).
+        if [ -n "$_found_local" ]; then
+            printf '      - no LLM running yet? quickest local start: install Ollama (%s), then: %s\n' \
+                "${_KEY}https://ollama.com/download${_OFF}" "${_KEY}ollama pull qwen2.5:7b${_OFF}" > /dev/tty
+            printf '      - or use a hosted /v1, e.g. %s with your API key\n' \
+                "${_KEY}https://api.openai.com/v1${_OFF}" > /dev/tty
+        else
+            printf '      - no LLM running yet? see the options above (run one locally, use a hosted /v1, or skip)\n' > /dev/tty
+        fi
         printf '    Re-enter the endpoint, or type "skip" to continue without one [retry]: ' > /dev/tty
         IFS= read -r _ans < /dev/tty || _ans="skip"
         case "$_ans" in
