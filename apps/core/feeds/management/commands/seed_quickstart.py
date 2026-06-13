@@ -33,7 +33,10 @@ from watches.registry import validate_config
 from watches.services import WatchService
 
 DEFAULT_STARTER = "selfhosted-opensource"
-DEFAULT_DAYS = 3
+# The backfill is scored one LLM call per post on the first tick, so the
+# window sets how long a new user waits for their first match. Wider
+# lookback on demand: DAYS=7 seed.sh.
+DEFAULT_DAYS = 1
 DEFAULT_EMAIL = "local@openmagpie.local"
 DEFAULT_PASSWORD = "openmagpie-local"
 

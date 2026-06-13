@@ -6,7 +6,7 @@
 # on its own to try another starter: STARTER=devtools DAYS=7 ./scripts/quickstart/seed.sh
 #
 # POSIX sh (part of the portable quickstart trio).
-# Env: STARTER (default selfhosted-opensource), DAYS (default 3),
+# Env: STARTER (default selfhosted-opensource), DAYS (default 1),
 #      SKIP_DATA_SEED=1 (create the account only, no example feed/watch).
 set -eu
 
@@ -20,7 +20,7 @@ cd "$ROOT"
 . ./scripts/quickstart/_lib.sh
 
 STARTER="${STARTER:-selfhosted-opensource}"
-DAYS="${DAYS:-3}"
+DAYS="${DAYS:-1}"
 
 # Account-only mode: no example feed/watch. Stop after the account exists so the
 # user can explore an empty workspace. is_truthy (from
