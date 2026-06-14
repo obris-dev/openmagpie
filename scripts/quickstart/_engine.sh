@@ -14,11 +14,23 @@
 # line, empty on any failure (unreachable/auth/none). The probe lives in the
 # Python module engine.scripts.probe (httpx-only, Django-free); the shell shells
 # out so it never re-implements it. Runs from apps/core so `-m engine.scripts.probe`
-# resolves the `engine` package (callers are cd'd to repo root).
+# resolves the `engine` package (callers are cd'd to repo root). Stderr is parsed
+# for the probe's `probe: <reason>` diagnostic line (emitted on any failure) and
+# stashed in the global ENGINE_PROBE_REASON so the caller can surface WHY the
+# probe came back empty - "no LLM reached" alone left a tester with a healthy
+# `ollama serve` but no model pulled with no way to tell. uv's own chatter (sync
+# progress, warnings) is swallowed; it isn't actionable here.
 engine_probe_models() {
+    ENGINE_PROBE_REASON=""
+    _perr="$(mktemp 2>/dev/null || printf '/tmp/openmagpie-probe.%s' "$$")"
     # Pass the key via ENGINE_PROBE_KEY (env), NOT a positional arg, so it never
     # lands in process argv where `ps`/`/proc/<pid>/cmdline` would leak it.
-    ( cd apps/core || exit 1; ENGINE_PROBE_KEY="${2:-}" uv run --package openmagpie-core python -m engine.scripts.probe "$1" ) 2>/dev/null || true
+    _pout="$( ( cd apps/core || exit 1; ENGINE_PROBE_KEY="${2:-}" uv run --package openmagpie-core python -m engine.scripts.probe "$1" ) 2>"$_perr" || true )"
+    # The probe namespaces its diagnostic with `probe: ` so it's findable amid
+    # whatever uv prints; take the first one (the probe emits at most one).
+    ENGINE_PROBE_REASON="$(sed -n 's/^probe: //p' "$_perr" 2>/dev/null | sed -n '1p')"
+    rm -f "$_perr" 2>/dev/null || true
+    printf '%s' "$_pout"
 }
 
 # Echo the first common local /v1 endpoint that answers GET /v1/models, else
@@ -169,6 +181,12 @@ configure_engine() {
         # to debug blind), flagging the ones that look off, before re-prompting.
         # The LLM is optional - the stack boots either way - so "skip" continues.
         printf '  ! no OpenAI-compatible LLM reached at %s. Check:\n' "$_url" > /dev/tty
+        # Lead with the probe's own diagnosis when it gave one (set by
+        # engine_probe_models; empty when uv/python never got far enough, e.g. a
+        # missing apps/core or a sync crash). Concrete - "rejected the request
+        # (HTTP 401)", "reached <url>, but it lists no models" - so the user
+        # doesn't have to guess between the generic bullets below.
+        [ -n "${ENGINE_PROBE_REASON:-}" ] && printf '      - %s\n' "$ENGINE_PROBE_REASON" > /dev/tty
         case "$_url" in
             http://* | https://*) ;;
             *) printf '      - scheme: prefix it with http:// (or https://)\n' > /dev/tty ;;

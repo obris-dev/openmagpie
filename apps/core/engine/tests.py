@@ -180,6 +180,31 @@ class ProbeTests(SimpleTestCase):
         with mock.patch("engine.scripts.probe.httpx.get", side_effect=httpx.ConnectError("refused")):
             self.assertEqual(probe.probe_models("http://llm.test/v1"), [])
 
+    def test_classify_success_returns_models_and_no_reason(self) -> None:
+        resp = httpx.Response(200, json={"data": [{"id": "a"}]}, request=httpx.Request("GET", "http://x"))
+        with mock.patch("engine.scripts.probe.httpx.get", return_value=resp):
+            self.assertEqual(probe._classify("http://llm.test/v1", "", 5.0), (["a"], None))
+
+    def test_classify_reports_why_each_failure_happened(self) -> None:
+        # The quickstart surfaces this reason so a failed probe isn't a blank
+        # miss: each distinct cause gets a distinct, human-readable substring.
+        req = httpx.Request("GET", "http://x")
+        responses = {
+            "no models": httpx.Response(200, json={"data": []}, request=req),
+            "401": httpx.Response(401, json={}, request=req),
+            "/v1": httpx.Response(404, text="nope", request=req),
+        }
+        for needle, resp in responses.items():
+            with mock.patch("engine.scripts.probe.httpx.get", return_value=resp):
+                models, reason = probe._classify("http://llm.test/v1", "", 5.0)
+            self.assertEqual(models, [])
+            self.assertIsNotNone(reason)
+            self.assertIn(needle, reason or "")
+        with mock.patch("engine.scripts.probe.httpx.get", side_effect=httpx.ConnectError("refused")):
+            models, reason = probe._classify("http://llm.test/v1", "", 5.0)
+        self.assertEqual(models, [])
+        self.assertIn("could not connect", reason or "")
+
 
 class ChecksTests(SimpleTestCase):
     """engine.W001 warns (never errors) when ENGINE_MODEL is unset, so `up` boots."""

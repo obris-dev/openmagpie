@@ -147,11 +147,20 @@ if [ -n "$docker_ok" ]; then
     fi
 fi
 
-# uv lands in ~/.local/bin by default, which may not be on PATH in this shell.
-if command -v uv >/dev/null 2>&1 || [ -x "$HOME/.local/bin/uv" ]; then
+# `command -v uv` ALONE isn't enough: a version-manager shim (pyenv, asdf, mise,
+# rtx) satisfies it but fails at runtime when the active runtime has no uv
+# installed. Actually RUN uv so a shadowed shim is caught here, instead of
+# opaquely inside run.sh's engine probe. Surface uv's first non-blank stderr
+# line verbatim - it's googleable and unambiguous - rather than trying to
+# guess which manager shadowed it (the install hint covers every variant).
+if uv --version >/dev/null 2>&1; then
     pass "uv"
 else
-    miss "uv" "uv (for the magpie CLI): curl -LsSf https://astral.sh/uv/install.sh | sh
+    uv_first="$(uv --version 2>&1 | awk 'NF { print; exit }' || true)"
+    label="uv"
+    [ -n "$uv_first" ] && label="uv (not runnable: $uv_first)"
+    miss "$label" "uv (for the magpie CLI): curl -LsSf https://astral.sh/uv/install.sh | sh
+     If a version manager (pyenv, asdf, mise) shadows it, install uv into the active runtime OR put ~/.local/bin earlier on PATH.
      docs: https://docs.astral.sh/uv/getting-started/installation/"
 fi
 
