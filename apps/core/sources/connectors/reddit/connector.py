@@ -177,7 +177,15 @@ class RedditSubRedditConnector(BaseConnector[RedditSubredditSourceSpec]):
             with client.stream("GET", url, params=params) as response:
                 if response.status_code != 429 or attempt >= MAX_RATE_LIMIT_RETRIES:
                     response.raise_for_status()
-                    return read_response_capped(response, max_bytes=MAX_BODY_BYTES, url_label=url)
+                    body = read_response_capped(response, max_bytes=MAX_BODY_BYTES, url_label=url)
+                    # Close the loop on the retry lines above: if we'd been
+                    # backing off and this attempt got through, say so, so the
+                    # escalating warnings don't read as an unresolved failure.
+                    # (raise_for_status() already returned on the
+                    # exhausted-still-429 path, so reaching here means success.)
+                    if attempt > 0:
+                        logger.info("%s succeeded after %d retr%s", url, attempt, "y" if attempt == 1 else "ies")
+                    return body
                 delay = _rate_limit_delay(response.headers.get("Retry-After"), attempt)
             # Sleep AFTER the `with` closes the 429 response, so the wait
             # never pins the streamed connection open.

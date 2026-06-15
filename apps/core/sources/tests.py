@@ -131,14 +131,25 @@ class RedditRateLimitBackoffTests(SimpleTestCase):
         return payloads, captured
 
     def test_retry_after_drives_the_wait_then_page_succeeds(self) -> None:
-        payloads, sleeps = self._poll_with(
-            [
-                httpx.Response(429, headers={"Retry-After": "3"}),
-                httpx.Response(200, content=self._EMPTY_ATOM),
-            ]
-        )
+        with self.assertLogs("sources", level="INFO") as logs:
+            payloads, sleeps = self._poll_with(
+                [
+                    httpx.Response(429, headers={"Retry-After": "3"}),
+                    httpx.Response(200, content=self._EMPTY_ATOM),
+                ]
+            )
         self.assertEqual(payloads, [])
         self.assertEqual(sleeps, [3.0])
+        # The retry warns, and the eventual success closes the loop so the 429
+        # lines don't read as an unresolved failure.
+        joined = "\n".join(logs.output)
+        self.assertIn("rate limited", joined)
+        self.assertIn("succeeded after 1 retry", joined)
+
+    def test_no_recovery_line_without_a_retry(self) -> None:
+        # A clean first hit must not emit the recovery line.
+        with self.assertNoLogs("sources", level="INFO"):
+            self._poll_with([httpx.Response(200, content=self._EMPTY_ATOM)])
 
     def test_unusable_retry_after_falls_back_to_exponential(self) -> None:
         payloads, sleeps = self._poll_with(
