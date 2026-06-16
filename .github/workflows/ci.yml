@@ -69,6 +69,11 @@ jobs:
       # --check implies no-write on Django >=4.2, so no --dry-run needed.
       - name: migrations match models
         run: uv run --package openmagpie-core python apps/core/manage.py makemigrations --check
+      # Smoke-test the CLI wheel build (the PyPI publish path in release-cli.yml).
+      # A packaging break - name drift, a missing schema force-include - fails
+      # here instead of at the first real release. Build only; not published.
+      - name: CLI wheel builds
+        run: uv build --package openmagpie --wheel
 
   test:
     name: test
