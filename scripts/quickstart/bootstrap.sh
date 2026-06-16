@@ -24,7 +24,9 @@
 #   curl -fsSL https://openmagpie.ai | OPENMAGPIE_BRANCH=feature sh
 #   OPENMAGPIE_DIR     where to clone (default: ./openmagpie under the current
 #                      directory; prompts when run interactively)
-#   OPENMAGPIE_BRANCH  branch or tag to check out (default: main)
+#   OPENMAGPIE_BRANCH  branch or tag to check out (default: the latest published
+#                      release, falling back to main when there's none / lookup
+#                      fails; set OPENMAGPIE_BRANCH=main for the bleeding edge)
 #   OPENMAGPIE_SSH=1   clone over SSH instead of HTTPS
 # DAYS / SKIP_DATA_SEED pass through to the seed as well (inherited down to
 # seed.sh), e.g. DAYS=7 sh:
@@ -34,8 +36,9 @@ set -eu
 
 readonly REPO_HTTPS="https://github.com/obris-dev/openmagpie.git"
 readonly REPO_SSH="git@github.com:obris-dev/openmagpie.git"
+readonly REPO_SLUG="obris-dev/openmagpie"
 OPENMAGPIE_DIR="${OPENMAGPIE_DIR:-}"  # resolved in resolve_target_dir
-OPENMAGPIE_BRANCH="${OPENMAGPIE_BRANCH:-main}"
+OPENMAGPIE_BRANCH="${OPENMAGPIE_BRANCH:-}"  # empty -> resolved in resolve_ref (latest release, else main)
 
 # Colors only when stdout is a terminal (curl | sh keeps stdout on the tty).
 # $(printf ...) rather than $'...' (ANSI-C quoting is a bashism).
@@ -145,6 +148,39 @@ fetch_repo() {
     echo ""
 }
 
+# Resolve which ref to fetch when the caller didn't pin OPENMAGPIE_BRANCH: the
+# latest PRODUCT release tag (v<x.y.z>), so a fresh install lands on the newest
+# STABLE version, reproducibly, while main keeps moving. CLI releases (cli-v*)
+# are a separate track and skipped by construction. Falls back to main when
+# there's no release yet or the lookup fails (offline / rate-limited) - the
+# quickstart still works, just from the tip.
+resolve_ref() {
+    [ -n "$OPENMAGPIE_BRANCH" ] && return 0  # caller pinned a branch/tag
+    if command -v curl >/dev/null 2>&1; then
+        # No jq on a fresh box. grep -o extracts each tag_name as its own line
+        # (robust to compact or pretty JSON; a line-based sed would grab the
+        # wrong tag in compact output). The list is newest-first, so the first
+        # match is the most recent. Match only clean stable semver tags
+        # (vMAJOR.MINOR.PATCH, $-anchored): that picks the PRODUCT track and skips
+        # both the cli-v* track (starts "cli-") AND prereleases - GET /releases
+        # DOES include prereleases, but they carry a -suffix (v0.2.0-rc1) the
+        # anchor rejects, so the comment's "stable" promise holds. per_page=100 is
+        # the API max; if >100 releases across both tracks pile up before a v*, we
+        # fall through to main below - safe (installs the tip), just not pinned.
+        OPENMAGPIE_BRANCH="$(curl -fsSL "https://api.github.com/repos/$REPO_SLUG/releases?per_page=100" 2>/dev/null \
+            | grep -oE '"tag_name"[[:space:]]*:[[:space:]]*"[^"]+"' \
+            | sed -E 's/.*"([^"]+)"$/\1/' \
+            | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' \
+            | head -n1)"
+    fi
+    if [ -n "$OPENMAGPIE_BRANCH" ]; then
+        info "Installing the latest release: $OPENMAGPIE_BRANCH"
+    else
+        OPENMAGPIE_BRANCH="main"
+        info "No published release found; installing from main"
+    fi
+}
+
 # Wrapped in a function so `curl | sh` reads the whole script before running
 # any of it (a truncated download then can't execute a half-script).
 main() {
@@ -153,6 +189,7 @@ main() {
     info "https://openmagpie.ai"
     echo ""
     resolve_target_dir
+    resolve_ref
     fetch_repo
     cd "$OPENMAGPIE_DIR"
     # Repo's here now: run the full prerequisites checklist from it (one shared
