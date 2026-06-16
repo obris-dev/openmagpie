@@ -106,6 +106,15 @@ fetch_repo() {
     url="$REPO_HTTPS"  # no `local` (undefined in POSIX sh)
     [ -n "${OPENMAGPIE_SSH:-}" ] && url="$REPO_SSH"
 
+    # The quickstart needs the repo's CODE, not the demo GIFs (assets/*.gif live
+    # in Git LFS). Skip the LFS smudge for every git op below: it avoids pulling
+    # MBs the install never uses, and - more importantly - decouples the install
+    # from LFS health. An LFS outage or an exhausted bandwidth quota makes the
+    # smudge download fail, which would make git clone/checkout exit non-zero and
+    # abort the quickstart over a cosmetic asset; skipping it keeps the install
+    # working regardless. (No effect when git-lfs isn't installed.)
+    export GIT_LFS_SKIP_SMUDGE=1
+
     if [ -d "$OPENMAGPIE_DIR/.git" ]; then
         info "Updating existing checkout at $OPENMAGPIE_DIR"
         git -C "$OPENMAGPIE_DIR" fetch --quiet origin "$OPENMAGPIE_BRANCH" || fail "git fetch failed"
