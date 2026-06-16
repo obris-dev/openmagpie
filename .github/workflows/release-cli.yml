@@ -1,0 +1,51 @@
+name: release-cli
+
+# On a published CLI release (tag cli-v<x.y.z>), build the openmagpie wheel and
+# publish it to PyPI via trusted publishing (OIDC - no API token; authorized by
+# a pending/registered publisher on PyPI for this repo + this workflow file).
+#
+# Fires for CLI releases only (tag starts with `cli-`), never product releases
+# (`v*`) - both emit `release: published`, so the job guards on the prefix.
+#
+# The wheel is built DIRECTLY (uv build --wheel), not via an sdist: the CLI
+# vendors openmagpie-schema with a `force-include` of ../../packages/..., which
+# does not survive sdist isolation (`uv build --package` would fail). A direct
+# wheel build runs against the full checked-out source tree, where the relative
+# include resolves.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Tag/ref to build + publish (e.g. cli-v0.1.0)"
+        required: true
+
+permissions:
+  contents: read
+  id-token: write   # trusted publishing to PyPI
+
+jobs:
+  publish:
+    # CLI releases only; manual dispatch always runs.
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.event.release.tag_name, 'cli-')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The tagged commit carries the version release-please wrote into
+          # apps/cli/pyproject.toml.
+          ref: ${{ github.event.release.tag_name || inputs.ref }}
+
+      - uses: astral-sh/setup-uv@v5
+
+      - name: Build the openmagpie wheel (direct, not via sdist)
+        run: |
+          rm -rf dist
+          uv build --package openmagpie --wheel --out-dir dist
+
+      - name: Publish to PyPI (trusted publishing)
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist

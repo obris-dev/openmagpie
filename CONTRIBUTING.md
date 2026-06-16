@@ -39,6 +39,8 @@ feat/leaf-only-action-cli     fix/poll-lock-lease     ci/branch-naming
 | `revert`   | revert a previous change                                |
 
 The slug is lowercase letters, digits, and `- . _`, starting alphanumeric.
+Append `!` to the type to mark a breaking change — e.g. `feat!/drop-legacy-api` —
+mirroring the `feat!:` commit marker that bumps the version (see below).
 
 This is enforced in two places by the same script,
 [`scripts/check-branch-name.sh`](scripts/check-branch-name.sh):
@@ -53,6 +55,27 @@ Rename a branch with `git branch -m <new-name>`.
 Use the same Conventional-Commits types for commit subjects, e.g.
 `feat(watches): add the activity summary`. Not enforced, but it keeps the
 history scannable and matches the branch types.
+
+## Versioning and releases
+
+Releases are cut by [release-please](https://github.com/googleapis/release-please)
+from the Conventional-Commit history, on two independent tracks:
+
+- **Product** (the server stack: core, web, email-render) is versioned together
+  and tagged `v<x.y.z>`. The services deploy as a unit, so they share one version
+  (no per-image compatibility matrix to reason about).
+- **The `magpie` CLI** (`apps/cli`, published to PyPI as `openmagpie`) versions on
+  its own track, tagged `cli-v<x.y.z>`. It talks to the server over a versioned API
+  (`/v1/...`), so CLI/server compatibility is governed by the **API version, not the
+  build number** — a CLI works with any server that still serves an API version it
+  speaks.
+
+Pre-1.0 SemVer: `feat:` → minor, `fix:` → patch, a breaking change
+(`feat!:` / `BREAKING CHANGE:`) → minor (no major bump until 1.0). So the commit
+type sets the next version — `feat(cli):` bumps the CLI, `feat(core):` bumps the
+product. release-please keeps an open "release PR" per track with the pending
+version + changelog; merging that PR cuts the release (tag + GitHub Release). You
+don't tag by hand.
 
 ## Running the checks
 

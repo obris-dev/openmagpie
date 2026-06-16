@@ -1,0 +1,84 @@
+name: release-images
+
+# On a published PRODUCT release (tag v<x.y.z>), give the current main image a
+# version tag. The release tag points at release-please's version-bump-only
+# merge commit (version.txt + CHANGELOG + pyproject) - it changes no code, so
+# images.yml (which builds only on code/dep/workflow changes) builds NOTHING for
+# that commit and sha-<release-commit> never exists. So we promote :latest - the
+# newest image images.yml built+pushed on a main merge, which IS the release's
+# code since the bump added none. NO rebuild: imagetools copies the existing
+# manifest list (multi-arch preserved). The build still only happens on a main
+# merge; a release just gives that tested image a named version.
+#
+# Fires for product releases only (tag starts with `v`), never CLI releases
+# (`cli-v*`) - both emit `release: published`, so the job guards on the prefix.
+#
+# workflow_dispatch is the manual escape hatch: pass the version `tag`, and
+# optionally a `sha` to promote a specific build instead of :latest.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Product version tag to apply, e.g. v0.1.0"
+        required: true
+      sha:
+        description: "Commit sha whose sha-<short> image to promote instead of :latest (optional)"
+        required: false
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  promote:
+    # Product releases only; manual dispatch always runs.
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.event.release.tag_name, 'v')
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # Both deployables get the version tag so a release is coherent. Only
+        # openmagpie-core is needed by self-hosters; openmagpie-email-render is a
+        # hosted-only sidecar, tagged for parity.
+        image: [openmagpie-core, openmagpie-email-render]
+    steps:
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Promote the current main image to the release version
+        env:
+          IMAGE: ghcr.io/obris-dev/${{ matrix.image }}
+          RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
+          SRC_SHA: ${{ inputs.sha }}
+        run: |
+          set -euo pipefail
+          ver="$RELEASE_TAG"
+          # A release promotes :latest (newest main image == this release's code,
+          # since the version bump added none). A manual run can pin a sha instead.
+          # imagetools resolves the source once and copies its manifest list, so
+          # multi-arch is preserved, nothing rebuilds, and a later :latest move
+          # can't affect this tag (a fresh build takes minutes; we read :latest
+          # seconds after the release).
+          if [ -n "$SRC_SHA" ]; then
+            src="${IMAGE}:sha-$(printf '%s' "$SRC_SHA" | cut -c1-7)"
+          else
+            src="${IMAGE}:latest"
+          fi
+          # Always tag the exact version. Add the rolling :vMAJOR.MINOR alias only
+          # for clean stable semver - a pre-release (e.g. v0.1.0-rc1) must not move
+          # the rolling alias, and ${ver%.*} on it would derive a misleading one.
+          tags=(--tag "${IMAGE}:${ver}")
+          if printf '%s' "$ver" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+            tags+=(--tag "${IMAGE}:${ver%.*}")
+          fi
+          echo "Promoting ${src} -> ${tags[*]}"
+          docker buildx imagetools create "${tags[@]}" "${src}"
+          echo "Tagged: ${tags[*]}"

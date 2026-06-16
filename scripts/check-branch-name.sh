@@ -35,7 +35,10 @@ esac
 # POSIX sh has no `[[ =~ ]]`, so match the anchored regex with grep -E. grep
 # anchors per line, not whole-string like `[[ =~ ]]`, but a git refname can't
 # contain a newline (and the only other input is a dev's argv), so it's moot.
-pattern='^(feat|fix|docs|refactor|test|chore|ci|perf|build|style|revert)/[a-z0-9][a-z0-9._-]*$'
+# An optional `!` after the type marks a breaking change (Conventional Commits),
+# e.g. feat!/drop-legacy-api - it mirrors the `feat!:` commit marker that
+# release-please reads to bump the version.
+pattern='^(feat|fix|docs|refactor|test|chore|ci|perf|build|style|revert)!?/[a-z0-9][a-z0-9._-]*$'
 if printf '%s\n' "$branch" | grep -Eq "$pattern"; then
     exit 0
 fi
@@ -59,6 +62,7 @@ Branch name doesn't match the convention: <type>/<kebab-slug>
   revert    revert a previous change
 
   slug : lowercase letters / digits / - . _  (starts alphanumeric)
+  break: append `!` to the type for a breaking change, e.g. feat!/drop-legacy-api
 
 Rename the current branch with:  git branch -m <new-name>
 EOF
