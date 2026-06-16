@@ -103,20 +103,23 @@ if is_truthy "${SKIP_DATA_SEED:-}"; then
   ${KEY}magpie feed create${OFF}
   ${KEY}magpie watch create${OFF}"
 else
-    # --starter so a STARTER override resolves the right watch (same env + default
-    # as seed.sh); without it the lookup misses the seeded watch and prints a dead
-    # <action_id>. Read-only, no side effects.
-    aid="$(manage seed_quickstart --print-activity --starter="${STARTER:-selfhosted-opensource}" 2>/dev/null | tr -d '\r' | tail -1)" || aid=""
+    # The seeded watch's filter-action id, for the inspect commands below.
+    # Read-only, no side effects.
+    aid="$(manage seed_quickstart --print-activity 2>/dev/null | tr -d '\r' | tail -1)" || aid=""
     [ -n "$aid" ] || aid="<action_id>"
     next_block="See the filter, then what it matched, with the magpie CLI:
   ${KEY}magpie auth login${OFF}
   ${KEY}magpie watch action get ${aid}${OFF}
-  ${KEY}magpie activity list --action ${aid}${OFF}"
+  ${KEY}magpie activity list --action ${aid}${OFF}
+
+Your feed and watch are saved as editable config (${KEY}config/README.md${OFF} explains them):
+  ${KEY}config/quickstart/feed.yaml${OFF}, ${KEY}config/quickstart/watch.yaml${OFF}
+  edit them and re-apply with ${KEY}magpie feed/watch edit${OFF}, or copy them into a new listener with ${KEY}create -f${OFF}."
 fi
 
 cat <<EOF
 
-${GREEN}Ready. Your local OpenMagpie is up.${OFF}
+${GREEN}Your local OpenMagpie is ready.${OFF}
 
 ${next_block}
 
@@ -131,7 +134,7 @@ On a headless box (no browser or installing on a remote instance)? Mint a token 
 Run the pipeline: ${KEY}make local-tick${OFF} (once) or ${KEY}make up-jobs${OFF} (background).
 
 Learn more:
-  ${KEY}examples/README.md${OFF}   how a starter works (feed -> watch -> matches), more starters
+  ${KEY}examples/README.md${OFF}   more starters to try, and pushing matches to a webhook
   ${KEY}make help${OFF}            every local command
 EOF
 

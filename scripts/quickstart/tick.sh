@@ -10,7 +10,6 @@
 # doesn't need).
 #
 # POSIX sh (part of the portable quickstart trio).
-# Env: STARTER (default selfhosted-opensource) - for the activity hint.
 set -eu
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -19,8 +18,6 @@ cd "$ROOT"
 # Shared helpers (manage()). Sourced after cd so the path resolves.
 # shellcheck source=/dev/null
 . ./scripts/quickstart/_lib.sh
-
-STARTER="${STARTER:-selfhosted-opensource}"
 
 # The one reachability check (the real engine). A standalone run lets its stderr
 # (the specific unreachable_reason + how_to_fix) through; the quickstart keeps its
@@ -38,13 +35,12 @@ fi
 
 echo "LLM reachable. Scoring your backlog now: the semantic filter calls your LLM once per post, so this can take a minute. Progress, an ETA, and any matches stream below as they happen."
 # poll -> trigger -> drain -> digest (the scoring stages of `make local-tick`,
-# without its send_outbound_emails). The bundled starters deliver via `log`
-# (instant), so the digest flush is a no-op
-# for them, but running it means a custom starter that adds a webhook + digest
-# delivery still gets flushed. send_outbound_emails is skipped on purpose: email
-# is a hosted-only concern, not part of a local trial.
+# without its send_outbound_emails). The seeded watch delivers via `log`
+# (instant), so the digest flush is a no-op for it, but running it means a watch
+# that adds a webhook + digest delivery still gets flushed. send_outbound_emails
+# is skipped on purpose: email is a hosted-only concern, not part of a local trial.
 if manage poll_due_feeds && manage process_due_watches && manage process_due_runs && manage process_due_digests; then
-    tick_msg="Tick done. Posts that cleared the threshold printed above, tagged with the starter's prefix (e.g. [oss starter]); a backlog can also score zero on the first pass."
+    tick_msg="Tick done. Posts that cleared the threshold printed above, tagged with the watch's prefix (e.g. [quickstart]); a backlog can also score zero on the first pass."
     # The quickstart (run.sh) prints its own consolidated next-steps with the
     # activity command + login, so it sets OPENMAGPIE_QUICKSTART to suppress this
     # hint and avoid saying it twice; a standalone tick still shows it.
@@ -52,7 +48,7 @@ if manage poll_due_feeds && manage process_due_watches && manage process_due_run
         # No pipefail under POSIX sh, so a print-activity hiccup just yields an
         # empty aid (tail still succeeds) and we fall back to the generic hint;
         # the `|| aid=""` is a harmless guard for any other capture failure.
-        aid="$(manage seed_quickstart --print-activity --starter="$STARTER" 2>/dev/null | tr -d '\r' | tail -1)" || aid=""
+        aid="$(manage seed_quickstart --print-activity 2>/dev/null | tr -d '\r' | tail -1)" || aid=""
         if [ -n "$aid" ]; then
             tick_msg="$tick_msg See the filter: magpie watch action get $aid ; what it matched: magpie activity list --action $aid (after magpie auth login)."
         else

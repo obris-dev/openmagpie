@@ -1,0 +1,12 @@
+# The feed the quickstart seeds from: a set of sources to poll for new posts.
+# The quickstart copies this, swaps in the subreddits you chose, and writes the
+# result to config/quickstart/feed.yaml. Edit that copy (not this template) to
+# change your listener; see config/README.md.
+name: "Quickstart feed"
+kind: curated
+poll_interval_seconds: 300
+data:
+  retention_days: 30
+sources:
+  - spec: {kind: reddit_subreddit, subreddit: selfhosted}
+  - spec: {kind: reddit_subreddit, subreddit: opensource}

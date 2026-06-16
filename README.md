@@ -65,7 +65,7 @@ cd openmagpie
 ./scripts/quickstart/run.sh
 ```
 
-Either way it seeds an example feed + watch (a couple of subreddits, a natural-language filter, a `log` delivery) and, once an LLM is reachable, runs the pipeline once so the first matches print straight to the logs, tagged with the starter's prefix (e.g. `[oss starter]`). Matches show up in the terminal and the CLI activity log, not the web UI yet. Want a different example or a wider lookback? `STARTER=devtools DAYS=7 ./scripts/quickstart/seed.sh`. See [examples/README.md](examples/README.md) for the full list of starters.
+Either way it walks you through your first listener (which subreddits to watch, what to flag in plain language, how strict), seeds it, and once an LLM is reachable runs the pipeline once so the first matches print straight to the logs, tagged `[quickstart]`. Matches show up in the terminal and the CLI activity log, not the web UI yet. Your feed and watch are saved as editable YAML in `config/quickstart/` (see [config/README.md](config/README.md) for editing and reusing them). Want more posts to start with? `DAYS=7 ./scripts/quickstart/seed.sh` backfills a week instead of a day. See [examples/README.md](examples/README.md) for ready-made starters to apply by hand.
 
 ### Prereq: an OpenAI-compatible LLM endpoint
 

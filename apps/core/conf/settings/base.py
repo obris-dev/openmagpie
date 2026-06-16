@@ -14,6 +14,7 @@ from common.env import env_bool
 logging.Formatter.converter = time.gmtime
 
 BASE_DIR = Path(__file__).resolve().parents[2]  # core/
+REPO_ROOT = BASE_DIR.parents[1]  # repo root (apps/core -> apps -> root); the dev bind mount maps it to /app
 
 SECRET_KEY = os.environ["DJANGO_SECRET_KEY"]
 

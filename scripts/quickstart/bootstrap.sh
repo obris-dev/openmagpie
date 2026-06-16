@@ -26,10 +26,10 @@
 #                      directory; prompts when run interactively)
 #   OPENMAGPIE_BRANCH  branch or tag to check out (default: main)
 #   OPENMAGPIE_SSH=1   clone over SSH instead of HTTPS
-# STARTER / DAYS / SKIP_DATA_SEED pass through to the seed as well (inherited
-# down to seed.sh), e.g. STARTER=devtools DAYS=7 sh:
-#   STARTER / DAYS     which example starter to seed + its backfill window
-#   SKIP_DATA_SEED=1   create the account only, no example feed/watch
+# DAYS / SKIP_DATA_SEED pass through to the seed as well (inherited down to
+# seed.sh), e.g. DAYS=7 sh:
+#   DAYS               first-tick backfill window (default 1)
+#   SKIP_DATA_SEED=1   create the account only, no feed/watch
 set -eu
 
 readonly REPO_HTTPS="https://github.com/obris-dev/openmagpie.git"

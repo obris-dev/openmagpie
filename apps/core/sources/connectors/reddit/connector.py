@@ -51,8 +51,8 @@ MAX_BODY_BYTES = 5 * 1024 * 1024
 # Exhausted retries fall through to `raise_for_status()`, the existing
 # recoverable per-source error path. The cap keeps a hostile / buggy
 # header from stalling a poll worker for minutes.
-MAX_RATE_LIMIT_RETRIES = 5
-RATE_LIMIT_BACKOFF_BASE_SECONDS = 2.0  # 2s..32s over the 5 retries when Retry-After is absent
+MAX_RATE_LIMIT_RETRIES = 6
+RATE_LIMIT_BACKOFF_BASE_SECONDS = 2.0  # 2s..60s over the 6 retries when Retry-After is absent (6th clamps to the cap)
 RATE_LIMIT_DELAY_CAP_SECONDS = 60.0
 
 # Backoff sleeps tick the caller's `heartbeat` at this cadence so the poll

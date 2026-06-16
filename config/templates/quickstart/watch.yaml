@@ -1,0 +1,26 @@
+# The watch the quickstart seeds from: it reads the feed and runs each new post
+# through a semantic_filter (your LLM scores it against the instructions; it
+# passes at or above the threshold) then logs what clears. The quickstart swaps
+# in your instructions + threshold and wires feed_ids to the created feed, then
+# writes the result to config/quickstart/watch.yaml. Edit that copy; see
+# config/README.md. Hand-applying with `magpie watch create -f` needs the real
+# feed id in place of REPLACE_WITH_FEED_ID.
+name: "Quickstart listener"
+is_active: true
+feed_ids:
+  - REPLACE_WITH_FEED_ID
+actions:
+  - kind: semantic_filter
+    config:
+      instructions: "Someone asking for an open-source or self-hostable alternative to a paid or SaaS tool."
+      threshold: 0.8
+  - kind: log
+    config:
+      prefix: "[quickstart]"
+  # Prefer a push over a log line? Uncomment and point at your notifier (ntfy, or
+  # a relay like a Slack/Discord webhook or openclaw-style instance). A webhook also
+  # records a delivery audit you can inspect with `magpie delivery list --action <action_id>`:
+  # - kind: webhook
+  #   config:
+  #     url: "https://your-notifier.example/hook"
+  #     method: POST

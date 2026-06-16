@@ -67,3 +67,10 @@ node_modules/
 # CLI build artifacts
 cli/dist/
 cli/.venv/
+
+# config/ holds the user's feed/watch configs. The committed README + templates
+# stay tracked; everything else (the seeded quickstart/ instance + anything the
+# user writes) is theirs and ignored.
+/config/*
+!/config/README.md
+!/config/templates/
