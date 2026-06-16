@@ -47,9 +47,14 @@ One command for your first real match (needs Docker and uv; it clones the repo a
 curl -fsSL https://openmagpie.ai | sh
 ```
 
-<img src="assets/quickstart.gif" alt="The quickstart from curl to first matches: prerequisites check, LLM setup prompts, personalizing the listener (which subreddits, what to flag, how strict), then the seeded backlog scoring and the ready summary" width="900">
+Once setup finishes, keep processing new posts in the background:
 
-(The long parts are cut; a real run takes a few minutes.)
+```bash
+make up-jobs        # run the schedulers in the background
+tail -f .jobs/*.log # watch them work
+```
+
+<img src="assets/quickstart.gif" alt="The quickstart from curl to first matches: prerequisites check, LLM setup prompts, personalizing the listener (which subreddits, what to flag, how strict), then the seeded backlog scoring and the ready summary" width="900">
 
 Prefer to not generate seed data? `SKIP_DATA_SEED=1` brings up the stack without sample data:
 
