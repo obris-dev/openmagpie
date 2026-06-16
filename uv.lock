@@ -5,9 +5,9 @@ requires-python = ">=3.13"
 [manifest]
 members = [
     "openmagpie",
-    "openmagpie-cli",
     "openmagpie-core",
     "openmagpie-schema",
+    "openmagpie-suite",
 ]
 
 [[package]]
@@ -502,11 +502,6 @@ wheels = [
 [[package]]
 name = "openmagpie"
 version = "0.1.0"
-source = { virtual = "." }
-
-[[package]]
-name = "openmagpie-cli"
-version = "0.1.0"
 source = { editable = "apps/cli" }
 dependencies = [
     { name = "httpx" },
@@ -610,6 +605,11 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [{ name = "pydantic", specifier = ">=2.5" }]
+
+[[package]]
+name = "openmagpie-suite"
+version = "0.1.0"
+source = { virtual = "." }
 
 [[package]]
 name = "packaging"

@@ -1,7 +1,7 @@
 """Unit tests for the personal-access-token login path.
 
 Stdlib `unittest` (no pytest dependency in the CLI yet). Run with:
-  uv run --package openmagpie-cli python -m unittest discover -s apps/cli/tests
+  uv run --package openmagpie python -m unittest discover -s apps/cli/tests
 
 These cover the pure logic and the persistence behaviour without a live
 server; the full end-to-end path is exercised manually against a running

@@ -119,7 +119,7 @@ echo "Recording with watch '$WATCH_NAME' (watch=$WATCH_ID feed=$FEED_ID action=$
 # Render to a temp tape. vhs runs from the repo root, where the tape's relative
 # Output path lands in assets/. Explicit template, not `mktemp -t`: BSD treats
 # -t's operand as a prefix, GNU requires X's in it, so -t can't be both.
-tape="$(mktemp "${TMPDIR:-/tmp}/openmagpie-cli-tour-tape.XXXXXXXX")"
+tape="$(mktemp "${TMPDIR:-/tmp}/cli-tour-tape.XXXXXXXX")"
 trap 'rm -f "$tape"' EXIT
 python3 - "$TMPL" "$FEED_ID" "$WATCH_ID" "$ACTION_ID" "$RUN_ID" "$HAS_NEXT_PAGE" >"$tape" <<'PY'
 import sys

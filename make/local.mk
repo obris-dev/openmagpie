@@ -131,7 +131,7 @@ local-cli-sync: ## Sync the uv workspace (one root .venv for all members)
 	@echo "Run: make local-cli ARGS=\"auth login\""
 
 local-cli: ## Run the magpie CLI via uv (e.g. make local-cli ARGS="auth login")
-	uv run --package openmagpie-cli magpie $(ARGS)
+	uv run --package openmagpie magpie $(ARGS)
 
 local-lint: ## Run linters (ruff + whitespace/final-newline on tracked text files)
 	$(MAKE) local-exec SVC=core CMD="uv run ruff check ."
