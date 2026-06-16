@@ -47,7 +47,7 @@ One command for your first real match (needs Docker and uv; it clones the repo a
 curl -fsSL https://openmagpie.ai | sh
 ```
 
-<img src="assets/quickstart.gif" alt="The quickstart from curl to first matches: prerequisites check, LLM setup prompts, then the seeded backlog scoring and the ready summary" width="900">
+<img src="assets/quickstart.gif" alt="The quickstart from curl to first matches: prerequisites check, LLM setup prompts, personalizing the listener (which subreddits, what to flag, how strict), then the seeded backlog scoring and the ready summary" width="900">
 
 (The long parts are cut; a real run takes a few minutes.)
 

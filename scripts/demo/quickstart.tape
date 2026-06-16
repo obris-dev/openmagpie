@@ -5,32 +5,33 @@
 # COMPOSE_PROJECT_NAME that keeps the demo's containers and volumes away from
 # the dev stack's.
 #
-# The montage: the typed command and the quickstart's own prompts (clone dir,
-# LLM URL, API key, model) play in real time; the build/seed and the gap before
-# the summary hide behind Hide/Show jump cuts on FIXED sleeps. Not Wait: vhs's
-# text-buffer polling (what Wait reads) goes stale minutes into a session while
-# its screenshot pipeline stays live, so a mid-take Wait+Screen hangs to its
-# timeout even with the anchor text sitting on screen. Sleeps are time-based
-# and immune. Wait+Line is still used for the four prompts: those land in the
-# session's first minute, inside the window where the buffer is fresh.
+# The montage: the typed command and the quickstart's seven prompts play in real
+# time - first the engine prompts (clone dir, LLM URL, API key, model), then,
+# after the build, the listener prompts the seed asks (which subreddits, what to
+# flag, how strict). The build and the scoring grind hide behind Hide/Show jump
+# cuts. The hidden windows use FIXED sleeps, not Wait: vhs's text-buffer polling
+# (what Wait reads) goes stale minutes into a session while its screenshot
+# pipeline stays live, so a mid-take Wait+Screen hangs to its timeout even with
+# the anchor text on screen. Sleeps are time-based and immune. Wait+Line is still
+# used for the prompts: the engine ones land in the session's first minute and
+# the listener ones block on /dev/tty read, so they sit on screen until typed and
+# Wait+Line catches them whenever the build's hidden window ends.
 #
-# The hidden sleeps are tuned to a WARM docker layer cache (the whole run is
-# ~90s; the drain kicks off ~30s after the model pick and scoring runs ~20s).
-# Beat shape: surface for the drain kickoff ("You'll see progress every
-# ~minute"), hide the scoring grind with margin (overshoot is safe, the screen
-# settles on the summary), surface for "Tick done." + the Ready summary. On a
-# cold cache the build alone outlasts the sleeps, so pre-warm by running the
-# quickstart once before recording, and tune by retaking: a take is only a
-# few minutes.
+# The hidden sleeps are tuned to a WARM docker layer cache (the build runs ~30s;
+# scoring the day's backlog runs ~1-2 min, an LLM call per post). Beat shape:
+# hide the build, surface for the three listener prompts, hide the scoring grind
+# with margin (overshoot is safe, the screen settles on the summary), surface for
+# "Tick done." + the Ready summary. On a cold cache the build outlasts its sleep,
+# so pre-warm by running the quickstart once before recording, and tune by
+# retaking: a take is only a few minutes.
 #
-# Rate-limit note: repeated takes re-poll the same subreddits and Reddit
-# starts throttling. The connector backs off and retries (an on-screen INFO
-# line, not a warning), but back-to-back takes still record slower scoring;
-# space takes out, or record one with STARTER=devtools to rotate subreddits.
+# Rate-limit note: repeated takes re-poll the same subreddits and Reddit starts
+# throttling. The connector backs off and retries (an on-screen INFO line, not a
+# warning), but back-to-back takes still record slower scoring; space them out.
 #
 # The model beat types qwen2.5:7b (the README's suggested model); the recorder
-# verifies it is on the detected endpoint first, since a typed id that is not
-# in the list re-prompts and derails the take.
+# verifies it is on the detected endpoint first, since a typed id that is not in
+# the list re-prompts and derails the take.
 
 Output quickstart.gif
 
@@ -67,12 +68,31 @@ Type "qwen2.5:7b"
 Enter
 Sleep 2s
 
+# Build + migrate + install the CLI (hidden), then the seed's three listener
+# prompts surface. They block on /dev/tty read, so each waits on screen until
+# typed; Wait+Line re-syncs after the hidden build window regardless of its
+# exact length.
 Hide
 Sleep 30s
 Show
-Sleep 8s
 
+Wait+Line /Which subreddits/
+Sleep 1.5s
+Type "selfhosted, LocalLLaMA"
+Enter
+
+Wait+Line /What should it flag/
+Sleep 1.5s
+Type "self-hosting and open-source alternatives to paid software"
+Enter
+
+Wait+Line /Match threshold/
+Sleep 2s
+Enter
+Sleep 6s
+
+# Scoring grind (an LLM call per post) hides; surface on "Tick done." + summary.
 Hide
-Sleep 150s
+Sleep 130s
 Show
 Sleep 14s
