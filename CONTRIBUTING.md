@@ -17,7 +17,8 @@ the first time.
 ## Branch naming
 
 Branches are **`<type>/<kebab-slug>`**: a Conventional-Commits type, a slash,
-and a short kebab-case description. `main` is the only exempt branch.
+and a short kebab-case description. `main` and release-please's own release-PR
+branches (`release-please--…`) are exempt.
 
 ```
 feat/leaf-only-action-cli     fix/poll-lock-lease     ci/branch-naming
