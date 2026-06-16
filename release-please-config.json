@@ -8,7 +8,8 @@
       "include-component-in-tag": false,
       "changelog-path": "CHANGELOG.md",
       "exclude-paths": ["apps/cli"],
-      "extra-files": ["pyproject.toml"]
+      "extra-files": ["pyproject.toml"],
+      "initial-version": "0.1.0"
     },
     "apps/cli": {
       "release-type": "python",
