@@ -1,0 +1,74 @@
+# VHS tape template for a Reddit-focused CLI tour (https://github.com/charmbracelet/vhs).
+#
+# Same machinery as cli-tour.tape.tmpl, framed around a real subreddit feed (for
+# the launch post). Not runnable as-is: the __FEED_ID__ / __WATCH_ID__ /
+# __ACTION_ID__ / __RUN_ID__ / __PAGER__ placeholders are ids on YOUR running
+# stack, resolved at record time. Render + record with cli-record.sh pointed at
+# this tape + the featured watch, never with `vhs` directly:
+#
+#   WATCH_NAME="ai-webhook" TAPE=scripts/demo/reddit-tour.tape.tmpl \
+#     scripts/demo/cli-record.sh
+#
+# __PAGER__ marks where the `activity list` pager prompt is answered (see
+# cli-tour.tape.tmpl's header for the why). Narrative is the pipeline in order:
+# the subreddit feed, the watch + its plain-English filter, then what matched
+# (ids + scores + titles), then one match in full. Every id a command takes is
+# on screen first, in the `list` that precedes it.
+
+Output assets/reddit-tour.gif
+
+Require magpie
+
+Set Shell bash
+Set FontSize 15
+Set Width 1500
+Set Height 800
+Set Padding 16
+Set TypingSpeed 30ms
+Set Theme "Catppuccin Mocha"
+
+Type "# magpie: find the Reddit threads worth showing up in"
+Enter
+Sleep 1.5s
+
+Type "# A feed polls your sources. This one watches subreddits:"
+Enter
+Sleep 1.5s
+Type "magpie feed list"
+Enter
+Sleep 3s
+Type "magpie feed get __FEED_ID__"
+Enter
+Sleep 4s
+
+Type "# A watch reads a feed through a chain of actions: filter, then deliver"
+Enter
+Sleep 2s
+Type "magpie watch list"
+Enter
+Sleep 3s
+Type "magpie watch action list --watch __WATCH_ID__"
+Enter
+Sleep 4s
+
+Type "# The filter: say what you want in plain English, set the bar to match"
+Enter
+Sleep 2.5s
+Type "magpie watch action get __ACTION_ID__"
+Enter
+Sleep 6s
+
+Type "# Your local LLM scores every new post against that. These cleared the bar:"
+Enter
+Sleep 1.5s
+Type "magpie activity list --action __ACTION_ID__ --state succeeded --limit 5 --columns run.id,run.result.score,feed_item.title"
+Enter
+Sleep 5s
+__PAGER__
+
+Type "# One match in full: the link, the score, and why the model said yes"
+Enter
+Sleep 1.5s
+Type "magpie activity get __RUN_ID__"
+Enter
+Sleep 10s

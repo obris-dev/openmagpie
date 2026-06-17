@@ -24,7 +24,11 @@ ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$ROOT"
 
 WATCH_NAME="${WATCH_NAME:-OSS alternative seekers (starter)}"
-TMPL=scripts/demo/cli-tour.tape.tmpl
+# The tape to render + record. Defaults to the README's cli-tour; override via
+# TAPE to record another tour (e.g. TAPE=scripts/demo/reddit-tour.tape.tmpl).
+# Each tape declares its own `Output` path, so a different tape writes a
+# different GIF and never clobbers cli-tour.gif.
+TMPL="${TAPE:-scripts/demo/cli-tour.tape.tmpl}"
 
 # The CLI installs to ~/.local/bin (scripts/install-local-cli.sh); put it first
 # so both this script and the shell VHS records resolve THAT magpie, even when
@@ -139,4 +143,6 @@ print(text.replace("__PAGER__\n", pager), end="")
 PY
 
 vhs "$tape"
-echo "Wrote assets/cli-tour.gif"
+# Report whatever the tape declared as its Output (cli-tour.gif by default).
+out="$(awk '/^Output /{print $2; exit}' "$TMPL")"
+echo "Wrote ${out:-the GIF}"
