@@ -1,0 +1,33 @@
+# OpenMagpie starter: Hacker News story listening.
+# Uses the `hn_feed` source kind (the new / Show HN / Ask HN story feeds).
+# Stories are low-volume (~1k/day), so this is safe to apply as-is.
+# Want HN COMMENTS too? That's a separate, high-volume starter on purpose:
+# see examples/starters/hackernews-comments/ (read its warning first).
+# Apply with the seed flow (it sets the first-tick lookback for you):
+#   ./scripts/quickstart/run.sh   or   STARTER=hackernews ./scripts/quickstart/seed.sh   (seed only)
+# Applying by hand with `magpie feed create -f` works too, but then YOU set a
+# past last_event_at on each source or the first tick only sees brand-new posts.
+# Full walkthrough: examples/README.md
+name: "Hacker News stories (starter)"
+kind: curated
+poll_interval_seconds: 300
+data:
+  retention_days: 30
+sources:
+  # All new HN stories. `feed` also takes `show` (Show HN) or `ask` (Ask HN).
+  - spec: {kind: hn_feed, feed: new}
+  # Add Show HN / Ask HN too by uncommenting:
+  #   - spec: {kind: hn_feed, feed: show}
+  #   - spec: {kind: hn_feed, feed: ask}
+
+# Backfill window, by hand (the seed flow sets this for you; skip it then).
+# Each source can carry a `last_event_at`: the point in time it starts reading
+# from. A past UTC timestamp pulls everything posted since then on the FIRST
+# tick (so you have posts to score right away); leave it off and the first tick
+# only sees posts that arrive AFTER you create the feed. It is a sibling key of
+# `spec` (same indent), not a field inside the spec map. A source with it set
+# looks exactly like this:
+#
+# sources:
+#   - spec: {kind: hn_feed, feed: new}
+#     last_event_at: 2026-06-01T00:00:00Z   # read posts from 2026-06-01 up to now

@@ -11,6 +11,13 @@ Available starters:
   asking for an open-source or self-hostable alternative to a paid tool.
 - `devtools`: r/devops + r/programming, listening for people hitting a problem
   a developer tool could solve, or asking for a tool recommendation.
+- `hackernews`: HN new stories (`hn_feed`), listening for open-source project
+  launches. Low-volume (~1k stories/day), safe to apply as-is.
+- `hackernews-comments`: a keyword-filtered slice of HN's comment stream
+  (`hn_comment`), for monitoring mentions of a project or product. Kept separate
+  from `hackernews` on purpose: comments are high-volume, so **read the local-
+  processing warning at the top of its `feed.yaml`** and keep the keyword tight
+  before applying: a broad keyword can outrun a local engine.
 
 ## Applying a starter by hand
 

@@ -1,0 +1,23 @@
+# Companion watch for the Hacker News comments starter. See feed.yaml (and its
+# LOCAL PROCESSING WARNING) and examples/README.md. The seed wires feed_ids to
+# the created feed automatically; hand-applying with `magpie watch create -f`
+# needs the real feed id here.
+name: "Hacker News mentions (starter)"
+is_active: true
+feed_ids:
+  - REPLACE_WITH_FEED_ID
+actions:
+  - kind: semantic_filter
+    config:
+      instructions: "A Hacker News comment that meaningfully discusses, asks about, or reports a problem with <your project or product>. Skip passing mentions and off-topic noise. Edit this to your own."
+      threshold: 0.6
+  - kind: log
+    config:
+      prefix: "[hn comments starter]"
+  # Prefer a push over a log line? Uncomment and point at your notifier (ntfy, or
+  # a relay like a Slack/Discord webhook or openclaw-style instance). A webhook also
+  # records a delivery audit you can inspect with `magpie delivery list --action <action_id>`:
+  # - kind: webhook
+  #   config:
+  #     url: "https://your-notifier.example/hook"
+  #     method: POST

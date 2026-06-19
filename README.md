@@ -156,7 +156,7 @@ graph TD
 
     REDDIT --> FEED
     RSS --> FEED
-    HN -. planned .-> FEED
+    HN --> FEED
     SLACK -. planned .-> FEED
     LINKEDIN -. planned .-> FEED
     GITHUB -. planned .-> FEED
@@ -212,7 +212,7 @@ Social listening is a crowded market (Brand24, Mention, Octolens, Syften, and to
 
 | Layer | Shipped |
 |---|---|
-| Connectors | Reddit (`reddit_subreddit`), RSS/Atom (`rss`) |
+| Connectors | Reddit (`reddit_subreddit`), Hacker News (`hn_feed`, `hn_comment`), RSS/Atom (`rss`) |
 | Engines | Any OpenAI-compatible `/v1` API: Ollama, vLLM, llama.cpp, LM Studio, OpenAI, ... |
 | Action kinds | `semantic_filter` (LLM-judged), `webhook`, `log` |
 | Delivery modes | instant, digest |
@@ -221,7 +221,7 @@ Social listening is a crowded market (Brand24, Mention, Octolens, Syften, and to
 
 ## Roadmap
 
-- **More connectors**: Hacker News, Slack, LinkedIn, GitHub, Bluesky, Mastodon, and X.
+- **More connectors**: Slack, LinkedIn, GitHub, Bluesky, Mastodon, and X.
 - **More engines**: Anthropic, OpenAI, and a keyword engine behind the same `Engine` Protocol.
 - **Learns from feedback**: thumbs up/down on past matches become few-shot examples for the next pass.
 - **Run-history in the payload**: the upstream filter score and chain provenance as an opt-in webhook field.
@@ -244,7 +244,7 @@ apps/
     common/                   BaseModel (ULID PK + timestamps), ULIDField, locks, db ceilings, /healthz
     accounts/                 User / Account / UserProfile + services + AccountScopedAPIView mixin
     auth_api/                 signup / login / logout / me + tokens/* + device-flow handshake (DRF)
-    sources/                  Connectors (Reddit subreddit, RSS/Atom) + SourcePayload classes + registry
+    sources/                  Connectors (Reddit, Hacker News, RSS/Atom) + SourcePayload classes + registry
     feeds/                    Feed + Source + FeedItem models + poll orchestrator + item log
     engine/                   Engine Protocol + OpenAICompatEngine + registry (+ probe)
     watches/                  Watch + WatchFeed + WatchPath + WatchAction + WatchActionRun + WatchActionDelivery

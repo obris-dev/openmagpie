@@ -10,3 +10,9 @@ data:
 sources:
   - spec: {kind: reddit_subreddit, subreddit: selfhosted}
   - spec: {kind: reddit_subreddit, subreddit: opensource}
+  # A feed can mix source kinds; add any of these alongside the subreddits:
+  #   - spec: {kind: hn_feed, feed: new}    # Hacker News newest (feed: new | show | ask)
+  #   - spec: {kind: hn_feed, feed: show}   # Show HN
+  #   - spec: {kind: hn_comment, query: "your product"}   # HN comments matching a keyword
+  #   - spec: {kind: rss, url: "https://example.com/feed.xml", name: "Example blog"}
+  # HN `query`: words AND by default; add `match: any` for OR, or `-word` to exclude. See config/README.md.

@@ -1,0 +1,37 @@
+# OpenMagpie starter: Hacker News COMMENT listening.
+# Uses the `hn_comment` source kind: a keyword-filtered slice of HN's comment
+# stream. This is a SEPARATE starter from `hackernews` (stories) ON PURPOSE:
+# comments are high-volume, so you opt into them deliberately.
+# Apply with the seed flow (it sets the first-tick lookback for you):
+#   STARTER=hackernews-comments ./scripts/quickstart/seed.sh   (seed only)
+# Full walkthrough: examples/README.md
+#
+# ⚠️  LOCAL PROCESSING WARNING  ⚠️
+# Every matching comment costs ONE LLM call (the semantic_filter). HN's full
+# comment stream averages ~20k/day (bursty, heavier on weekdays); a single
+# local engine at ~6s/comment tops out near ~14k/day, so it CANNOT keep up with
+# the unfiltered stream. The REQUIRED `query` keyword is what keeps you safe: a
+# tight keyword (a product or project name) matches ~dozens to hundreds/day; a
+# BROAD keyword can still outrun local processing and back the poll queue up.
+# Keep it tight; widen only if you have the throughput to spare.
+name: "Hacker News comments (starter)"
+kind: curated
+poll_interval_seconds: 300
+data:
+  retention_days: 30
+sources:
+  # `query` is REQUIRED and filtered server-side (words AND by default;
+  # `match: any` for OR; `-word` to exclude). CHANGE this to your own keyword:
+  # the tighter it is, the less local LLM work the watch has to do.
+  - spec: {kind: hn_comment, query: "kubernetes"}
+
+# Backfill window, by hand (the seed flow sets this for you; skip it then).
+# A `last_event_at` sibling of `spec` (same indent) pulls everything since a
+# past UTC timestamp on the FIRST tick.
+#
+# ⚠️  Be conservative here: a wide backfill window combined with a broad query
+# enqueues a lot of LLM work at once. A source with it set looks like this:
+#
+# sources:
+#   - spec: {kind: hn_comment, query: "kubernetes"}
+#     last_event_at: 2026-06-01T00:00:00Z

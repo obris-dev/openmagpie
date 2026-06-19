@@ -8,11 +8,19 @@ variant is erased here ; the call seam (`polling.py`) passes a runtime
 
 from typing import Any
 
-from sources.connectors import Connector, RedditSubRedditConnector, RssConnector
+from sources.connectors import (
+    Connector,
+    HackerNewsCommentConnector,
+    HackerNewsFeedConnector,
+    RedditSubRedditConnector,
+    RssConnector,
+)
 
 _REGISTRY: dict[str, Connector[Any]] = {
     RedditSubRedditConnector.kind: RedditSubRedditConnector(),
     RssConnector.kind: RssConnector(),
+    HackerNewsFeedConnector.kind: HackerNewsFeedConnector(),
+    HackerNewsCommentConnector.kind: HackerNewsCommentConnector(),
 }
 
 
