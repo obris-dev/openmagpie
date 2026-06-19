@@ -110,8 +110,8 @@ class RssConnector(ChallengeBypassMixin, BaseConnector[RssSourceSpec]):
         ssl.SSLError)`) not string-matched — see the bozo comment below
         for why we generally avoid matching on exception text.
 
-        The httpx client carries `_validate_request_url` as a request
-        hook so every redirect target is re-checked under
+        The httpx client carries the shared `validate_request_url` hook
+        (from `..base`) so every redirect target is re-checked under
         `SOURCE_BLOCK_PRIVATE_IPS` (a 302 from a public host to a
         link-local / metadata-service address raises before httpx
         fetches the inner target). `read_response_capped` streams +
