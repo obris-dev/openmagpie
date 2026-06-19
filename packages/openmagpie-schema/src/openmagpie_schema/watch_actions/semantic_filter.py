@@ -45,6 +45,12 @@ class SemanticFilterConfig(WatchActionConfigBase):
     # GATES. Strict `gt=0.0` so a 0 threshold can't pass every item ; an
     # engine returning 0 for "irrelevant" would otherwise never gate.
     threshold: float = Field(default=0.8, gt=0.0, le=1.0)
+    # When the item has an `external_url` (an off-site link, e.g. an HN link
+    # post), fetch that page and fold its readable text into the judge so a bare
+    # link is scored on its substance, not just the title. ON by default; set
+    # false to skip the fetch (saves a network call per judged item). No-ops when
+    # the item has no external_url (Reddit, Ask HN, RSS today).
+    fetch_external_content: bool = True
 
     model_config = {"extra": "ignore"}
 

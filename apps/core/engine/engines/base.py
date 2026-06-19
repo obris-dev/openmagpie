@@ -57,12 +57,18 @@ class Engine(Protocol):
         *,
         instructions: str,
         model: str | None = None,
+        external_content: str | None = None,
     ) -> JudgmentResult:
         """Score how relevant the payload is to the caller's `instructions`.
 
         `model` lets the caller override the engine's default model on a
         per-call basis (so a pinned `engine.model` isn't a no-op). None
         means "use the engine instance's configured default."
+
+        `external_content`, when given, is the readable text of the item's
+        linked article (the caller fetched it); the engine folds it into the
+        judged input alongside title + content. None = judge on the payload
+        alone.
         """
         ...
 

@@ -63,20 +63,22 @@ class HackerNewsFeedConnectorTests(SimpleTestCase):
         self.assertEqual(p.kind, "hn_feed")
         self.assertEqual(p.external_id, "101")
         self.assertEqual(p.title, "Story 101")
-        self.assertEqual(p.url, "https://example.com/101")
+        self.assertEqual(p.url, "https://news.ycombinator.com/item?id=101")  # the item's home (discussion)
+        self.assertEqual(p.external_url, "https://example.com/101")  # the off-site link the engine fetches
         self.assertEqual(p.author, "alice")
         self.assertEqual(p.points, 42)
         self.assertEqual(p.num_comments, 7)
-        self.assertEqual(p.hn_url, "https://news.ycombinator.com/item?id=101")
         self.assertEqual(p.feed, "new")
         # story_text is HTML-stripped + entity-unescaped into content.
         self.assertEqual(p.content, "hi & bye")
 
-    def test_text_post_url_falls_back_to_the_discussion_permalink(self) -> None:
-        # Ask HN posts carry no outbound `url`; canonical url must not be blank.
+    def test_text_post_has_no_external_url_and_url_is_the_discussion(self) -> None:
+        # Ask HN posts carry no outbound link: external_url is empty (nothing to
+        # fetch), and url is always the HN discussion.
         spec = HackerNewsFeedSourceSpec(kind="hn_feed", feed="ask")
         payloads, requests = self._poll_with([{"hits": [_hn_hit(202, 1_700_000_000, url=None)]}], spec=spec)
         self.assertEqual(payloads[0].url, "https://news.ycombinator.com/item?id=202")
+        self.assertEqual(payloads[0].external_url, "")
         self.assertEqual(requests[0].url.params["tags"], "ask_hn")
 
     def test_since_is_pushed_into_the_numeric_filter(self) -> None:

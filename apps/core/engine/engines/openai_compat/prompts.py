@@ -20,7 +20,7 @@ USER_PROMPT_TEMPLATE = """User interest:
 Item:
   Source: {source}
   Title: {title}
-  Content: {content}
+  Content: {content}{external_section}
 
 Respond with JSON only."""
 
@@ -28,3 +28,11 @@ Respond with JSON only."""
 # cap matters for the long-form ones (Reddit `selftext` at the upper bound).
 # Truncation is purely a cost/latency lever; the title alone is usually enough signal.
 CONTENT_TRUNCATE = 2000
+
+# When the engine is given external_content (a fetched linked article, e.g. for
+# an HN link post whose own `content` is empty), it is rendered into the
+# {external_section} slot above. Larger budget than CONTENT_TRUNCATE because the
+# article IS the substance for a link post; still bounded for cost/latency.
+EXTERNAL_CONTENT_TRUNCATE = 4000
+EXTERNAL_CONTENT_TEMPLATE = """
+  Linked article: {external_content}"""

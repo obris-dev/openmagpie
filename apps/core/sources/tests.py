@@ -12,7 +12,7 @@ from sources import (
     payload_registry,
     registry,  # noqa: F401  pulls in the connectors, which self-register their payloads
 )
-from sources.connectors.base import ConnectorParseError
+from sources.connectors.base import ConnectorParseError, extract_article_text, fetch_url_safely
 from sources.connectors.reddit.connector import RedditSubRedditConnector
 from sources.connectors.rss.connector import RssConnector, _unwrap_xml_viewer
 
@@ -253,3 +253,45 @@ class FeedItemPayloadParityTests(SimpleTestCase):
                     f"{server_cls.__name__} fields drifted from schema {schema[kind].__name__}; "
                     "update the mirror in openmagpie_schema.feed",
                 )
+
+
+class FetchUrlSafelyTests(SimpleTestCase):
+    """The shared SSRF-safe fetch: returns the body under the cap, raises on an
+    oversize body, and ALWAYS blocks a private host (the article fetch reaches
+    untrusted URLs, so the block is unconditional, not gated by a setting)."""
+
+    def _client(self, handler):
+        real = httpx.Client
+        return mock.patch(
+            "sources.connectors.base.httpx.Client",
+            lambda **kw: real(transport=httpx.MockTransport(handler), **kw),
+        )
+
+    def test_returns_body_under_cap(self) -> None:
+        with self._client(lambda req: httpx.Response(200, content=b"<html>hi</html>")):
+            self.assertEqual(fetch_url_safely("https://example.com/a", max_bytes=1000), b"<html>hi</html>")
+
+    def test_oversize_body_raises(self) -> None:
+        with self._client(lambda req: httpx.Response(200, content=b"x" * 50)), self.assertRaises(ConnectorParseError):
+            fetch_url_safely("https://example.com/a", max_bytes=10)
+
+    def test_private_host_is_always_blocked(self) -> None:
+        # No SOURCE_BLOCK_PRIVATE_IPS override: the article fetch blocks regardless.
+        with self.assertRaises(ConnectorParseError):
+            fetch_url_safely("http://127.0.0.1/x", max_bytes=1000)
+
+
+class ExtractArticleTextTests(SimpleTestCase):
+    """trafilatura extraction: main text out of an article, "" for non-articles."""
+
+    def test_extracts_main_text(self) -> None:
+        html = (
+            b"<html><body><article><h1>Widget pricing</h1>"
+            b"<p>The new widget costs about five hundred dollars, which is steep for hobbyists.</p>"
+            b"<p>Reviewers say the build quality is excellent and the battery comfortably lasts a full day.</p>"
+            b"</article></body></html>"
+        )
+        self.assertIn("five hundred dollars", extract_article_text(html))
+
+    def test_empty_on_non_article(self) -> None:
+        self.assertEqual(extract_article_text(b"not html at all"), "")

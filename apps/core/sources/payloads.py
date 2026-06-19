@@ -28,6 +28,10 @@ class SourcePayload(BaseModel):
     title: str = ""
     content: str = ""
     url: str = ""
+    # The off-platform link this item points to ("" when self-contained, e.g. a
+    # text post or a Reddit thread). Distinct from `url` (the item's own page on
+    # its source); the relevance engine's lazy article-fetch reads THIS, not `url`.
+    external_url: str = ""
     parent_external_id: str = ""
 
     model_config = {"frozen": True}

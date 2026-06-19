@@ -1,11 +1,17 @@
+import ipaddress
+import logging
+import socket
 from collections.abc import Callable, Iterator
 from datetime import datetime
 from typing import Protocol
 
 import httpx
+from django.conf import settings
 from pydantic import BaseModel
 
 from sources.payloads import SourcePayload
+
+logger = logging.getLogger("sources")
 
 
 class ConnectorParseError(Exception):
@@ -36,6 +42,93 @@ def read_response_capped(response: httpx.Response, *, max_bytes: int, url_label:
         if len(body) > max_bytes:
             raise ConnectorParseError(f"{url_label} exceeded {max_bytes}-byte cap mid-stream")
     return bytes(body)
+
+
+# ── SSRF-safe fetch of the open web ───────────────────────────────────────
+# Shared by every fetch of a source-/user-supplied URL: the RSS connector and
+# the relevance engine's lazy external-link fetch. The guard is one policy in
+# one place rather than duplicated per caller.
+
+
+def block_private_ip(host: str, *, url: httpx.URL) -> None:
+    """Raise ConnectorParseError if `host` resolves to a private / loopback /
+    link-local / multicast / reserved address. Catches IP-literal URLs (no DNS
+    round-trip) and hostname URLs (one getaddrinfo)."""
+    try:
+        ip = ipaddress.ip_address(host)
+        candidates: list[ipaddress.IPv4Address | ipaddress.IPv6Address] = [ip]
+    except ValueError:
+        try:
+            infos = socket.getaddrinfo(host, None)
+        except socket.gaierror as exc:
+            raise ConnectorParseError(f"DNS resolution failed for {host!r}: {exc}") from exc
+        candidates = [ipaddress.ip_address(info[4][0]) for info in infos]
+    for ip in candidates:
+        if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_multicast or ip.is_reserved:
+            raise ConnectorParseError(
+                f"blocked URL {url} (host {host!r} resolves to {ip}; SOURCE_BLOCK_PRIVATE_IPS is set)"
+            )
+
+
+def validate_request_url(request: httpx.Request) -> None:
+    """httpx request hook ; runs for the initial request AND every redirect
+    target, so a public host that 302s to an internal address is rejected
+    before the inner fetch. No-op when SOURCE_BLOCK_PRIVATE_IPS is off."""
+    if not settings.SOURCE_BLOCK_PRIVATE_IPS:
+        return
+    host = request.url.host
+    if not host:
+        return
+    block_private_ip(host, url=request.url)
+
+
+def _enforce_public_host(request: httpx.Request) -> None:
+    """Always-on private-IP block for fetches of UNTRUSTED URLs (the engine's
+    lazy fetch of a submitter-supplied external link). Unlike
+    `validate_request_url`, NOT gated by SOURCE_BLOCK_PRIVATE_IPS: that setting
+    governs operator-chosen feed URLs (RSS), which an operator may deliberately
+    point at an internal host; a submitter's link is never trusted, so it always
+    blocks. Runs on the initial request and every redirect."""
+    host = request.url.host
+    if host:
+        block_private_ip(host, url=request.url)
+
+
+def fetch_url_safely(
+    url: str,
+    *,
+    max_bytes: int,
+    timeout: float = 15.0,
+    user_agent: str | None = None,
+) -> bytes:
+    """GET `url` with the SSRF guard (private-IP block on the request and every
+    redirect) plus the streamed byte cap; return the raw body. Raises on a
+    blocked host / oversize body (ConnectorParseError) or a transport / non-2xx
+    error (httpx.*). Best-effort callers (the engine's article fetch) catch
+    broadly and fall back."""
+    headers = {"User-Agent": user_agent} if user_agent else {}
+    with (
+        httpx.Client(
+            event_hooks={"request": [_enforce_public_host]},
+            follow_redirects=True,
+            timeout=timeout,
+            headers=headers,
+        ) as client,
+        client.stream("GET", url) as response,
+    ):
+        response.raise_for_status()
+        return read_response_capped(response, max_bytes=max_bytes, url_label=url)
+
+
+def extract_article_text(html: bytes, *, max_chars: int = 20_000) -> str:
+    """Extract the main readable text from an HTML page (boilerplate stripped),
+    capped to `max_chars`. Returns "" when nothing useful is extractable (a
+    paywall, a JS-only page, a non-article). trafilatura is imported lazily so
+    the dependency only loads when an extraction actually runs."""
+    import trafilatura
+
+    text = trafilatura.extract(html.decode("utf-8", "replace")) or ""
+    return text[:max_chars].strip()
 
 
 class Connector[SpecT: BaseModel](Protocol):

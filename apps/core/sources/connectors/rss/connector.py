@@ -7,9 +7,7 @@ publisher quirks (which key holds the body, which holds the author)
 are absorbed by the `field_map` override threaded through from the
 Source row + feed default."""
 
-import ipaddress
 import logging
-import socket
 import ssl
 from collections.abc import Callable, Iterator
 from datetime import datetime
@@ -22,7 +20,7 @@ from openmagpie_schema.configs import RssSourceSpec
 from sources.payload_registry import register
 from sources.payloads import SourcePayload
 
-from ..base import BaseConnector, ConnectorParseError, read_response_capped
+from ..base import BaseConnector, ConnectorParseError, read_response_capped, validate_request_url
 from ..challenge_bypass import ChallengeBypassMixin
 from .payloads import RssEntryPayload
 
@@ -69,41 +67,6 @@ def _unwrap_xml_viewer(body: bytes) -> bytes:
     if end <= start:
         return body
     return text[start:end].encode("utf-8")
-
-
-def _block_private_ip(host: str, *, url: httpx.URL) -> None:
-    """Raise `ConnectorParseError` if `host` resolves to a private /
-    loopback / link-local / multicast / reserved address and the
-    SOURCE_BLOCK_PRIVATE_IPS setting is on. Catches both IP-literal
-    URLs (no DNS round-trip) and hostname URLs (one getaddrinfo). The
-    schema validator rejected the no-host case at create."""
-    try:
-        ip = ipaddress.ip_address(host)
-        candidates: list[ipaddress.IPv4Address | ipaddress.IPv6Address] = [ip]
-    except ValueError:
-        try:
-            infos = socket.getaddrinfo(host, None)
-        except socket.gaierror as exc:
-            raise ConnectorParseError(f"rss: DNS resolution failed for {host!r}: {exc}") from exc
-        candidates = [ipaddress.ip_address(info[4][0]) for info in infos]
-    for ip in candidates:
-        if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_multicast or ip.is_reserved:
-            raise ConnectorParseError(
-                f"rss: blocked URL {url} (host {host!r} resolves to {ip}; SOURCE_BLOCK_PRIVATE_IPS is set)"
-            )
-
-
-def _validate_request_url(request: httpx.Request) -> None:
-    """httpx request hook ; runs for the initial GET AND for every
-    redirect target so a public hostname that 302s to an internal
-    address is rejected before httpx makes the inner fetch. No-op if
-    the SSRF setting is off."""
-    if not settings.SOURCE_BLOCK_PRIVATE_IPS:
-        return
-    host = request.url.host
-    if not host:
-        return
-    _block_private_ip(host, url=request.url)
 
 
 class RssConnector(ChallengeBypassMixin, BaseConnector[RssSourceSpec]):
@@ -158,7 +121,7 @@ class RssConnector(ChallengeBypassMixin, BaseConnector[RssSourceSpec]):
         def _stream(verify: bool) -> bytes:
             with (
                 httpx.Client(
-                    event_hooks={"request": [_validate_request_url]},
+                    event_hooks={"request": [validate_request_url]},
                     follow_redirects=True,
                     timeout=15.0,
                     headers={"User-Agent": RSS_USER_AGENT},

@@ -241,3 +241,20 @@ class RegistryTests(SimpleTestCase):
         fake = _engine()
         registry.register(fake)
         self.assertIs(registry.get(""), fake)
+
+
+class ExternalContentPromptTests(SimpleTestCase):
+    """external_content (a fetched linked article) is folded into the judge
+    prompt only when the caller provides it."""
+
+    def _user_prompt(self, **kw) -> str:
+        params = _engine()._chat_params(model="m", instructions="rust", payload=PAYLOAD, **kw)
+        return params["messages"][1]["content"]
+
+    def test_external_content_included_when_given(self) -> None:
+        prompt = self._user_prompt(external_content="THE FETCHED ARTICLE BODY")
+        self.assertIn("THE FETCHED ARTICLE BODY", prompt)
+        self.assertIn("Linked article", prompt)
+
+    def test_no_linked_article_section_without_external_content(self) -> None:
+        self.assertNotIn("Linked article", self._user_prompt())

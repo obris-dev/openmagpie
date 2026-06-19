@@ -16,7 +16,9 @@ from engine import registry as engine_registry
 from engine.engines import EngineRequestRejected
 from openmagpie_schema.watch_actions import SemanticFilterConfig, SemanticFilterResult
 from openmagpie_schema.watch_enums import WatchActionKind, WatchActionRunState
+from sources.connectors.base import extract_article_text, fetch_url_safely
 from sources.payload_registry import UnhydrateablePayload, hydrate_data
+from sources.payloads import SourcePayload
 from watches import run_messages
 from watches.models import WatchAction
 from watches.registry import load_config
@@ -24,6 +26,10 @@ from watches.registry import load_config
 from .protocol import Action, ActionContext, ActionItem, ActionResult
 
 logger = logging.getLogger("watches")
+
+# Bounds for the opt-in external-article fetch (config.fetch_external_content).
+MAX_ARTICLE_BYTES = 5 * 1024 * 1024
+ARTICLE_USER_AGENT = "openmagpie/1.0 (+https://github.com/obris-dev/openmagpie)"
 
 
 class SemanticFilterAction(Action):
@@ -74,8 +80,17 @@ class SemanticFilterAction(Action):
         # endpoint/model, malformed request) is ERRORED, not retried - like the
         # unknown-kind path above. Transient judge failures (engine down,
         # rate-limited, malformed JSON) still propagate -> the drain's FAILED.
+        # Opt-in: fetch the item's external link and fold its text into the judge
+        # (best-effort; see _external_content). No-op when off or the item has no
+        # external link.
+        external_content = self._external_content(action.id, config, payload)
         try:
-            judgment = engine.judge(payload, instructions=config.instructions, model=config.engine.model or None)
+            judgment = engine.judge(
+                payload,
+                instructions=config.instructions,
+                model=config.engine.model or None,
+                external_content=external_content,
+            )
         except EngineRequestRejected as exc:
             logger.error("semantic_filter: engine rejected request for action=%s: %s", action.id, exc)
             return ActionResult(state=WatchActionRunState.ERRORED, error=run_messages.ENGINE_REJECTED)
@@ -84,3 +99,22 @@ class SemanticFilterAction(Action):
         result = SemanticFilterResult(passed=passed, score=judgment.score, reason=judgment.reason)
         state = WatchActionRunState.SUCCEEDED if passed else WatchActionRunState.GATED
         return ActionResult(state=state, result=result.model_dump(mode="json"))
+
+    def _external_content(self, action_id: str, config: SemanticFilterConfig, payload: SourcePayload) -> str | None:
+        """Lazily fetch + extract the item's external link for the judge, when the
+        filter opts in and the item has one. Best-effort: any failure (paywall,
+        JS-only page, timeout, blocked host, parse error) falls back to None, so
+        the judge still runs on title + content rather than failing the run."""
+        if not config.fetch_external_content or not payload.external_url:
+            return None
+        try:
+            html = fetch_url_safely(payload.external_url, max_bytes=MAX_ARTICLE_BYTES, user_agent=ARTICLE_USER_AGENT)
+            return extract_article_text(html) or None
+        except Exception as exc:  # best-effort enrichment must never fail the judge
+            logger.info(
+                "semantic_filter: external fetch failed for action=%s url=%s: %s",
+                action_id,
+                payload.external_url,
+                exc,
+            )
+            return None
