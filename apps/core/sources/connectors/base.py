@@ -1,6 +1,3 @@
-import ipaddress
-import logging
-import socket
 from collections.abc import Callable, Iterator
 from datetime import datetime
 from typing import Protocol
@@ -9,9 +6,8 @@ import httpx
 from django.conf import settings
 from pydantic import BaseModel
 
+from common.ssrf import destination_block_reason
 from sources.payloads import SourcePayload
-
-logger = logging.getLogger("sources")
 
 
 class ConnectorParseError(Exception):
@@ -45,53 +41,37 @@ def read_response_capped(response: httpx.Response, *, max_bytes: int, url_label:
 
 
 # ── SSRF-safe fetch of the open web ───────────────────────────────────────
-# Shared by every fetch of a source-/user-supplied URL: the RSS connector and
-# the relevance engine's lazy external-link fetch. The guard is one policy in
-# one place rather than duplicated per caller.
-
-
-def block_private_ip(host: str, *, url: httpx.URL) -> None:
-    """Raise ConnectorParseError if `host` resolves to a private / loopback /
-    link-local / multicast / reserved address. Catches IP-literal URLs (no DNS
-    round-trip) and hostname URLs (one getaddrinfo)."""
-    try:
-        ip = ipaddress.ip_address(host)
-        candidates: list[ipaddress.IPv4Address | ipaddress.IPv6Address] = [ip]
-    except ValueError:
-        try:
-            infos = socket.getaddrinfo(host, None)
-        except socket.gaierror as exc:
-            raise ConnectorParseError(f"DNS resolution failed for {host!r}: {exc}") from exc
-        candidates = [ipaddress.ip_address(info[4][0]) for info in infos]
-    for ip in candidates:
-        if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_multicast or ip.is_reserved:
-            raise ConnectorParseError(
-                f"blocked URL {url} (host {host!r} resolves to {ip}; SOURCE_BLOCK_PRIVATE_IPS is set)"
-            )
+# Shared by every fetch of a source-/user-supplied URL (the RSS connector and
+# the relevance engine's lazy external-link fetch). The block POLICY itself
+# lives in `common.ssrf.destination_block_reason` (the same check the webhook
+# delivery uses); these wrap it as httpx request hooks so it runs on the initial
+# request AND every redirect target.
 
 
 def validate_request_url(request: httpx.Request) -> None:
-    """httpx request hook ; runs for the initial request AND every redirect
-    target, so a public host that 302s to an internal address is rejected
-    before the inner fetch. No-op when SOURCE_BLOCK_PRIVATE_IPS is off."""
-    if not settings.SOURCE_BLOCK_PRIVATE_IPS:
-        return
-    host = request.url.host
-    if not host:
-        return
-    block_private_ip(host, url=request.url)
+    """httpx request hook for OPERATOR-chosen URLs (RSS feeds): block a private /
+    loopback / etc. target only when SOURCE_BLOCK_PRIVATE_IPS is on (an operator
+    may deliberately point at an internal feed). Runs on the request and every
+    redirect."""
+    reason = destination_block_reason(
+        str(request.url),
+        require_https=False,
+        block_private_ips=settings.SOURCE_BLOCK_PRIVATE_IPS,
+        resolve_dns=True,
+    )
+    if reason:
+        raise ConnectorParseError(f"blocked URL {request.url}: {reason}")
 
 
 def _enforce_public_host(request: httpx.Request) -> None:
-    """Always-on private-IP block for fetches of UNTRUSTED URLs (the engine's
-    lazy fetch of a submitter-supplied external link). Unlike
-    `validate_request_url`, NOT gated by SOURCE_BLOCK_PRIVATE_IPS: that setting
-    governs operator-chosen feed URLs (RSS), which an operator may deliberately
-    point at an internal host; a submitter's link is never trusted, so it always
-    blocks. Runs on the initial request and every redirect."""
-    host = request.url.host
-    if host:
-        block_private_ip(host, url=request.url)
+    """httpx request hook for UNTRUSTED URLs (the engine's lazy fetch of a
+    submitter-supplied external link): ALWAYS block a private / loopback / etc.
+    target, regardless of SOURCE_BLOCK_PRIVATE_IPS (which governs operator feed
+    URLs; a submitter's link is never trusted). Runs on the request and every
+    redirect."""
+    reason = destination_block_reason(str(request.url), require_https=False, block_private_ips=True, resolve_dns=True)
+    if reason:
+        raise ConnectorParseError(f"blocked URL {request.url}: {reason}")
 
 
 def fetch_url_safely(
