@@ -13,7 +13,7 @@ install-local-cli: ## Install the local magpie CLI on your PATH (snapshot of thi
 	# Logic lives in scripts/install-local-cli.sh (POSIX sh) so the quickstart
 	# can install the CLI without make ; this target is the dev-loop alias. The
 	# script needs uv (and prints how to get it if missing).
-	@./scripts/install-local-cli.sh
+	@./scripts/install-local-cli.sh --force
 
 up: ## Start local Docker dev environment
 	docker compose up -d

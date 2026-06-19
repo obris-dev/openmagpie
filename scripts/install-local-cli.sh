@@ -21,6 +21,18 @@ set -eu
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
+# Opt-in `--force`: overwrite an existing `magpie` executable. The dev-loop
+# `make install-local-cli` passes it so re-running is idempotent even when a
+# prior install left the executable behind; the quickstart omits it so a
+# from-source build never silently clobbers a deliberately-installed released
+# `magpie`.
+force=""
+case "${1:-}" in
+    --force) force=1 ;;
+    "") ;;
+    *) printf '%s\n' "usage: $0 [--force]" >&2; exit 2 ;;
+esac
+
 require_uv() {
     command -v uv >/dev/null 2>&1 && return 0
     # uv may already live in its default ~/.local/bin without this shell's PATH
@@ -41,6 +53,11 @@ require_uv
 # NOT --editable: the CLI depends on the openmagpie-schema workspace package,
 # and an editable tool install lets a stale schema copy shadow the live one
 # (ModuleNotFoundError on newer submodules). Non-editable builds a CURRENT
-# schema wheel. --reinstall keeps re-running idempotent.
-uv tool install --reinstall ./apps/cli
+# schema wheel. --reinstall rebuilds on every run; --force (opt-in, see above)
+# also overwrites an existing `magpie` executable so the dev loop stays idempotent.
+if [ -n "$force" ]; then
+    uv tool install --reinstall --force ./apps/cli
+else
+    uv tool install --reinstall ./apps/cli
+fi
 printf '%s\n' "Installed the local CLI (snapshot of this checkout; re-run after a pull). Try: magpie auth login"
