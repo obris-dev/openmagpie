@@ -1,3 +1,4 @@
+import logging
 from collections.abc import Callable, Iterator
 from datetime import datetime
 from typing import Protocol
@@ -9,6 +10,8 @@ from pydantic import BaseModel
 from common.safe_http import SsrfBlocked, pinned_transport
 from common.ssrf import destination_block_reason
 from sources.payloads import SourcePayload
+
+logger = logging.getLogger("sources")
 
 
 class ConnectorParseError(Exception):
@@ -97,11 +100,23 @@ def fetch_url_safely(
 def extract_article_text(html: bytes, *, max_chars: int = 20_000) -> str:
     """Extract the main readable text from an HTML page (boilerplate stripped),
     capped to `max_chars`. Returns "" when nothing useful is extractable (a
-    paywall, a JS-only page, a non-article). trafilatura is imported lazily so
-    the dependency only loads when an extraction actually runs."""
+    paywall, a JS-only page, a non-article) OR when extraction itself fails -- ""
+    is this helper's own failure mode, so a best-effort caller never crashes.
+    trafilatura is imported lazily so the dep only loads when an extraction runs."""
     import trafilatura
 
-    text = trafilatura.extract(html.decode("utf-8", "replace")) or ""
+    try:
+        # Pass raw bytes: trafilatura detects the page's charset itself ; decoding
+        # as utf-8 first would mangle a non-utf-8 page (latin-1) before extraction.
+        text = trafilatura.extract(html) or ""
+    except Exception:
+        # Blanket catch is deliberate HERE: a leaf over UNTRUSTED bytes whose
+        # trafilatura / lxml failure surface is unbounded (parse errors, recursion
+        # limits) and whose defined failure value is "". logger.exception (not
+        # warning) so the full traceback reaches Sentry -- a crash is unexpected,
+        # unlike the caller's narrowly-handled fetch errors.
+        logger.exception("extract_article_text: extraction failed")
+        return ""
     return text[:max_chars].strip()
 
 

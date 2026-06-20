@@ -113,6 +113,10 @@ class OpenAICompatEngine:
         # leaves the prompt exactly as before.
         external_section = ""
         if external_content:
+            # Untrusted text is passed as a `.format` ARGUMENT, never as the
+            # template, so any `{...}` braces in it are inert data (not re-parsed).
+            # Keep it that way: don't f-string-interpolate or `.format()` the
+            # article text itself, or a `{}` in a hostile page becomes a format bug.
             external_section = EXTERNAL_CONTENT_TEMPLATE.format(
                 external_content=external_content[:EXTERNAL_CONTENT_TRUNCATE]
             )

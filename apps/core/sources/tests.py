@@ -281,13 +281,27 @@ class ExtractArticleTextTests(SimpleTestCase):
     """trafilatura extraction: main text out of an article, "" for non-articles."""
 
     def test_extracts_main_text(self) -> None:
+        # Dense, multi-paragraph body: trafilatura's length heuristics shift across
+        # versions, so a thin fixture could flip red on a harmless dep bump.
         html = (
-            b"<html><body><article><h1>Widget pricing</h1>"
-            b"<p>The new widget costs about five hundred dollars, which is steep for hobbyists.</p>"
-            b"<p>Reviewers say the build quality is excellent and the battery comfortably lasts a full day.</p>"
+            b"<html><body><article><h1>Widget pricing breakdown</h1>"
+            b"<p>The new widget costs about five hundred dollars, which is steep for hobbyists "
+            b"who are used to spending a fraction of that on comparable hardware from last season.</p>"
+            b"<p>Reviewers say the build quality is excellent and the battery comfortably lasts a "
+            b"full working day, even under the heavier workloads that previous models struggled with.</p>"
+            b"<p>The bundled software is where opinions diverge: power users praise the automation "
+            b"hooks, while newcomers find the configuration screens dense and poorly documented.</p>"
+            b"<p>Overall the consensus is that the widget is a solid, if pricey, upgrade that earns "
+            b"its keep for people who lean on it daily rather than reaching for it occasionally.</p>"
             b"</article></body></html>"
         )
         self.assertIn("five hundred dollars", extract_article_text(html))
 
     def test_empty_on_non_article(self) -> None:
         self.assertEqual(extract_article_text(b"not html at all"), "")
+
+    def test_extraction_crash_returns_empty(self) -> None:
+        # A trafilatura / lxml crash on hostile HTML must yield "" (the helper's
+        # failure mode), never raise -- the best-effort caller relies on it.
+        with mock.patch("trafilatura.extract", side_effect=RecursionError("boom")):
+            self.assertEqual(extract_article_text(b"<html>x</html>"), "")

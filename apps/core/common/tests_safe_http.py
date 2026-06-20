@@ -10,7 +10,7 @@ from unittest import mock
 from django.test import SimpleTestCase
 from httpcore._backends.sync import SyncBackend
 
-from common.safe_http import SsrfBlocked, _PinnedBackend
+from common.safe_http import SsrfBlocked, _PinnedBackend, pinned_transport
 
 _MOD = "common.safe_http"
 
@@ -27,6 +27,13 @@ class PinnedBackendTests(SimpleTestCase):
     def test_blocks_a_private_ip_literal(self) -> None:
         with self.assertRaises(SsrfBlocked):
             _PinnedBackend().connect_tcp("169.254.169.254", 80)  # link-local (cloud metadata)
+
+    def test_pinned_transport_installs_the_backend(self) -> None:
+        # Tripwire on the private httpcore wiring: if a future httpcore moves
+        # `_pool` / `_network_backend`, this fails loudly instead of the pin
+        # silently no-op'ing (apps/core also bounds httpcore to 1.x).
+        backend = getattr(pinned_transport()._pool, "_network_backend", None)
+        self.assertIsInstance(backend, _PinnedBackend)
 
     def test_connects_to_the_resolved_ip_not_the_hostname(self) -> None:
         # The pin: we connect to the validated IP, not the name (no re-resolution).

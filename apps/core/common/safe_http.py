@@ -14,8 +14,9 @@ trusted), unlike the operator-gated `validate_request_url` used for RSS feeds.
 
 Wiring note: httpx.HTTPTransport exposes no `network_backend`, so we subclass
 httpcore's SyncBackend and swap it onto the transport's connection pool. Both
-touch httpcore internals (pinned at httpcore 1.0.x); the TLS-against-hostname
-behavior was verified against a real HTTPS host.
+touch httpcore internals, so apps/core bounds httpcore to 1.x (a 2.x can't be
+resolved and silently break pinning); the TLS-against-hostname behavior was
+verified against a real HTTPS host.
 """
 
 import ipaddress
@@ -58,6 +59,10 @@ class _PinnedBackend(SyncBackend):
                 # transport errors" contract holds instead of leaking socket.gaierror.
                 raise ConnectError(str(exc)) from exc
             target = str(infos[0][4][0])  # sockaddr[0] is the address string
+        # INVARIANT: validate and connect to EXACTLY `target` (one resolved IP).
+        # Do NOT add a happy-eyeballs / multi-address fallback that tries
+        # infos[1..] without re-running ip_is_blocked per candidate -- that would
+        # connect to an unvalidated address and reopen the SSRF hole.
         if ip_is_blocked(ipaddress.ip_address(target)):
             raise SsrfBlocked(f"blocked connection target {target} (host {host!r})")
         return super().connect_tcp(
@@ -71,7 +76,7 @@ def pinned_transport(**kwargs: Any) -> httpx.HTTPTransport:
     `verify`)."""
     transport = httpx.HTTPTransport(**kwargs)
     # httpx.HTTPTransport exposes no `network_backend`, so swap it on the pool
-    # directly (httpcore internals, pinned at 1.0.x). `_pool` is typed as a
+    # directly (httpcore internals; apps/core bounds httpcore to 1.x). `_pool` is typed as a
     # union (ConnectionPool | SOCKSProxy); a plain (proxy-less) transport always
     # uses ConnectionPool -- narrow to it so the assignment is typed AND that
     # invariant is enforced at runtime.

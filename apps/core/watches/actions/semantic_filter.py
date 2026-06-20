@@ -10,13 +10,14 @@ from __future__ import annotations
 
 import logging
 
+import httpx
 from pydantic import ValidationError
 
 from engine import registry as engine_registry
 from engine.engines import EngineRequestRejected
-from openmagpie_schema.watch_actions import SemanticFilterConfig, SemanticFilterResult
+from openmagpie_schema.watch_actions import ExternalContentStatus, SemanticFilterConfig, SemanticFilterResult
 from openmagpie_schema.watch_enums import WatchActionKind, WatchActionRunState
-from sources.connectors.base import extract_article_text
+from sources.connectors.base import ConnectorParseError, extract_article_text
 from sources.payload_registry import UnhydrateablePayload, hydrate_data
 from sources.payloads import SourcePayload
 from watches import run_messages
@@ -84,7 +85,7 @@ class SemanticFilterAction(ExternalFetchMixin, Action):
         # Opt-in: fetch the item's external link and fold its text into the judge
         # (best-effort; see _external_content). No-op when off or the item has no
         # external link.
-        external_content = self._external_content(action.id, config, payload)
+        external_content, enrichment_status = self._external_content(action.id, config, payload)
         try:
             judgment = engine.judge(
                 payload,
@@ -97,27 +98,44 @@ class SemanticFilterAction(ExternalFetchMixin, Action):
             return ActionResult(state=WatchActionRunState.ERRORED, error=run_messages.ENGINE_REJECTED)
 
         passed = judgment.score >= config.threshold
-        result = SemanticFilterResult(passed=passed, score=judgment.score, reason=judgment.reason)
+        result = SemanticFilterResult(
+            passed=passed, score=judgment.score, reason=judgment.reason, enrichment_status=enrichment_status
+        )
         state = WatchActionRunState.SUCCEEDED if passed else WatchActionRunState.GATED
         return ActionResult(state=state, result=result.model_dump(mode="json"))
 
-    def _external_content(self, action_id: str, config: SemanticFilterConfig, payload: SourcePayload) -> str | None:
-        """Lazily fetch + extract the item's external link for the judge, when the
-        filter opts in and the item has one. Best-effort: any failure (paywall,
-        JS-only page, timeout, blocked host, parse error) falls back to None, so
-        the judge still runs on title + content rather than failing the run."""
-        if not config.fetch_external_content or not payload.external_url:
-            return None
+    def _external_content(
+        self, action_id: str, config: SemanticFilterConfig, payload: SourcePayload
+    ) -> tuple[str | None, ExternalContentStatus]:
+        """Lazily fetch + extract the item's external link for the judge. Returns
+        (content, status): the status is recorded on the result so a judgment
+        carries whether it saw the article, and if not, why. Best-effort by design
+        -- a failed fetch (UNAVAILABLE) or an empty extraction (MISSING) still lets
+        the judge run on title + content ; the run is never failed for missing
+        enrichment. Only the EXPECTED fetch failures are swallowed (httpx /
+        ConnectorParseError: blocked host, oversize, timeout, 4xx/5xx) ; an
+        unexpected error propagates, since that is a real defect."""
+        if not config.fetch_external_content:
+            return None, ExternalContentStatus.DISABLED
+        if not payload.external_url:
+            return None, ExternalContentStatus.NOT_APPLICABLE
         try:
             html = self.fetch_external_url(
                 payload.external_url, max_bytes=MAX_ARTICLE_BYTES, user_agent=ARTICLE_USER_AGENT
             )
-            return extract_article_text(html) or None
-        except Exception as exc:  # best-effort enrichment must never fail the judge
-            logger.info(
+        except (httpx.HTTPError, ConnectorParseError) as exc:
+            # warning (not info): a fetch FAILURE can signal a systemic egress /
+            # network problem, not just one dead link. (The per-run UNAVAILABLE
+            # status is the primary signal; MISSING / paywalls stay unlogged.)
+            logger.warning(
                 "semantic_filter: external fetch failed for action=%s url=%s: %s",
                 action_id,
                 payload.external_url,
                 exc,
             )
-            return None
+            return None, ExternalContentStatus.UNAVAILABLE
+        text = extract_article_text(html)
+        if not text:
+            # Fetched OK but no usable article text (paywall / JS-only / non-article).
+            return None, ExternalContentStatus.MISSING
+        return text, ExternalContentStatus.INCLUDED

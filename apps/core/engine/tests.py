@@ -254,7 +254,7 @@ class ExternalContentPromptTests(SimpleTestCase):
     def test_external_content_included_when_given(self) -> None:
         prompt = self._user_prompt(external_content="THE FETCHED ARTICLE BODY")
         self.assertIn("THE FETCHED ARTICLE BODY", prompt)
-        self.assertIn("Linked article", prompt)
+        self.assertIn("[LINKED_ARTICLE]", prompt)
 
     def test_no_linked_article_section_without_external_content(self) -> None:
-        self.assertNotIn("Linked article", self._user_prompt())
+        self.assertNotIn("[LINKED_ARTICLE]", self._user_prompt())

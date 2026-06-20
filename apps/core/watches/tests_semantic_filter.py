@@ -9,9 +9,10 @@ from __future__ import annotations
 
 from unittest import mock
 
+import httpx
 from django.test import SimpleTestCase
 
-from openmagpie_schema.watch_actions import SemanticFilterConfig
+from openmagpie_schema.watch_actions import ExternalContentStatus, SemanticFilterConfig
 from sources.connectors.hackernews.payloads import HackerNewsFeedPayload
 from watches.actions.semantic_filter import SemanticFilterAction
 
@@ -24,34 +25,47 @@ class ExternalContentFetchTests(SimpleTestCase):
         # frozen model -> model_copy to set the external link under test
         return HackerNewsFeedPayload.sample().model_copy(update={"external_url": external_url})
 
-    def _call(self, config: SemanticFilterConfig, payload: HackerNewsFeedPayload) -> str | None:
+    def _call(
+        self, config: SemanticFilterConfig, payload: HackerNewsFeedPayload
+    ) -> tuple[str | None, ExternalContentStatus]:
         return SemanticFilterAction()._external_content("a1", config, payload)
 
-    def test_opted_out_does_not_fetch(self) -> None:
+    def test_opted_out_is_disabled(self) -> None:
         config = SemanticFilterConfig(instructions="x", fetch_external_content=False)
         with mock.patch(_FETCH) as fetch:
-            self.assertIsNone(self._call(config, self._payload()))
+            self.assertEqual(self._call(config, self._payload()), (None, ExternalContentStatus.DISABLED))
         fetch.assert_not_called()
 
-    def test_no_external_url_does_not_fetch(self) -> None:
+    def test_no_external_url_is_not_applicable(self) -> None:
         config = SemanticFilterConfig(instructions="x")  # fetch_external_content defaults True
         with mock.patch(_FETCH) as fetch:
-            self.assertIsNone(self._call(config, self._payload(external_url="")))
+            self.assertEqual(
+                self._call(config, self._payload(external_url="")), (None, ExternalContentStatus.NOT_APPLICABLE)
+            )
         fetch.assert_not_called()
 
-    def test_fetches_and_extracts_when_on_with_a_link(self) -> None:
+    def test_fetches_and_extracts_is_included(self) -> None:
         config = SemanticFilterConfig(instructions="x")  # default on
         with (
             mock.patch(_FETCH, return_value=b"<html>..</html>") as fetch,
             mock.patch(f"{_MOD}.extract_article_text", return_value="ARTICLE TEXT") as extract,
         ):
             out = self._call(config, self._payload())
-        self.assertEqual(out, "ARTICLE TEXT")
+        self.assertEqual(out, ("ARTICLE TEXT", ExternalContentStatus.INCLUDED))
         fetch.assert_called_once()
         extract.assert_called_once()
 
-    def test_fetch_failure_falls_back_to_none(self) -> None:
-        # Best-effort: a paywall / timeout / blocked host must not fail the judge.
+    def test_fetch_failure_is_unavailable(self) -> None:
+        # The fetch itself failed (network / blocked / timeout): UNAVAILABLE, never fails the judge.
         config = SemanticFilterConfig(instructions="x")
-        with mock.patch(_FETCH, side_effect=RuntimeError("paywall")):
-            self.assertIsNone(self._call(config, self._payload()))
+        with mock.patch(_FETCH, side_effect=httpx.ConnectError("boom")):
+            self.assertEqual(self._call(config, self._payload()), (None, ExternalContentStatus.UNAVAILABLE))
+
+    def test_fetched_but_no_text_is_missing(self) -> None:
+        # Fetched OK but extraction yielded nothing (paywall / JS-only): MISSING.
+        config = SemanticFilterConfig(instructions="x")
+        with (
+            mock.patch(_FETCH, return_value=b"<html></html>"),
+            mock.patch(f"{_MOD}.extract_article_text", return_value=""),
+        ):
+            self.assertEqual(self._call(config, self._payload()), (None, ExternalContentStatus.MISSING))
