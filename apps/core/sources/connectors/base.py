@@ -6,6 +6,7 @@ import httpx
 from django.conf import settings
 from pydantic import BaseModel
 
+from common.safe_http import SsrfBlocked, pinned_transport
 from common.ssrf import destination_block_reason
 from sources.payloads import SourcePayload
 
@@ -41,11 +42,13 @@ def read_response_capped(response: httpx.Response, *, max_bytes: int, url_label:
 
 
 # ── SSRF-safe fetch of the open web ───────────────────────────────────────
-# Shared by every fetch of a source-/user-supplied URL (the RSS connector and
-# the relevance engine's lazy external-link fetch). The block POLICY itself
-# lives in `common.ssrf.destination_block_reason` (the same check the webhook
-# delivery uses); these wrap it as httpx request hooks so it runs on the initial
-# request AND every redirect target.
+# Two callers, one block POLICY (`common.ssrf` / `common.safe_http`):
+#   - RSS feeds (OPERATOR-chosen URLs): `validate_request_url`, an httpx request
+#     hook gated by SOURCE_BLOCK_PRIVATE_IPS (an operator may point at an internal
+#     feed). Re-checked on every redirect.
+#   - the engine's lazy article fetch (UNTRUSTED submitter URLs): `fetch_url_safely`,
+#     on the pinned-IP transport (always-block; resolve once + connect to that IP,
+#     closing the DNS-rebinding TOCTOU).
 
 
 def validate_request_url(request: httpx.Request) -> None:
@@ -63,41 +66,32 @@ def validate_request_url(request: httpx.Request) -> None:
         raise ConnectorParseError(f"blocked URL {request.url}: {reason}")
 
 
-def _enforce_public_host(request: httpx.Request) -> None:
-    """httpx request hook for UNTRUSTED URLs (the engine's lazy fetch of a
-    submitter-supplied external link): ALWAYS block a private / loopback / etc.
-    target, regardless of SOURCE_BLOCK_PRIVATE_IPS (which governs operator feed
-    URLs; a submitter's link is never trusted). Runs on the request and every
-    redirect."""
-    reason = destination_block_reason(str(request.url), require_https=False, block_private_ips=True, resolve_dns=True)
-    if reason:
-        raise ConnectorParseError(f"blocked URL {request.url}: {reason}")
-
-
 def fetch_url_safely(
     url: str,
     *,
     max_bytes: int,
     timeout: float = 15.0,
     user_agent: str | None = None,
+    _transport: httpx.BaseTransport | None = None,
 ) -> bytes:
-    """GET `url` with the SSRF guard (private-IP block on the request and every
-    redirect) plus the streamed byte cap; return the raw body. Raises on a
-    blocked host / oversize body (ConnectorParseError) or a transport / non-2xx
-    error (httpx.*). Best-effort callers (the engine's article fetch) catch
-    broadly and fall back."""
+    """GET an UNTRUSTED `url` with pinned-IP SSRF protection (resolve once,
+    validate, connect to that IP; re-pinned per redirect) plus the streamed byte
+    cap; return the raw body. Raises ConnectorParseError on a blocked host or an
+    oversize body, httpx.* on transport / non-2xx errors. Best-effort callers
+    (the engine's article fetch) catch broadly and fall back. `_transport` is a
+    TEST-ONLY override; a real caller must never pass it or SSRF protection is
+    bypassed."""
     headers = {"User-Agent": user_agent} if user_agent else {}
-    with (
-        httpx.Client(
-            event_hooks={"request": [_enforce_public_host]},
-            follow_redirects=True,
-            timeout=timeout,
-            headers=headers,
-        ) as client,
-        client.stream("GET", url) as response,
-    ):
-        response.raise_for_status()
-        return read_response_capped(response, max_bytes=max_bytes, url_label=url)
+    client_transport = pinned_transport() if _transport is None else _transport
+    try:
+        with (
+            httpx.Client(transport=client_transport, follow_redirects=True, timeout=timeout, headers=headers) as client,
+            client.stream("GET", url) as response,
+        ):
+            response.raise_for_status()
+            return read_response_capped(response, max_bytes=max_bytes, url_label=url)
+    except SsrfBlocked as exc:
+        raise ConnectorParseError(str(exc)) from exc
 
 
 def extract_article_text(html: bytes, *, max_chars: int = 20_000) -> str:

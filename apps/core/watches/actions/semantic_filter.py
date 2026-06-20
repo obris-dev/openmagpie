@@ -16,13 +16,14 @@ from engine import registry as engine_registry
 from engine.engines import EngineRequestRejected
 from openmagpie_schema.watch_actions import SemanticFilterConfig, SemanticFilterResult
 from openmagpie_schema.watch_enums import WatchActionKind, WatchActionRunState
-from sources.connectors.base import extract_article_text, fetch_url_safely
+from sources.connectors.base import extract_article_text
 from sources.payload_registry import UnhydrateablePayload, hydrate_data
 from sources.payloads import SourcePayload
 from watches import run_messages
 from watches.models import WatchAction
 from watches.registry import load_config
 
+from ._fetch import ExternalFetchMixin
 from .protocol import Action, ActionContext, ActionItem, ActionResult
 
 logger = logging.getLogger("watches")
@@ -32,7 +33,7 @@ MAX_ARTICLE_BYTES = 5 * 1024 * 1024
 ARTICLE_USER_AGENT = "openmagpie/1.0 (+https://github.com/obris-dev/openmagpie)"
 
 
-class SemanticFilterAction(Action):
+class SemanticFilterAction(ExternalFetchMixin, Action):
     """Runs the relevance engine against an item and gates on the score."""
 
     kind = WatchActionKind.SEMANTIC_FILTER.value
@@ -108,7 +109,9 @@ class SemanticFilterAction(Action):
         if not config.fetch_external_content or not payload.external_url:
             return None
         try:
-            html = fetch_url_safely(payload.external_url, max_bytes=MAX_ARTICLE_BYTES, user_agent=ARTICLE_USER_AGENT)
+            html = self.fetch_external_url(
+                payload.external_url, max_bytes=MAX_ARTICLE_BYTES, user_agent=ARTICLE_USER_AGENT
+            )
             return extract_article_text(html) or None
         except Exception as exc:  # best-effort enrichment must never fail the judge
             logger.info(
