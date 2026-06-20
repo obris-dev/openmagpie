@@ -256,27 +256,23 @@ class FeedItemPayloadParityTests(SimpleTestCase):
 
 
 class FetchUrlSafelyTests(SimpleTestCase):
-    """The shared SSRF-safe fetch: returns the body under the cap, raises on an
-    oversize body, and ALWAYS blocks a private host (the article fetch reaches
-    untrusted URLs, so the block is unconditional, not gated by a setting)."""
-
-    def _client(self, handler):
-        real = httpx.Client
-        return mock.patch(
-            "sources.connectors.base.httpx.Client",
-            lambda **kw: real(transport=httpx.MockTransport(handler), **kw),
-        )
+    """The untrusted article fetch: returns the body under the cap, raises on an
+    oversize body, and blocks a private host via the pinned-IP transport. Cap /
+    body cases inject a MockTransport; the block case exercises the real pinned
+    transport (no network: it refuses the loopback target before connecting)."""
 
     def test_returns_body_under_cap(self) -> None:
-        with self._client(lambda req: httpx.Response(200, content=b"<html>hi</html>")):
-            self.assertEqual(fetch_url_safely("https://example.com/a", max_bytes=1000), b"<html>hi</html>")
+        t = httpx.MockTransport(lambda req: httpx.Response(200, content=b"<html>hi</html>"))
+        self.assertEqual(fetch_url_safely("https://example.com/a", max_bytes=1000, _transport=t), b"<html>hi</html>")
 
     def test_oversize_body_raises(self) -> None:
-        with self._client(lambda req: httpx.Response(200, content=b"x" * 50)), self.assertRaises(ConnectorParseError):
-            fetch_url_safely("https://example.com/a", max_bytes=10)
+        t = httpx.MockTransport(lambda req: httpx.Response(200, content=b"x" * 50))
+        with self.assertRaises(ConnectorParseError):
+            fetch_url_safely("https://example.com/a", max_bytes=10, _transport=t)
 
-    def test_private_host_is_always_blocked(self) -> None:
-        # No SOURCE_BLOCK_PRIVATE_IPS override: the article fetch blocks regardless.
+    def test_private_host_is_blocked(self) -> None:
+        # Real pinned transport (no MockTransport): a loopback target is refused
+        # as a ConnectorParseError before any connection.
         with self.assertRaises(ConnectorParseError):
             fetch_url_safely("http://127.0.0.1/x", max_bytes=1000)
 

@@ -16,6 +16,7 @@ from sources.connectors.hackernews.payloads import HackerNewsFeedPayload
 from watches.actions.semantic_filter import SemanticFilterAction
 
 _MOD = "watches.actions.semantic_filter"
+_FETCH = "watches.actions._fetch.fetch_url_safely"  # the mixin's call site (where the name is looked up)
 
 
 class ExternalContentFetchTests(SimpleTestCase):
@@ -28,20 +29,20 @@ class ExternalContentFetchTests(SimpleTestCase):
 
     def test_opted_out_does_not_fetch(self) -> None:
         config = SemanticFilterConfig(instructions="x", fetch_external_content=False)
-        with mock.patch(f"{_MOD}.fetch_url_safely") as fetch:
+        with mock.patch(_FETCH) as fetch:
             self.assertIsNone(self._call(config, self._payload()))
         fetch.assert_not_called()
 
     def test_no_external_url_does_not_fetch(self) -> None:
         config = SemanticFilterConfig(instructions="x")  # fetch_external_content defaults True
-        with mock.patch(f"{_MOD}.fetch_url_safely") as fetch:
+        with mock.patch(_FETCH) as fetch:
             self.assertIsNone(self._call(config, self._payload(external_url="")))
         fetch.assert_not_called()
 
     def test_fetches_and_extracts_when_on_with_a_link(self) -> None:
         config = SemanticFilterConfig(instructions="x")  # default on
         with (
-            mock.patch(f"{_MOD}.fetch_url_safely", return_value=b"<html>..</html>") as fetch,
+            mock.patch(_FETCH, return_value=b"<html>..</html>") as fetch,
             mock.patch(f"{_MOD}.extract_article_text", return_value="ARTICLE TEXT") as extract,
         ):
             out = self._call(config, self._payload())
@@ -52,5 +53,5 @@ class ExternalContentFetchTests(SimpleTestCase):
     def test_fetch_failure_falls_back_to_none(self) -> None:
         # Best-effort: a paywall / timeout / blocked host must not fail the judge.
         config = SemanticFilterConfig(instructions="x")
-        with mock.patch(f"{_MOD}.fetch_url_safely", side_effect=RuntimeError("paywall")):
+        with mock.patch(_FETCH, side_effect=RuntimeError("paywall")):
             self.assertIsNone(self._call(config, self._payload()))
