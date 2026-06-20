@@ -20,6 +20,7 @@ from openmagpie_schema.watch import (
     WatchActionRunWire,
     WatchActionWire,
 )
+from openmagpie_schema.watch_actions import ExternalContentStatus
 from openmagpie_schema.watch_enums import (
     BACKLOG_STATES,
     WatchActionKind,
@@ -101,13 +102,19 @@ class RunFormatter:
 
 
 class FilterRunFormatter(RunFormatter):
-    """`semantic_filter`: the relevance score + reason on the `get` detail."""
+    """`semantic_filter`: relevance score + reason + enrichment on the `get` detail."""
 
     def detail_fields(self, run: WatchActionRunWire) -> list[tuple[str, str]]:
         fields = [("score", _score(run))]
         reason = run.result.get("reason")
         if reason:
             fields.append(("reason", str(reason)))
+        # Linked-article enrichment provenance, shown only when there's something
+        # to say: NOT_APPLICABLE (no off-site link) and absent are omitted, so a
+        # title-only score is explained (included / unavailable / missing / disabled).
+        status = run.result.get("enrichment_status")
+        if status and status != ExternalContentStatus.NOT_APPLICABLE:
+            fields.append(("enrichment", str(status)))
         return fields
 
 

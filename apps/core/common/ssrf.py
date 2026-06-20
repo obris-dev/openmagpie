@@ -17,7 +17,7 @@ import socket
 from urllib.parse import urlsplit
 
 
-def _ip_is_blocked(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
+def ip_is_blocked(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
     """An address in a range that must never be an outbound target."""
     return ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_multicast or ip.is_reserved or ip.is_unspecified
 
@@ -49,7 +49,7 @@ def destination_block_reason(
     try:
         return (
             f"host is a blocked address ({ipaddress.ip_address(host)})"
-            if _ip_is_blocked(ipaddress.ip_address(host))
+            if ip_is_blocked(ipaddress.ip_address(host))
             else None
         )
     except ValueError:
@@ -66,6 +66,6 @@ def destination_block_reason(
             ip = ipaddress.ip_address(addr)
         except ValueError:
             continue
-        if _ip_is_blocked(ip):
+        if ip_is_blocked(ip):
             return f"host {host!r} resolves to a blocked address ({ip})"
     return None

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from enum import StrEnum
 from typing import Any, ClassVar
 
 from pydantic import BaseModel, Field
@@ -45,6 +46,12 @@ class SemanticFilterConfig(WatchActionConfigBase):
     # GATES. Strict `gt=0.0` so a 0 threshold can't pass every item ; an
     # engine returning 0 for "irrelevant" would otherwise never gate.
     threshold: float = Field(default=0.8, gt=0.0, le=1.0)
+    # When the item has an `external_url` (an off-site link, e.g. an HN link
+    # post), fetch that page and fold its readable text into the judge so a bare
+    # link is scored on its substance, not just the title. ON by default; set
+    # false to skip the fetch (saves a network call per judged item). No-ops when
+    # the item has no external_url (Reddit, Ask HN, RSS today).
+    fetch_external_content: bool = True
 
     model_config = {"extra": "ignore"}
 
@@ -69,6 +76,19 @@ class SemanticFilterConfig(WatchActionConfigBase):
         return self
 
 
+class ExternalContentStatus(StrEnum):
+    """How the linked-article enrichment fared for one judgment, recorded on the
+    result so a SUCCEEDED/GATED score carries its own provenance: judged WITH the
+    article, or without it (none to fetch / disabled / the fetch yielded nothing).
+    A judgment is never failed for missing enrichment ; this is the status of it."""
+
+    NOT_APPLICABLE = "not_applicable"  # item had no external_url (Reddit, Ask HN, RSS)
+    DISABLED = "disabled"  # fetch_external_content was off
+    INCLUDED = "included"  # fetched + extracted, folded into the judge
+    UNAVAILABLE = "unavailable"  # the fetch FAILED (network / HTTP error, blocked host, timeout, oversize)
+    MISSING = "missing"  # fetched OK, but no usable article text came out (paywall / JS-only / non-article)
+
+
 class SemanticFilterResult(BaseModel):
     """Result a semantic-filter run writes to WatchActionRun.result.
 
@@ -77,8 +97,15 @@ class SemanticFilterResult(BaseModel):
     audit log + threshold tuning), bounded to match the engine contract +
     `SemanticFilterConfig.threshold` so an out-of-range score is rejected
     at the write boundary, not silently logged. `passed` not `pass`
-    because `pass` is a Python keyword."""
+    because `pass` is a Python keyword. `enrichment_status` records the STATUS of
+    the linked-article fetch (provenance for the score) ; the article TEXT itself
+    is never stored here, the fetch is lazy and ephemeral."""
 
     passed: bool
     score: float = Field(ge=0.0, le=1.0)
     reason: str = ""
+    # STATUS of the linked-article enrichment, NOT the article text (never stored).
+    # NOT_APPLICABLE is both "this item had no off-site link" AND the default for
+    # results persisted before this field existed -- don't read it as proof there
+    # was no link.
+    enrichment_status: ExternalContentStatus = ExternalContentStatus.NOT_APPLICABLE

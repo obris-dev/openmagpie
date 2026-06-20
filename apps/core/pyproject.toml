@@ -14,6 +14,7 @@ dependencies = [
     "django-oauth-toolkit>=3.0",
     "djangorestframework>=3.15",
     "feedparser>=6.0",
+    "httpcore>=1,<2",  # transitive via httpx, but common.safe_http uses its internals (SyncBackend) for the pinned-IP SSRF transport; bound the major so a 2.x can't silently break pinning
     "httpx>=0.28",
     "openai>=1.40",  # official client; the lingua franca every OpenAI-compatible backend tests against
     "openmagpie-schema",
@@ -21,6 +22,7 @@ dependencies = [
     "pydantic>=2.5",
     "python-dotenv>=1.1",
     "pyyaml>=6.0",  # reads the examples/starters/*.yaml in seed_quickstart
+    "trafilatura>=1.7",  # HTML -> readable article text for the engine's lazy external-link fetch
     "ulid>=1.1",
 ]
 

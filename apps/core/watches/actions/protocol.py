@@ -9,7 +9,8 @@ filter judges one item ; a delivery emits one (instant) or many (digest).
 
 Module per capability: `protocol.py` (this), `registry.py` (kind -> impl),
 `semantic_filter.py` / `webhook.py` / `log.py` (the impls). `_config.py`
-holds the shared typed-config loader.
+holds the shared typed-config loader ; `_fetch.py` the `ExternalFetchMixin`
+(the SSRF-safe way an action fetches an arbitrary / user-supplied URL).
 """
 
 from __future__ import annotations

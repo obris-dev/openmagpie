@@ -27,13 +27,12 @@ class _HackerNewsPayload(SourcePayload):
     """Shared fields for HN feed + comment payloads.
 
     Abstract intermediate: never registered, so payload_registry.register's
-    `sample()` guard applies only to the concrete subclasses. `hn_url` is the
-    discussion permalink; `feed` is the within-kind source slug (new / show /
-    ask for the story feed, "comments" for the comment stream).
+    `sample()` guard applies only to the concrete subclasses. `feed` is the
+    within-kind source slug (new / show / ask for the story feed, "comments"
+    for the comment stream).
     """
 
     author: str = ""
-    hn_url: str = ""
     feed: str = ""
 
     model_config = {"frozen": True, "extra": "ignore"}
@@ -64,12 +63,12 @@ class HackerNewsFeedPayload(_HackerNewsPayload):
             source=HackerNewsFeedSourceSpec.SOURCE_KIND,
             title=f"Example HN story {n}: matched this watch",
             content="(SourcePayload.content ; included in payload only if `include_fields` lists it.)",
-            url=f"https://example.com/story-{n}",
+            url=f"https://news.ycombinator.com/item?id={item_id}",
+            external_url=f"https://example.com/story-{n}",
             parent_external_id="",
             author="example_user",
             points=100 + n,
             num_comments=20 + n,
-            hn_url=f"https://news.ycombinator.com/item?id={item_id}",
             feed="new",
         )
 
@@ -85,9 +84,10 @@ class HackerNewsFeedPayload(_HackerNewsPayload):
         # variant ever fetches the same story via Firebase.
         item_id = str(hit.get("objectID", ""))
         hn_url = f"https://news.ycombinator.com/item?id={item_id}"
-        # Link posts carry `url`; Ask HN / text posts don't, so the canonical
-        # `url` falls back to the discussion permalink (never blank).
-        story_url = hit.get("url") or ""
+        # `url` is the item's home (the HN discussion), consistent with Reddit's
+        # url = the post's page. The off-site link, when there is one (link posts
+        # and many Show HN; empty for Ask HN / text posts), is `external_url` --
+        # that's what the engine's article fetch reads, not `url`.
         return cls(
             external_id=item_id,
             kind=cls.PAYLOAD_KIND,
@@ -95,11 +95,11 @@ class HackerNewsFeedPayload(_HackerNewsPayload):
             source=spec.kind,
             title=hit.get("title") or "",
             content=_html_to_text(hit.get("story_text") or ""),
-            url=story_url or hn_url,
+            url=hn_url,
+            external_url=hit.get("url") or "",
             author=hit.get("author") or "",
             points=hit.get("points") or 0,
             num_comments=hit.get("num_comments") or 0,
-            hn_url=hn_url,
             feed=spec.feed,
         )
 
@@ -140,7 +140,6 @@ class HackerNewsCommentPayload(_HackerNewsPayload):
             url=f"https://news.ycombinator.com/item?id={item_id}",
             parent_external_id=str(story_id),
             author="example_user",
-            hn_url=f"https://news.ycombinator.com/item?id={item_id}",
             feed="comments",
             story_title=story_title,
         )
@@ -163,11 +162,10 @@ class HackerNewsCommentPayload(_HackerNewsPayload):
             source=spec.kind,
             title=story_title,  # parent headline -> canonical title (engine context)
             content=_html_to_text(hit.get("comment_text") or ""),
-            # a comment has no outbound link, so canonical url == hn_url (the permalink)
+            # a comment has no off-site link: url is its own permalink, external_url stays ""
             url=hn_url,
             parent_external_id=str(story_id) if story_id is not None else "",
             author=hit.get("author") or "",
-            hn_url=hn_url,
             feed="comments",
             story_title=story_title,
         )

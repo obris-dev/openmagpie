@@ -25,7 +25,7 @@ submodules.
 from ._delivery import DeliveryConfigBase
 from .base import WatchActionConfigBase, WatchActionConfigSummary
 from .log import LogConfig, LogResult
-from .semantic_filter import EngineSpec, SemanticFilterConfig, SemanticFilterResult
+from .semantic_filter import EngineSpec, ExternalContentStatus, SemanticFilterConfig, SemanticFilterResult
 from .webhook import (
     WebhookConfig,
     WebhookItem,
@@ -39,6 +39,7 @@ from .webhook import (
 __all__ = [
     "DeliveryConfigBase",
     "EngineSpec",
+    "ExternalContentStatus",
     "LogConfig",
     "LogResult",
     "SemanticFilterConfig",

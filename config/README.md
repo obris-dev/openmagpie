@@ -42,7 +42,9 @@ chain of actions over each new post. Its `feed_ids` is what links it to a feed.
 - `semantic_filter`: your LLM rates how well each post matches your plain-language
   `instructions`, from 0 to 1, and the post passes when that relevance score is at
   least `threshold` (0 keeps everything, 1 only exact matches; higher is stricter).
-  This is what makes a watch a listener instead of a firehose.
+  This is what makes a watch a listener instead of a firehose. When a post links
+  off-site (e.g. a Hacker News link post), the linked article is fetched and judged
+  alongside the title; set `fetch_external_content: false` on the action to skip it.
 - `log`: prints the posts that clear the filter (the prefixed lines you see when
   the pipeline runs).
 - `webhook` (optional): POSTs each match to a URL. See [examples/README.md](../examples/README.md).

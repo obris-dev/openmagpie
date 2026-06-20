@@ -1,11 +1,17 @@
+import logging
 from collections.abc import Callable, Iterator
 from datetime import datetime
 from typing import Protocol
 
 import httpx
+from django.conf import settings
 from pydantic import BaseModel
 
+from common.safe_http import SsrfBlocked, pinned_transport
+from common.ssrf import destination_block_reason
 from sources.payloads import SourcePayload
+
+logger = logging.getLogger("sources")
 
 
 class ConnectorParseError(Exception):
@@ -36,6 +42,82 @@ def read_response_capped(response: httpx.Response, *, max_bytes: int, url_label:
         if len(body) > max_bytes:
             raise ConnectorParseError(f"{url_label} exceeded {max_bytes}-byte cap mid-stream")
     return bytes(body)
+
+
+# ── SSRF-safe fetch of the open web ───────────────────────────────────────
+# Two callers, one block POLICY (`common.ssrf` / `common.safe_http`):
+#   - RSS feeds (OPERATOR-chosen URLs): `validate_request_url`, an httpx request
+#     hook gated by SOURCE_BLOCK_PRIVATE_IPS (an operator may point at an internal
+#     feed). Re-checked on every redirect.
+#   - the engine's lazy article fetch (UNTRUSTED submitter URLs): `fetch_url_safely`,
+#     on the pinned-IP transport (always-block; resolve once + connect to that IP,
+#     closing the DNS-rebinding TOCTOU).
+
+
+def validate_request_url(request: httpx.Request) -> None:
+    """httpx request hook for OPERATOR-chosen URLs (RSS feeds): block a private /
+    loopback / etc. target only when SOURCE_BLOCK_PRIVATE_IPS is on (an operator
+    may deliberately point at an internal feed). Runs on the request and every
+    redirect."""
+    reason = destination_block_reason(
+        str(request.url),
+        require_https=False,
+        block_private_ips=settings.SOURCE_BLOCK_PRIVATE_IPS,
+        resolve_dns=True,
+    )
+    if reason:
+        raise ConnectorParseError(f"blocked URL {request.url}: {reason}")
+
+
+def fetch_url_safely(
+    url: str,
+    *,
+    max_bytes: int,
+    timeout: float = 15.0,
+    user_agent: str | None = None,
+    _transport: httpx.BaseTransport | None = None,
+) -> bytes:
+    """GET an UNTRUSTED `url` with pinned-IP SSRF protection (resolve once,
+    validate, connect to that IP; re-pinned per redirect) plus the streamed byte
+    cap; return the raw body. Raises ConnectorParseError on a blocked host or an
+    oversize body, httpx.* on transport / non-2xx errors. Best-effort callers
+    (the engine's article fetch) catch broadly and fall back. `_transport` is a
+    TEST-ONLY override; a real caller must never pass it or SSRF protection is
+    bypassed."""
+    headers = {"User-Agent": user_agent} if user_agent else {}
+    client_transport = pinned_transport() if _transport is None else _transport
+    try:
+        with (
+            httpx.Client(transport=client_transport, follow_redirects=True, timeout=timeout, headers=headers) as client,
+            client.stream("GET", url) as response,
+        ):
+            response.raise_for_status()
+            return read_response_capped(response, max_bytes=max_bytes, url_label=url)
+    except SsrfBlocked as exc:
+        raise ConnectorParseError(str(exc)) from exc
+
+
+def extract_article_text(html: bytes, *, max_chars: int = 20_000) -> str:
+    """Extract the main readable text from an HTML page (boilerplate stripped),
+    capped to `max_chars`. Returns "" when nothing useful is extractable (a
+    paywall, a JS-only page, a non-article) OR when extraction itself fails -- ""
+    is this helper's own failure mode, so a best-effort caller never crashes.
+    trafilatura is imported lazily so the dep only loads when an extraction runs."""
+    import trafilatura
+
+    try:
+        # Pass raw bytes: trafilatura detects the page's charset itself ; decoding
+        # as utf-8 first would mangle a non-utf-8 page (latin-1) before extraction.
+        text = trafilatura.extract(html) or ""
+    except Exception:
+        # Blanket catch is deliberate HERE: a leaf over UNTRUSTED bytes whose
+        # trafilatura / lxml failure surface is unbounded (parse errors, recursion
+        # limits) and whose defined failure value is "". logger.exception (not
+        # warning) so the full traceback reaches Sentry -- a crash is unexpected,
+        # unlike the caller's narrowly-handled fetch errors.
+        logger.exception("extract_article_text: extraction failed")
+        return ""
+    return text[:max_chars].strip()
 
 
 class Connector[SpecT: BaseModel](Protocol):
