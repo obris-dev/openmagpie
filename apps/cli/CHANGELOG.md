@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.0](https://github.com/obris-dev/openmagpie/compare/cli-v0.1.0...cli-v0.2.0) (2026-06-21)
+
+
+### Features
+
+* Hacker News connectors + linked-article enrichment ([#112](https://github.com/obris-dev/openmagpie/issues/112)) ([b294a20](https://github.com/obris-dev/openmagpie/commit/b294a20dcda7834e4647ed9ffe1b1f9877fe3855))
+
 ## 0.1.0 (2026-06-16)
 
 
