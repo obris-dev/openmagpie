@@ -5,7 +5,7 @@
 
 ### Features
 
-* Hacker News connectors + linked-article enrichment ([#112](https://github.com/obris-dev/openmagpie/issues/112)) ([b294a20](https://github.com/obris-dev/openmagpie/commit/b294a20dcda7834e4647ed9ffe1b1f9877fe3855))
+* `activity get` now surfaces linked-article enrichment status for semantic-filter runs, so you can see whether a match was judged with the fetched article. ([#112](https://github.com/obris-dev/openmagpie/issues/112))
 
 ## 0.1.0 (2026-06-16)
 
