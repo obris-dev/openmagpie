@@ -74,6 +74,6 @@ class WaitlistSourceInterest(StrEnum):
     BLUESKY = "bluesky"
     MASTODON = "mastodon"
     GITHUB = "github"
-    HACKER_NEWS = "hacker_news"
+    # Hacker News shipped (hn_feed / hn_comment); retired from the roadmap vote.
     # Picked "Something else"; the free text lands in `source_interest_other`.
     OTHER = "other"

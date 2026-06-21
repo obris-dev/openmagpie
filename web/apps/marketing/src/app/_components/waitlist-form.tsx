@@ -37,7 +37,6 @@ const SOURCE_OPTIONS: { value: WaitlistSource; label: string }[] = [
   { value: WAITLIST_SOURCE.BLUESKY, label: "Bluesky" },
   { value: WAITLIST_SOURCE.MASTODON, label: "Mastodon" },
   { value: WAITLIST_SOURCE.GITHUB, label: "GitHub" },
-  { value: WAITLIST_SOURCE.HACKER_NEWS, label: "Hacker News" },
 ];
 
 export function WaitlistForm({ idPrefix = "wl" }: { idPrefix?: string }) {

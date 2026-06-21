@@ -28,7 +28,6 @@ export const WAITLIST_SOURCE = {
   BLUESKY: "bluesky",
   MASTODON: "mastodon",
   GITHUB: "github",
-  HACKER_NEWS: "hacker_news",
   OTHER: "other",
 } as const;
 export type WaitlistSource =
