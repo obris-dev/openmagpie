@@ -5,6 +5,14 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0](https://github.com/obris-dev/openmagpie/compare/v0.1.0...v0.2.0) (2026-06-21)
+
+
+### Features
+
+* **Hacker News connectors** (`hn_feed`, `hn_comment`): listen to HN story feeds (new / Show HN / Ask HN) and a keyword-filtered slice of the comment stream via the Algolia API. ([#112](https://github.com/obris-dev/openmagpie/issues/112))
+* **Linked-article enrichment:** the semantic filter now fetches a post's linked article and scores relevance on its content, not just the title (opt out with `fetch_external_content: false`); outbound fetches are SSRF-contained behind a pinned-IP transport. ([#112](https://github.com/obris-dev/openmagpie/issues/112))
+
 ## 0.1.0 (2026-06-16)
 
 
