@@ -5,6 +5,13 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0](https://github.com/obris-dev/openmagpie/compare/v0.1.0...v0.2.0) (2026-06-21)
+
+
+### Features
+
+* Hacker News connectors + linked-article enrichment ([#112](https://github.com/obris-dev/openmagpie/issues/112)) ([b294a20](https://github.com/obris-dev/openmagpie/commit/b294a20dcda7834e4647ed9ffe1b1f9877fe3855))
+
 ## 0.1.0 (2026-06-16)
 
 
