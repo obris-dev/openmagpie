@@ -1,0 +1,41 @@
+# OpenMagpie
+
+> Open-source, self-hostable social listening. You curate sources into a feed,
+> describe what's relevant in plain language, and a local LLM scores each new
+> item against it. Matches go to your logs or a webhook; everything else is
+> dropped. Sources today: Reddit, Hacker News, and any RSS/Atom feed.
+
+Setup is two YAML files applied via the `magpie` CLI: a `feed.yaml` (which
+sources to pull) and a `watch.yaml` (a semantic filter plus where matches go).
+To help someone set one up, read the config guide and the closest starter, then
+produce their feed.yaml + watch.yaml and the `magpie create` commands. The CLI
+validates on create and rejects malformed YAML with a specific error, so iterate
+against it rather than guessing. A single inlined copy of everything below, for
+assistants that can't follow links, is at /llms-full.txt.
+
+## Start here
+
+- [README](https://github.com/obris-dev/openmagpie/blob/main/README.md): what it is, capabilities, install and quickstart
+- [Config guide](https://github.com/obris-dev/openmagpie/blob/main/config/README.md): source kinds (reddit_subreddit, hn_feed, hn_comment, RSS) and every feed/watch field
+
+## Schema reference
+
+- [openmagpie-schema](https://github.com/obris-dev/openmagpie/tree/main/packages/openmagpie-schema/src/openmagpie_schema): Pydantic models for source specs, feed payloads, and watch actions (semantic_filter, log, webhook)
+
+## Worked examples (copy and adapt)
+
+- [Starters index and AI-assisted setup](https://github.com/obris-dev/openmagpie/blob/main/examples/README.md)
+- [hackernews](https://github.com/obris-dev/openmagpie/tree/main/examples/starters/hackernews): HN stories (hn_feed)
+- [hackernews-comments](https://github.com/obris-dev/openmagpie/tree/main/examples/starters/hackernews-comments): keyword-filtered HN comments (hn_comment)
+- [selfhosted-opensource](https://github.com/obris-dev/openmagpie/tree/main/examples/starters/selfhosted-opensource) and [devtools](https://github.com/obris-dev/openmagpie/tree/main/examples/starters/devtools): Reddit examples
+
+## CLI quick reference
+
+- `magpie quickstart`: interactive guided setup
+- `magpie feed template` and `magpie watch template`: print the exact YAML shape to adapt
+- `magpie feed create -f feed.yaml`, then `magpie watch create -f watch.yaml`: apply them (validates; put the printed feed id into watch.yaml's feed_ids)
+- `magpie activity summary --action <id>`: see matches
+
+## Optional
+
+- [AGENTS.md](https://github.com/obris-dev/openmagpie/blob/main/AGENTS.md): contributor and dev conventions (not needed to set up a listener)

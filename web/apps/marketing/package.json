@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "next dev -p 3000",
     "copy-installer": "cp \"$(git rev-parse --show-toplevel)/scripts/quickstart/bootstrap.sh\" public/install.sh",
-    "prebuild": "pnpm run copy-installer",
+    "gen-llms-full": "node scripts/gen-llms-full.mjs",
+    "prebuild": "pnpm run copy-installer && pnpm run gen-llms-full",
     "build": "next build",
     "start": "next start -p 3000",
     "lint": "next lint",
