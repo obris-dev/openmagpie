@@ -1,16 +1,30 @@
-import html
 import re
 from datetime import UTC, datetime
+from html.parser import HTMLParser
 from typing import Any, ClassVar
 
 from openmagpie_schema.configs import HackerNewsCommentSourceSpec, HackerNewsFeedSourceSpec
 from sources.payloads import SourcePayload
 
 # Algolia returns Ask HN bodies (`story_text`) and all comment bodies
-# (`comment_text`) as HTML, entity-encoded, same as HN stores them. The
-# engine wants plain text; strip tags + unescape entities.
-_TAG_RE = re.compile(r"<[^>]+>")
+# (`comment_text`) as HTML, entity-encoded, same as HN stores them. The engine
+# wants plain text. Parse with the stdlib HTMLParser rather than a tag-stripping
+# regex, so attributes, malformed markup, and entity decoding are handled by a
+# real parser. HN's markup is a small trusted subset, but the parser is correct
+# (a `>` inside an attribute, an unclosed tag) and adds no dependency.
 _WS_RE = re.compile(r"\s+")
+
+
+class _TextCollector(HTMLParser):
+    """Accumulate the text nodes of an HTML body. `convert_charrefs` (on by
+    default) decodes entities into the text stream, so `&amp;` -> `&` for us."""
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.chunks: list[str] = []
+
+    def handle_data(self, data: str) -> None:
+        self.chunks.append(data)
 
 
 def _html_to_text(content_html: str) -> str:
@@ -19,8 +33,12 @@ def _html_to_text(content_html: str) -> str:
     than embed boilerplate."""
     if not content_html:
         return ""
-    text = _TAG_RE.sub(" ", content_html)
-    return _WS_RE.sub(" ", html.unescape(text)).strip()
+    collector = _TextCollector()
+    collector.feed(content_html)
+    collector.close()
+    # Join text nodes with spaces so adjacent block elements (e.g. <p>a</p><p>b</p>)
+    # don't run together, then collapse the whitespace runs.
+    return _WS_RE.sub(" ", " ".join(collector.chunks)).strip()
 
 
 class _HackerNewsPayload(SourcePayload):

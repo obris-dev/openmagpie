@@ -15,6 +15,13 @@ from .payloads import HackerNewsCommentPayload, HackerNewsFeedPayload
 _FEED_TAGS = {"new": "story", "show": "show_hn", "ask": "ask_hn"}
 _COMMENT_TAG = "comment"
 
+# Scope the keyword `query` to CONTENT, not the author. The HN Algolia index
+# searches author + title + body, so query="users" would otherwise also match
+# items BY a user named "users". Restrict to what the user means: a comment's
+# body, or a story's title / url / text.
+_FEED_SEARCHABLE = ["title", "url", "story_text"]
+_COMMENT_SEARCHABLE = ["comment_text"]
+
 
 class HackerNewsFeedConnector(BaseConnector[HackerNewsFeedSourceSpec]):
     """Polls one Hacker News story feed (new / Show HN / Ask HN) via Algolia.
@@ -55,6 +62,7 @@ class HackerNewsFeedConnector(BaseConnector[HackerNewsFeedSourceSpec]):
             since=since,
             query=spec.query,
             match=spec.match,
+            restrict=_FEED_SEARCHABLE,
             to_payload=lambda hit, when: HackerNewsFeedPayload.from_algolia_hit(hit, spec, when),
         )
 
@@ -89,6 +97,7 @@ class HackerNewsCommentConnector(BaseConnector[HackerNewsCommentSourceSpec]):
             since=since,
             query=spec.query,
             match=spec.match,
+            restrict=_COMMENT_SEARCHABLE,
             to_payload=lambda hit, when: HackerNewsCommentPayload.from_algolia_hit(hit, spec, when),
         )
 

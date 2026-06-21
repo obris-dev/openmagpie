@@ -1,8 +1,9 @@
 # OpenMagpie starter: developer-tooling listening.
-# Apply with the seed flow (it sets the first-tick lookback for you):
-#   ./scripts/quickstart/run.sh   or   STARTER=devtools ./scripts/quickstart/seed.sh   (seed only)
-# Applying by hand with `magpie feed create -f` works too, but then YOU set a
-# past last_event_at on each source or the first tick only sees brand-new posts.
+# Apply by hand (this starter isn't wired into the quickstart seed script):
+#   magpie feed create -f examples/starters/devtools/feed.yaml
+#   magpie watch create -f examples/starters/devtools/watch.yaml   (after the edits in examples/README.md)
+# Then set a past last_event_at on each source, or the first tick only sees
+# brand-new posts.
 # Full walkthrough: examples/README.md
 name: "Developer tooling (starter)"
 kind: curated
@@ -13,7 +14,7 @@ sources:
   - spec: {kind: reddit_subreddit, subreddit: devops}
   - spec: {kind: reddit_subreddit, subreddit: programming}
 
-# Backfill window, by hand (the seed flow sets this for you; skip it then).
+# Backfill window, set by hand:
 # Each source can carry a `last_event_at`: the point in time it starts reading
 # from. A past UTC timestamp pulls everything posted since then on the FIRST
 # tick (so you have posts to score right away); leave it off and the first tick

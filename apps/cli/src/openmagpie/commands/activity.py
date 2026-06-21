@@ -113,7 +113,7 @@ class FilterRunFormatter(RunFormatter):
         # to say: NOT_APPLICABLE (no off-site link) and absent are omitted, so a
         # title-only score is explained (included / unavailable / missing / disabled).
         status = run.result.get("enrichment_status")
-        if status and status != ExternalContentStatus.NOT_APPLICABLE:
+        if status is not None and status != ExternalContentStatus.NOT_APPLICABLE.value:
             fields.append(("enrichment", str(status)))
         return fields
 

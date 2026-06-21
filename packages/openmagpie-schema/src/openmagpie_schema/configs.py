@@ -88,15 +88,27 @@ class HackerNewsCommentSourceSpec(_HackerNewsSpec):
     """Identity of one Hacker News COMMENT stream. Bound to HackerNewsCommentConnector.
 
     `tags=comment` unfiltered is the site-wide comment firehose (~20k/day on
-    average, bursty), so `query` is REQUIRED here: it overrides the base default
-    away. That is the structural guard that keeps an unfiltered firehose from
-    ever reaching the per-item relevance engine. Volume past the keyword filter
+    average, bursty), so `query` is REQUIRED and NON-BLANK here (it overrides the
+    base default away). That is the structural guard that keeps an unfiltered
+    firehose from ever reaching the per-item relevance engine -- a blank or
+    whitespace-only query would strip to no pre-filter, so it is rejected at the
+    spec layer, not merely required-to-be-present. Volume past the keyword filter
     is further bounded by the connector's page cap."""
 
     SOURCE_KIND: ClassVar[str] = "hn_comment"
 
     kind: Literal["hn_comment"] = "hn_comment"
-    query: str  # required: no default (see docstring)
+    query: str = Field(min_length=1)  # required + non-blank: the firehose guard (see _query_not_blank)
+
+    @field_validator("query")
+    @classmethod
+    def _query_not_blank(cls, v: str) -> str:
+        # min_length=1 rejects "" ; this also rejects a whitespace-only query and
+        # stores it stripped. A blank query = no pre-filter = the whole firehose.
+        v = v.strip()
+        if not v:
+            raise ValueError("hn_comment requires a non-blank query (the firehose guard)")
+        return v
 
     def display(self) -> str:
         return f'HN comments: "{self.query}"'

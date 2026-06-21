@@ -1,7 +1,7 @@
 # Companion watch for the Hacker News comments starter. See feed.yaml (and its
-# LOCAL PROCESSING WARNING) and examples/README.md. The seed wires feed_ids to
-# the created feed automatically; hand-applying with `magpie watch create -f`
-# needs the real feed id here.
+# LOCAL PROCESSING WARNING) and examples/README.md. Apply with
+# `magpie watch create -f` after creating the feed, and set its real id below
+# (replacing REPLACE_WITH_FEED_ID).
 name: "Hacker News mentions (starter)"
 is_active: true
 feed_ids:

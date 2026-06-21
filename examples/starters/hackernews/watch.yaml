@@ -1,6 +1,6 @@
 # Companion watch for the Hacker News stories starter. See feed.yaml and
-# examples/README.md. The seed wires feed_ids to the created feed automatically;
-# hand-applying with `magpie watch create -f` needs the real feed id here.
+# examples/README.md. Apply with `magpie watch create -f` after creating the
+# feed, and set its real id below (replacing REPLACE_WITH_FEED_ID).
 name: "Open-source launches (starter)"
 is_active: true
 feed_ids:

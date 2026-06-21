@@ -43,10 +43,9 @@ from sources.payloads import SourcePayload
 from ..base import EngineRequestRejected, JudgmentJSON, JudgmentResult
 from .prompts import (
     CONTENT_TRUNCATE,
-    EXTERNAL_CONTENT_TEMPLATE,
-    EXTERNAL_CONTENT_TRUNCATE,
     SYSTEM_PROMPT,
     USER_PROMPT_TEMPLATE,
+    render_linked_article,
 )
 
 # Reachability/model-list probe timeout (s); the chat call gets a longer one
@@ -108,24 +107,16 @@ class OpenAICompatEngine:
         payload: SourcePayload,
         external_content: str | None = None,
     ) -> dict[str, Any]:
-        # The linked-article section is rendered only when external_content is
-        # given (the filter opted in and the item had an external link); else ""
-        # leaves the prompt exactly as before.
-        external_section = ""
-        if external_content:
-            # Untrusted text is passed as a `.format` ARGUMENT, never as the
-            # template, so any `{...}` braces in it are inert data (not re-parsed).
-            # Keep it that way: don't f-string-interpolate or `.format()` the
-            # article text itself, or a `{}` in a hostile page becomes a format bug.
-            external_section = EXTERNAL_CONTENT_TEMPLATE.format(
-                external_content=external_content[:EXTERNAL_CONTENT_TRUNCATE]
-            )
+        # render_linked_article handles truncation, the nonce-fenced block, and the
+        # paired system rule; empty external_content -> empty fragments, leaving the
+        # prompt exactly as it was pre-enrichment.
+        parts = render_linked_article(external_content or "")
         user_prompt = USER_PROMPT_TEMPLATE.format(
             instructions=instructions,
             source=payload.source,
             title=payload.title,
             content=payload.content[:CONTENT_TRUNCATE],
-            external_section=external_section,
+            external_section=parts.user_section,
         )
         params = {
             "model": model,
@@ -133,7 +124,7 @@ class OpenAICompatEngine:
             # across runs, so the prompt is what's under test, not LLM noise.
             "temperature": 0,
             "messages": [
-                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "system", "content": SYSTEM_PROMPT.format(article_rule=parts.system_rule)},
                 {"role": "user", "content": user_prompt},
             ],
         }

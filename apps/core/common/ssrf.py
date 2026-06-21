@@ -16,10 +16,32 @@ import ipaddress
 import socket
 from urllib.parse import urlsplit
 
+# RFC 6598 shared address space (CGNAT). NOT flagged by is_private / is_reserved /
+# is_global, but used internally by clouds (AWS, EKS pods, ...), so block it
+# explicitly. IPv4-only; the mapped-IPv6 unwrap below funnels ::ffff:100.64.x here.
+_CGNAT = ipaddress.ip_network("100.64.0.0/10")
+
 
 def ip_is_blocked(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
     """An address in a range that must never be an outbound target."""
-    return ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_multicast or ip.is_reserved or ip.is_unspecified
+    # Unwrap an IPv4-mapped IPv6 address (::ffff:a.b.c.d) to its IPv4 form before
+    # the range checks, so a mapped private/loopback target is caught regardless
+    # of interpreter version. CPython >=3.13 already classifies these via
+    # is_private etc.; doing it explicitly keeps this security check independent
+    # of that runtime detail (defense in depth).
+    if isinstance(ip, ipaddress.IPv6Address):
+        mapped = ip.ipv4_mapped
+        if mapped is not None:
+            ip = mapped
+    return (
+        ip.is_private
+        or ip.is_loopback
+        or ip.is_link_local
+        or ip.is_multicast
+        or ip.is_reserved
+        or ip.is_unspecified
+        or (isinstance(ip, ipaddress.IPv4Address) and ip in _CGNAT)
+    )
 
 
 def destination_block_reason(

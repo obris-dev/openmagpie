@@ -1,4 +1,5 @@
 import logging
+import time
 from collections.abc import Callable, Iterator
 from datetime import datetime
 from typing import Protocol
@@ -13,6 +14,13 @@ from sources.payloads import SourcePayload
 
 logger = logging.getLogger("sources")
 
+# Bounds for fetching an UNTRUSTED URL (the engine's article fetch): cap the
+# redirect chain and the total wall-clock, so a redirect bomb or a slowloris
+# endpoint can't tie up a drain worker. (httpx's `timeout` is per-phase, not a
+# total deadline, so neither alone bounds the whole fetch.)
+FETCH_MAX_REDIRECTS = 3
+FETCH_TOTAL_TIMEOUT = 30.0
+
 
 class ConnectorParseError(Exception):
     """A connector failed to parse a response from its upstream source.
@@ -26,18 +34,24 @@ class ConnectorParseError(Exception):
     """
 
 
-def read_response_capped(response: httpx.Response, *, max_bytes: int, url_label: str) -> bytes:
+def read_response_capped(
+    response: httpx.Response, *, max_bytes: int, url_label: str, deadline: float | None = None
+) -> bytes:
     """Drain a streaming response into bytes, raising once the running
     total crosses `max_bytes`. The cap fires mid-stream so a hostile
     endpoint serving a multi-GB body never buffers past the cap (a
     `response.content`-then-`len` check materializes the full body
     before deciding).
 
-    Caller is responsible for `response.raise_for_status()` ; the helper
-    only reads bytes. Shared between connectors so the cap policy lives
-    in one place."""
+    `deadline` (a `time.monotonic()` value), when given, also caps total
+    wall-clock across the read loop, so a slowloris dribbling bytes within the
+    per-chunk read timeout can't read forever. Caller is responsible for
+    `response.raise_for_status()` ; the helper only reads bytes. Shared between
+    connectors so the cap policy lives in one place."""
     body = bytearray()
     for chunk in response.iter_bytes():
+        if deadline is not None and time.monotonic() > deadline:
+            raise ConnectorParseError(f"{url_label} exceeded its fetch time budget mid-stream")
         body.extend(chunk)
         if len(body) > max_bytes:
             raise ConnectorParseError(f"{url_label} exceeded {max_bytes}-byte cap mid-stream")
@@ -79,20 +93,29 @@ def fetch_url_safely(
 ) -> bytes:
     """GET an UNTRUSTED `url` with pinned-IP SSRF protection (resolve once,
     validate, connect to that IP; re-pinned per redirect) plus the streamed byte
-    cap; return the raw body. Raises ConnectorParseError on a blocked host or an
-    oversize body, httpx.* on transport / non-2xx errors. Best-effort callers
-    (the engine's article fetch) catch broadly and fall back. `_transport` is a
+    cap; return the raw body. The redirect chain is capped at FETCH_MAX_REDIRECTS
+    and total wall-clock at FETCH_TOTAL_TIMEOUT, so a hostile link can't stall a
+    worker. Raises ConnectorParseError on a blocked host / oversize body / time
+    budget, httpx.* on transport / non-2xx errors. Best-effort callers (the
+    engine's article fetch) catch broadly and fall back. `_transport` is a
     TEST-ONLY override; a real caller must never pass it or SSRF protection is
     bypassed."""
     headers = {"User-Agent": user_agent} if user_agent else {}
     client_transport = pinned_transport() if _transport is None else _transport
+    deadline = time.monotonic() + FETCH_TOTAL_TIMEOUT
     try:
         with (
-            httpx.Client(transport=client_transport, follow_redirects=True, timeout=timeout, headers=headers) as client,
+            httpx.Client(
+                transport=client_transport,
+                follow_redirects=True,
+                max_redirects=FETCH_MAX_REDIRECTS,
+                timeout=timeout,
+                headers=headers,
+            ) as client,
             client.stream("GET", url) as response,
         ):
             response.raise_for_status()
-            return read_response_capped(response, max_bytes=max_bytes, url_label=url)
+            return read_response_capped(response, max_bytes=max_bytes, url_label=url, deadline=deadline)
     except SsrfBlocked as exc:
         raise ConnectorParseError(str(exc)) from exc
 

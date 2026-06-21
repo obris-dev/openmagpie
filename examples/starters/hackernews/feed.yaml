@@ -3,10 +3,11 @@
 # Stories are low-volume (~1k/day), so this is safe to apply as-is.
 # Want HN COMMENTS too? That's a separate, high-volume starter on purpose:
 # see examples/starters/hackernews-comments/ (read its warning first).
-# Apply with the seed flow (it sets the first-tick lookback for you):
-#   ./scripts/quickstart/run.sh   or   STARTER=hackernews ./scripts/quickstart/seed.sh   (seed only)
-# Applying by hand with `magpie feed create -f` works too, but then YOU set a
-# past last_event_at on each source or the first tick only sees brand-new posts.
+# Apply by hand (this starter isn't wired into the quickstart seed script):
+#   magpie feed create -f examples/starters/hackernews/feed.yaml
+#   magpie watch create -f examples/starters/hackernews/watch.yaml   (after the edits in examples/README.md)
+# Then set a past last_event_at on each source, or the first tick only sees
+# brand-new posts.
 # Full walkthrough: examples/README.md
 name: "Hacker News stories (starter)"
 kind: curated
@@ -16,11 +17,20 @@ data:
 sources:
   # All new HN stories. `feed` also takes `show` (Show HN) or `ask` (Ask HN).
   - spec: {kind: hn_feed, feed: new}
+  # `query` is OPTIONAL here (stories are low-volume ~1k/day, so the default judges
+  # every story); set it to cut LLM cost when you only care about a keyword. It
+  # pre-filters server-side on the story title / url / text (not the author).
+  # Operators:
+  #   apple banana    every word must appear (AND, the default)
+  #   match: any      any word qualifies (OR; all-word matches still rank higher)
+  #   -word           exclude that word
+  #   "exact phrase"  match the phrase; quote it in YAML, e.g. query: '"service mesh"'
+  # e.g.  - spec: {kind: hn_feed, feed: new, query: "rust", match: any}
   # Add Show HN / Ask HN too by uncommenting:
   #   - spec: {kind: hn_feed, feed: show}
   #   - spec: {kind: hn_feed, feed: ask}
 
-# Backfill window, by hand (the seed flow sets this for you; skip it then).
+# Backfill window, set by hand:
 # Each source can carry a `last_event_at`: the point in time it starts reading
 # from. A past UTC timestamp pulls everything posted since then on the FIRST
 # tick (so you have posts to score right away); leave it off and the first tick

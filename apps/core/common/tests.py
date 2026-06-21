@@ -1,4 +1,5 @@
 import io
+import ipaddress
 import signal
 from collections.abc import Callable
 from typing import cast
@@ -13,8 +14,37 @@ from django.test import SimpleTestCase, override_settings
 from common.commands import SingleFlightCommand, _sigterm_as_systemexit
 from common.email import EmailRenderError, EmailService
 from common.locks import job_lock_key, named_lock
+from common.ssrf import ip_is_blocked
 
 _LOCMEM = {"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache", "LOCATION": "lock-tests"}}
+
+
+class IpIsBlockedTests(SimpleTestCase):
+    """The SSRF block predicate. Regression guard: link-local cloud metadata stays
+    blocked through the IPv6 -> IPv4 embeddings (v4-mapped, NAT64, 6to4,
+    v4-compatible) -- today via the ipv4_mapped unwrap + ipaddress is_reserved, but
+    pinned here so a future stdlib change can't silently open a metadata bypass."""
+
+    def test_blocks_metadata_through_ipv6_embeddings(self) -> None:
+        for s in (
+            "169.254.169.254",  # plain link-local (cloud metadata)
+            "::ffff:169.254.169.254",  # IPv4-mapped
+            "64:ff9b::a9fe:a9fe",  # NAT64 well-known /96
+            "2002:a9fe:a9fe::",  # 6to4
+            "::169.254.169.254",  # v4-compatible (deprecated)
+        ):
+            self.assertTrue(ip_is_blocked(ipaddress.ip_address(s)), f"{s} must be blocked")
+
+    def test_allows_public_addresses(self) -> None:
+        self.assertFalse(ip_is_blocked(ipaddress.ip_address("8.8.8.8")))
+        self.assertFalse(ip_is_blocked(ipaddress.ip_address("2606:4700:4700::1111")))
+
+    def test_blocks_cgnat_shared_address_space(self) -> None:
+        # RFC 6598 100.64.0.0/10 -- not is_private/reserved, but internal in clouds.
+        for s in ("100.64.0.1", "100.127.255.255", "::ffff:100.64.0.1"):  # incl. mapped
+            self.assertTrue(ip_is_blocked(ipaddress.ip_address(s)), f"{s} must be blocked")
+        for s in ("100.63.255.255", "100.128.0.0"):  # just outside the /10 -> public
+            self.assertFalse(ip_is_blocked(ipaddress.ip_address(s)), f"{s} must NOT be blocked")
 
 
 @override_settings(CACHES=_LOCMEM)

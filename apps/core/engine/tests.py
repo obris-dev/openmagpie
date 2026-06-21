@@ -254,7 +254,31 @@ class ExternalContentPromptTests(SimpleTestCase):
     def test_external_content_included_when_given(self) -> None:
         prompt = self._user_prompt(external_content="THE FETCHED ARTICLE BODY")
         self.assertIn("THE FETCHED ARTICLE BODY", prompt)
-        self.assertIn("[LINKED_ARTICLE]", prompt)
+        self.assertIn("[LINKED_ARTICLE_", prompt)  # nonce'd open marker
 
     def test_no_linked_article_section_without_external_content(self) -> None:
-        self.assertNotIn("[LINKED_ARTICLE]", self._user_prompt())
+        self.assertNotIn("[LINKED_ARTICLE_", self._user_prompt())
+
+    def test_fence_markers_use_a_per_call_nonce_named_in_the_system_rule(self) -> None:
+        import re
+
+        def chat(body: str) -> dict:
+            return _engine()._chat_params(model="m", instructions="rust", payload=PAYLOAD, external_content=body)
+
+        params = chat("body one")
+        system, user = params["messages"][0]["content"], params["messages"][1]["content"]
+        m = re.search(r"\[LINKED_ARTICLE_([0-9a-f]+)\]", user)
+        assert m is not None
+        nonce = m.group(1)
+        self.assertIn(f"[/LINKED_ARTICLE_{nonce}]", user)  # open + close share the nonce
+        self.assertIn(f"[LINKED_ARTICLE_{nonce}]", system)  # the system rule names the exact markers
+        # fresh nonce each call -> a forged close from a prior/guessed value can't match
+        self.assertNotIn(nonce, chat("body two")["messages"][1]["content"])
+
+    def test_over_length_external_content_is_marked_truncated(self) -> None:
+        prompt = self._user_prompt(external_content="x" * 9000)
+        self.assertIn("truncated", prompt)
+        self.assertLess(prompt.count("x"), 9000)  # the body was clipped, not sent whole
+
+    def test_short_external_content_is_not_marked_truncated(self) -> None:
+        self.assertNotIn("truncated", self._user_prompt(external_content="a short article body"))

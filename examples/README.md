@@ -19,6 +19,13 @@ Available starters:
   processing warning at the top of its `feed.yaml`** and keep the keyword tight
   before applying: a broad keyword can outrun a local engine.
 
+Both HN starters take a `query` keyword that runs **server-side as a pre-filter**:
+it narrows which items the connector pulls into the feed at all, before any watch
+takes action on them, so it bounds what gets ingested (and the work that follows)
+rather than filtering after the fact. It's optional for stories but required for
+comments, to keep a watch on the comment stream focused. It supports operators: AND by default, `match: any` for OR, `-word` to exclude, and
+`"phrase"`. The exact syntax is in each starter's `feed.yaml`.
+
 ## Applying a starter by hand
 
 The YAML files are `magpie feed/watch create -f` inputs. They are templates, not

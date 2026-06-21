@@ -78,14 +78,14 @@ class SemanticFilterAction(ExternalFetchMixin, Action):
         except KeyError:
             logger.warning("semantic_filter: unknown engine kind=%r for action=%s", config.engine.kind, action.id)
             return ActionResult(state=WatchActionRunState.ERRORED, error=run_messages.ENGINE_UNAVAILABLE)
-        # A 4xx that proves a permanent request/config defect (bad auth, missing
-        # endpoint/model, malformed request) is ERRORED, not retried - like the
-        # unknown-kind path above. Transient judge failures (engine down,
-        # rate-limited, malformed JSON) still propagate -> the drain's FAILED.
         # Opt-in: fetch the item's external link and fold its text into the judge
         # (best-effort; see _external_content). No-op when off or the item has no
         # external link.
         external_content, enrichment_status = self._external_content(action.id, config, payload)
+        # A 4xx that proves a permanent request/config defect (bad auth, missing
+        # endpoint/model, malformed request) is ERRORED, not retried - like the
+        # unknown-kind path above. Transient judge failures (engine down,
+        # rate-limited, malformed JSON) still propagate -> the drain's FAILED.
         try:
             judgment = engine.judge(
                 payload,

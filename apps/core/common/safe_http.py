@@ -53,10 +53,12 @@ class _PinnedBackend(SyncBackend):
         except ValueError:
             try:
                 infos = socket.getaddrinfo(host, port, proto=socket.IPPROTO_TCP)
-            except socket.gaierror as exc:
-                # DNS failure -> an httpcore transport error (httpx maps it to
+            except OSError as exc:
+                # Resolution failure -> an httpcore transport error (httpx maps it to
                 # httpx.ConnectError), so fetch_url_safely's documented "httpx.* on
-                # transport errors" contract holds instead of leaking socket.gaierror.
+                # transport errors" contract holds instead of leaking a raw OSError.
+                # OSError (not just gaierror): getaddrinfo can raise other OSError
+                # subclasses (e.g. EAI_SYSTEM), and gaierror is itself an OSError.
                 raise ConnectError(str(exc)) from exc
             target = str(infos[0][4][0])  # sockaddr[0] is the address string
         # INVARIANT: validate and connect to EXACTLY `target` (one resolved IP).

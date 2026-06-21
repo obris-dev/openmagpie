@@ -2,11 +2,12 @@
 # Uses the `hn_comment` source kind: a keyword-filtered slice of HN's comment
 # stream. This is a SEPARATE starter from `hackernews` (stories) ON PURPOSE:
 # comments are high-volume, so you opt into them deliberately.
-# Apply with the seed flow (it sets the first-tick lookback for you):
-#   STARTER=hackernews-comments ./scripts/quickstart/seed.sh   (seed only)
+# Apply by hand (this starter isn't wired into the quickstart seed script):
+#   magpie feed create -f examples/starters/hackernews-comments/feed.yaml
+#   magpie watch create -f examples/starters/hackernews-comments/watch.yaml   (see examples/README.md)
 # Full walkthrough: examples/README.md
 #
-# ⚠️  LOCAL PROCESSING WARNING  ⚠️
+# LOCAL PROCESSING WARNING
 # Every matching comment costs ONE LLM call (the semantic_filter). HN's full
 # comment stream averages ~20k/day (bursty, heavier on weekdays); a single
 # local engine at ~6s/comment tops out near ~14k/day, so it CANNOT keep up with
@@ -20,16 +21,22 @@ poll_interval_seconds: 300
 data:
   retention_days: 30
 sources:
-  # `query` is REQUIRED and filtered server-side (words AND by default;
-  # `match: any` for OR; `-word` to exclude). CHANGE this to your own keyword:
-  # the tighter it is, the less local LLM work the watch has to do.
+  # `query` is REQUIRED and non-blank here, to keep a watch on the comment stream
+  # focused; it pre-filters the comment body server-side (not the author / title).
+  # Operators:
+  #   apple banana    every word must appear (AND, the default)
+  #   match: any      any word qualifies (OR; all-word matches still rank higher)
+  #   -word           exclude that word
+  #   "exact phrase"  match the phrase; quote it in YAML, e.g. query: '"service mesh"'
+  # Keep it TIGHT: HN comments run ~20k/day and each match costs one LLM call, so a
+  # broad single word can outrun a local engine. CHANGE this to your own keyword.
   - spec: {kind: hn_comment, query: "kubernetes"}
 
-# Backfill window, by hand (the seed flow sets this for you; skip it then).
+# Backfill window, set by hand:
 # A `last_event_at` sibling of `spec` (same indent) pulls everything since a
 # past UTC timestamp on the FIRST tick.
 #
-# ⚠️  Be conservative here: a wide backfill window combined with a broad query
+# Be conservative here: a wide backfill window combined with a broad query
 # enqueues a lot of LLM work at once. A source with it set looks like this:
 #
 # sources:

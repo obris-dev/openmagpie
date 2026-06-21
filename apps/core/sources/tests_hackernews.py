@@ -91,7 +91,11 @@ class HackerNewsFeedConnectorTests(SimpleTestCase):
         tail = {"hits": [_hn_hit(9001, 1_699_000_000)]}
         payloads, requests = self._poll_with([full, tail])
         self.assertEqual(len(payloads), PAGE_SIZE + 1)
-        self.assertEqual([int(r.url.params["page"]) for r in requests], [0, 1])
+        # Keyset paging (no page=N offset): page 2 is anchored at-or-older than
+        # page 1's oldest created_at_i (1_700_000_000 - 99).
+        self.assertEqual(len(requests), 2)
+        self.assertNotIn("page", requests[0].url.params)
+        self.assertEqual(requests[1].url.params["numericFilters"], "created_at_i<=1699999901")
 
     def test_hit_missing_created_at_is_skipped_not_fatal(self) -> None:
         page = {"hits": [_hn_hit(1, 1_700_000_000), _hn_hit(2, None), _hn_hit(3, 1_699_999_000)]}
@@ -161,10 +165,10 @@ class HackerNewsFeedConnectorTests(SimpleTestCase):
         self.assertEqual(requests[0].url.params["query"], "rust zig")
         self.assertEqual(requests[0].url.params["optionalWords"], "rust zig")
 
-    def test_page_cap_is_enforced_and_warns(self) -> None:
+    def test_page_cap_is_enforced_and_logs_error(self) -> None:
         # The cap (page_size * max_pages) is the load-bearing volume guard. With
         # every page full, walk stops at exactly max_pages requests and cap-many
-        # payloads, and warns that an older tail went unfetched (silent loss).
+        # payloads, and logs an error that an older tail went unfetched (data loss).
         search = AlgoliaSearch(page_size=2, max_pages=2)
         requests: list[httpx.Request] = []
 
@@ -180,7 +184,7 @@ class HackerNewsFeedConnectorTests(SimpleTestCase):
                 "sources.connectors.hackernews.algolia.httpx.Client",
                 lambda **kw: real_client(transport=transport, **kw),
             ),
-            self.assertLogs("sources", level="WARNING") as logs,
+            self.assertLogs("sources", level="ERROR") as logs,
         ):
             payloads = list(
                 search.walk(
@@ -242,6 +246,8 @@ class HackerNewsCommentConnectorTests(SimpleTestCase):
         _, requests = self._poll_with([{"hits": []}])
         self.assertEqual(requests[0].url.params["tags"], "comment")
         self.assertEqual(requests[0].url.params["query"], "kubernetes")
+        self.assertEqual(requests[0].url.params["advancedSyntax"], "true")  # enables -word / "phrase"
+        self.assertEqual(requests[0].url.params["restrictSearchableAttributes"], "comment_text")  # not author
         self.assertNotIn("optionalWords", requests[0].url.params)
 
     def test_match_any_adds_optional_words_for_or(self) -> None:
@@ -255,3 +261,10 @@ class HackerNewsCommentConnectorTests(SimpleTestCase):
         # isn't a static type error.
         with self.assertRaises(ValidationError):
             HackerNewsCommentSourceSpec.model_validate({"kind": "hn_comment"})
+
+    def test_blank_query_is_rejected_at_the_spec_layer(self) -> None:
+        # "required" isn't enough: "" and whitespace-only would strip to no
+        # pre-filter and poll the unfiltered firehose, so they must fail too.
+        for bad in ("", "   "):
+            with self.assertRaises(ValidationError):
+                HackerNewsCommentSourceSpec(kind="hn_comment", query=bad)
