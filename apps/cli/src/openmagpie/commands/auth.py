@@ -17,7 +17,9 @@ from ..api.auth import DeviceSessionCompleted, DeviceSessionExpired
 from ..constants import TOKEN_ENV_VAR, is_personal_access_token
 from ..context import app_config, app_ctx
 from ..http import ApiError, AuthError
+from ._shared import _unreachable_message
 from .auth_token import token_app
+from .telemetry import prompt_after_login
 
 auth_app = typer.Typer(no_args_is_help=True)
 
@@ -105,9 +107,10 @@ def _login_with_token() -> None:
         console.error(f"Couldn't reach server at {ac.config.server_url} (HTTP {e.status}).")
         raise typer.Exit(code=1) from None
     except httpx.HTTPError as e:
-        console.error(f"Couldn't reach the server ({type(e).__name__}). Check your network or server URL.")
+        console.error(_unreachable_message(e))
         raise typer.Exit(code=1) from None
     _print_signed_in(me.email)
+    prompt_after_login(ac)
 
 
 @auth_app.command("login")
@@ -147,7 +150,10 @@ def login(
     try:
         created = ac.api.auth.create_device_session()
     except ApiError as e:
-        console.error(f"Couldn't reach server at {ac.config.server_url}: {e}")
+        console.error(f"Server returned an error (HTTP {e.status}).")
+        raise typer.Exit(code=1) from None
+    except httpx.HTTPError as e:
+        console.error(_unreachable_message(e))
         raise typer.Exit(code=1) from None
 
     if not _safe_authorize_url(created.authorize_url, ac.config.server_url):
@@ -212,6 +218,7 @@ def login(
             if isinstance(poll, DeviceSessionCompleted):
                 ac.sign_in(poll)
                 _print_signed_in(poll.user.email)
+                prompt_after_login(ac)
                 return
             if isinstance(poll, DeviceSessionExpired):
                 console.error("Session expired.")
@@ -250,7 +257,7 @@ def status() -> None:
         console.error(f"Couldn't reach the server cleanly (HTTP {e.status}). Try again or check the server status.")
         raise typer.Exit(code=1) from None
     except httpx.HTTPError as e:
-        console.error(f"Couldn't reach the server ({type(e).__name__}). Check your network or server URL.")
+        console.error(_unreachable_message(e))
         raise typer.Exit(code=1) from None
 
     console.log(f"Signed in as {me.email}")

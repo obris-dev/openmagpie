@@ -21,6 +21,7 @@ from .auth import AuthApi
 from .delivery import DeliveryApi
 from .engine import EngineApi
 from .feed import FeedApi
+from .telemetry import TelemetryApi
 from .watch import WatchApi
 
 
@@ -52,5 +53,9 @@ class Api:
     def engine(self) -> EngineApi:
         return EngineApi(self._http)
 
+    @cached_property
+    def telemetry(self) -> TelemetryApi:
+        return TelemetryApi(self._http)
 
-__all__ = ["ActivityApi", "Api", "AuthApi", "DeliveryApi", "EngineApi", "FeedApi", "WatchApi"]
+
+__all__ = ["ActivityApi", "Api", "AuthApi", "DeliveryApi", "EngineApi", "FeedApi", "TelemetryApi", "WatchApi"]

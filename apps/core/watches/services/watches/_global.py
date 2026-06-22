@@ -24,3 +24,8 @@ class WatchGlobal:
         entry point ("due" = is_active, no per-watch schedule). Iterates
         (chunked) rather than materializing ; there may be many watches."""
         return Watch.objects.filter(is_active=True).iterator(chunk_size=chunk_size)
+
+    @staticmethod
+    def count() -> int:
+        """Total watches across all accounts (telemetry gauge)."""
+        return Watch.objects.count()

@@ -22,6 +22,7 @@ _ACTIONS = f"/{API_VERSION}/actions"
 _ACTION_ACTIVITY = f"/{API_VERSION}/action-activity"
 _ACTION_DELIVERIES = f"/{API_VERSION}/action-deliveries"
 _ENGINES = f"/{API_VERSION}/engines"
+_TELEMETRY = f"/{API_VERSION}/telemetry"
 
 
 class auth:
@@ -147,3 +148,9 @@ class engines:
     """`/v1/engines/*` routes the CLI consumes."""
 
     collection = _ENGINES
+
+
+class telemetry:
+    """`/v1/telemetry`: read the anonymous-telemetry mode (any user); an account owner sets it."""
+
+    base = _TELEMETRY

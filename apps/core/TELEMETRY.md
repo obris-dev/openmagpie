@@ -1,0 +1,110 @@
+# Telemetry
+
+OpenMagpie can send **anonymous, opt-in** usage telemetry. This document is the
+full, honest description of it: what it's for, exactly what is (and isn't) sent,
+and every way to turn it off.
+
+## Why it exists
+
+OpenMagpie is open source and self-hosted, which means we otherwise have **no
+idea** whether anyone installs it, gets to a first match, or which sources and
+features matter. Without that, every decision (build a UI? which connector next?
+is setup too hard?) is a guess. A small anonymous signal lets us prioritize what
+actually helps the people running it. That's the entire purpose.
+
+## The guarantees
+
+- **Off by default.** A fresh install is in `unset` mode and sends **nothing**.
+  Telemetry only flows after you explicitly opt in (`anonymous`).
+- **Anonymous, not pseudonymous.** Events are keyed by a random per-install
+  `instance_id` (a UUID generated when you opt in). It is not linked to your
+  account, your email, or anything you monitor. Geolocation is disabled
+  (`disable_geoip`), so no location is derived from it; and because events are
+  captured server-side, the only IP that reaches PostHog is your instance's own
+  outbound server IP (the host running OpenMagpie), never an end user's.
+- **Never your content.** We never send queries, filter instructions, URLs,
+  post titles, match text, or any feed/watch payload. Only counts, enums, and
+  the version (see the schema below).
+- **Off means silent.** When off, nothing leaves your machine, including **no
+  record that you declined**. There is no opt-out beacon.
+- **It can never break the app.** Every emit is best-effort and swallowed; a
+  telemetry failure cannot affect a poll, a judgment, or an API call.
+
+## What is collected
+
+Every event also carries `version` (the product version) and
+`deployment` (`self_hosted`). Milestone events also carry `surface`: `cli`, `web`,
+or `api` for a user-driven action, or `system` for server-internal emits (the
+scheduler, e.g. `first_match`).
+
+**Milestone events (rare, one-off):**
+
+| Event | Properties |
+|---|---|
+| `telemetry_enabled` | (the opt-in moment) |
+| `feed_created` | `source_count`, `connector_kinds`, `surface` |
+| `watch_created` | `action_kinds`, `feed_count`, `surface` |
+| `first_match` | `action_kind`, `surface` (a watch's first-ever match) |
+| `quickstart_completed` | `surface` |
+
+> Funnel caveat: these events fire only on installs that opted in -- and the
+> consent prompt itself runs *after* the quickstart seeds its feed/watch -- so the
+> counts reflect *opted-in* activity, not all installs (and the seeded feed/watch
+> aren't counted as `feed_created`/`watch_created`). Estimate totals against the
+> consent-free install signals, not this stream.
+
+**Daily heartbeat (`instance_heartbeat`, one event per install per day):** current
+gauges + a 24h rollup, so a busy install sends one event/day, not thousands.
+
+- environment: `os`, `arch`, `engine_reachable`
+- gauges: `accounts`, `feeds`, `watches`, `sources_by_kind`, `actions_by_kind`
+- 24h rollup: `runs_by_state`, `matches`, `deliveries`
+
+A sample heartbeat payload:
+
+```json
+{
+  "event": "instance_heartbeat",
+  "distinct_id": "f1e2d3c4-....-randomUUID",
+  "properties": {
+    "version": "0.3.0", "deployment": "self_hosted",
+    "os": "Linux", "arch": "x86_64", "engine_reachable": true,
+    "accounts": 1, "feeds": 2, "watches": 1,
+    "sources_by_kind": {"reddit_subreddit": 2, "hn_comment": 1},
+    "actions_by_kind": {"semantic_filter": 1, "log": 1},
+    "runs_by_state": {"succeeded": 4, "gated": 37}, "matches": 4, "deliveries": 0
+  }
+}
+```
+
+## What is NOT collected
+
+Content of any kind: source queries, `semantic_filter` instructions, URLs, post
+titles or bodies, match text, account/email, or the LLM model name. (Your
+instance's outbound server IP necessarily reaches PostHog like any HTTPS request,
+but geolocation is disabled, so no location is derived from it.)
+
+## How to control it
+
+Run the management command against your stack with `make local-manage CMD="…"`
+(the same wrapper the quickstart uses; in a dev checkout you can call
+`manage.py …` directly):
+
+- **Status:** `make local-manage CMD="telemetry status"`
+- **Opt in:** `make local-manage CMD="telemetry enable"` (also offered by the quickstart)
+- **Opt out:** `make local-manage CMD="telemetry disable"`
+- **Hard off (any mode):** set `DO_NOT_TRACK=1` ([standard](https://consoledonottrack.com/)), or leave `POSTHOG_API_KEY` empty.
+- **Send to your own PostHog instead:** set `POSTHOG_API_KEY` (and `POSTHOG_HOST`) to your project.
+
+## Where it goes & retention
+
+Anonymous events go to a PostHog project (US region). The key shipped in the
+repo is a public, write-only ingestion key (capture-only; it cannot read data).
+Events are retained on a rolling window for trend analysis, not archived
+indefinitely.
+
+## Identified telemetry
+
+`identified` mode (account-keyed analytics) is reserved for the future *hosted*
+product and its terms of service. Self-hosted installs only ever use `off` or
+`anonymous`; the self-hosted setter refuses `identified`.

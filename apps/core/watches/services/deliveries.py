@@ -28,8 +28,19 @@ _OUTCOME_TO_DELIVERY = {
 }
 
 
+class WatchActionDeliveryGlobal:
+    """Static methods only. Span all accounts. Telemetry only."""
+
+    @staticmethod
+    def count_since(since: datetime) -> int:
+        """Deliveries recorded since `since` across all accounts (24h rollup)."""
+        return WatchActionDelivery.objects.filter(created_at__gte=since).count()
+
+
 class WatchActionDeliveryService:
     """Account-scoped delivery-log surface."""
+
+    Global = WatchActionDeliveryGlobal
 
     def __init__(self, *, account_id: str) -> None:
         if not account_id:

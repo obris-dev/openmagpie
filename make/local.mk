@@ -66,6 +66,7 @@ local-tick: ## Run one pipeline pass: poll feeds -> trigger watches -> drain run
 	$(MAKE) local-manage CMD="process_due_runs"
 	$(MAKE) local-manage CMD="process_due_digests"
 	$(MAKE) local-manage CMD="send_outbound_emails"
+	$(MAKE) local-manage CMD="emit_telemetry_heartbeat"
 
 # Background tickers: each stage on its OWN cadence (they're decoupled ;
 # poll writes items, trigger enqueues runs, drain executes them). Each
@@ -80,6 +81,9 @@ TRIGGER_INTERVAL ?= 300
 DRAIN_INTERVAL ?= 60
 DIGEST_INTERVAL ?= 60
 EMAIL_INTERVAL ?= 60
+# The heartbeat command self-throttles to ~once/day; this is just how often it's
+# given a chance to fire, so a coarse hourly poke is plenty.
+HEARTBEAT_INTERVAL ?= 3600
 
 up-jobs: ## Start poll/trigger/drain/digest/email as independent background tickers
 	@mkdir -p $(JOBS_DIR)
@@ -93,6 +97,7 @@ up-jobs: ## Start poll/trigger/drain/digest/email as independent background tick
 	@$(MAKE) --no-print-directory _job-up NAME=drain   CMD=process_due_runs    INTERVAL=$(DRAIN_INTERVAL)
 	@$(MAKE) --no-print-directory _job-up NAME=digest  CMD=process_due_digests INTERVAL=$(DIGEST_INTERVAL)
 	@$(MAKE) --no-print-directory _job-up NAME=email   CMD=send_outbound_emails INTERVAL=$(EMAIL_INTERVAL)
+	@$(MAKE) --no-print-directory _job-up NAME=heartbeat CMD=emit_telemetry_heartbeat INTERVAL=$(HEARTBEAT_INTERVAL)
 
 _job-up:
 	@# Print the command name (CMD) alongside the ticker name so the start
@@ -107,7 +112,7 @@ _job-up:
 	fi
 
 down-jobs: ## Stop the background tickers started by up-jobs (and clear their job locks)
-	@for n in poll trigger drain digest email; do \
+	@for n in poll trigger drain digest email heartbeat; do \
 		if [ -f $(JOBS_DIR)/$$n.pid ]; then \
 			kill $$(cat $(JOBS_DIR)/$$n.pid) 2>/dev/null; rm -f $(JOBS_DIR)/$$n.pid; echo "$$n stopped"; \
 		else echo "$$n not running"; fi; \

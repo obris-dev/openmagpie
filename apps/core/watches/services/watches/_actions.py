@@ -16,6 +16,7 @@ add-first-action race a row lock would miss. The loser of the race gets
 import builtins
 
 from django.db import transaction
+from django.db.models import Count
 from django.utils import timezone
 from pydantic import ValidationError
 
@@ -32,8 +33,20 @@ class ConcurrentChainError(RuntimeError):
     caller maps this to a 409 ; the operator retries."""
 
 
+class WatchActionGlobal:
+    """Static methods only. Span all accounts. Telemetry only."""
+
+    @staticmethod
+    def count_by_kind() -> dict[str, int]:
+        """{action kind: count} across all accounts (telemetry gauge)."""
+        rows = WatchAction.objects.values("kind").annotate(n=Count("id"))
+        return {row["kind"]: row["n"] for row in rows}
+
+
 class WatchActionService:
     """Account-scoped service for a path's WatchAction chain."""
+
+    Global = WatchActionGlobal
 
     def __init__(self, *, account_id: str) -> None:
         if not account_id:

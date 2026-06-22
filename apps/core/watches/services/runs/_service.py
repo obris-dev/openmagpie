@@ -42,6 +42,24 @@ class WatchActionRunService(DigestBatchMixin):
             raise ValueError("WatchActionRunService requires account_id")
         self.account_id = account_id
 
+    def has_prior_succeeded(self, *, watch_id: str, exclude_run_id: str) -> bool:
+        """Whether this account's watch has any OTHER succeeded run. Backs the
+        telemetry first_match guard (so the milestone fires only on a watch's
+        first match). Scoped to (account_id, watch_id) -- a left-prefix of the run
+        table's unique constraint -- so it rides that index rather than scanning.
+
+        Best-effort under concurrency, NOT exact-once: two runs of the same watch
+        committing SUCCEEDED at once can each read no-prior and both emit (and a
+        reaped+replayed run can under-count). That's acceptable for a coarse
+        activation gauge; don't lean on it as a precise counter."""
+        return (
+            WatchActionRun.objects.filter(
+                account_id=self.account_id, watch_id=watch_id, state=WatchActionRunState.SUCCEEDED.value
+            )
+            .exclude(pk=exclude_run_id)
+            .exists()
+        )
+
     def enqueue(
         self,
         *,

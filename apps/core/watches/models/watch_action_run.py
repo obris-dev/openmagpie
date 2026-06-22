@@ -92,6 +92,11 @@ class WatchActionRun(BaseModel):
                 fields=["account_id", "action_id", "completed_at"],
                 name="watchrun_activity_idx",
             ),
+            # Telemetry heartbeat rollup (count_by_state_since): a cross-tenant
+            # GROUP BY state over a completed_at window. DELIBERATELY account-
+            # agnostic (a Global scan, like watchrun_state_sched_idx) -- the
+            # account-first indexes above can't serve a bare completed_at range.
+            models.Index(fields=["completed_at", "state"], name="watchrun_completed_state_idx"),
         ]
 
     def __str__(self) -> str:

@@ -9,7 +9,7 @@ from collections.abc import Iterator
 from datetime import datetime, timedelta
 
 from django.conf import settings
-from django.db.models import Exists, F, OuterRef
+from django.db.models import Count, Exists, F, OuterRef
 from django.utils import timezone
 
 from watches import run_messages
@@ -101,3 +101,10 @@ class WatchActionRunGlobal:
         pre-pass snapshot, so the live count can drift slightly (concurrent
         drains claiming rows, or rows falling due mid-pass)."""
         return _due_runs(now or timezone.now()).count()
+
+    @staticmethod
+    def count_by_state_since(since: datetime) -> dict[str, int]:
+        """{run state: count} for runs completed since `since`, all accounts
+        (the heartbeat's 24h rollup)."""
+        rows = WatchActionRun.objects.filter(completed_at__gte=since).values("state").annotate(n=Count("id"))
+        return {row["state"]: row["n"] for row in rows}

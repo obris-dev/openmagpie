@@ -29,6 +29,7 @@ from datetime import datetime
 
 import ulid
 from django.db import transaction
+from django.db.models import Count
 
 from common.locks import feed_set_lock
 from feeds.models import Feed, Source
@@ -85,8 +86,20 @@ def _hash_spec(spec: SourceSpec) -> str:
     ).hexdigest()
 
 
+class SourceGlobal:
+    """Static methods only. Span all accounts. Scheduler / telemetry only."""
+
+    @staticmethod
+    def count_by_kind() -> dict[str, int]:
+        """{source kind: count} across all accounts (telemetry gauge)."""
+        rows = Source.objects.values("kind").annotate(n=Count("id"))
+        return {row["kind"]: row["n"] for row in rows}
+
+
 class SourceService:
     """Account-scoped service for Source CRUD bound to a Feed."""
+
+    Global = SourceGlobal
 
     def __init__(self, *, account_id: str) -> None:
         if not account_id:

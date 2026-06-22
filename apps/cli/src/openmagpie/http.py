@@ -18,6 +18,8 @@ from typing import Any
 
 import httpx
 
+from openmagpie_schema.telemetry import SURFACE_HEADER, Surface
+
 from . import __version__, routes
 from .config import Config, UserInfo, save
 from .constants import AUTHORIZATION_HEADER, BEARER_SCHEME, TOKEN_ENV_VAR
@@ -99,7 +101,9 @@ class MagpieClient:
         self._client = httpx.Client(
             base_url=config.server_url,
             timeout=30.0,
-            headers={"User-Agent": _user_agent()},
+            # X-Magpie-Surface tags server-side telemetry with the client surface
+            # (the server allowlists it; see telemetry.middleware.SurfaceMiddleware).
+            headers={"User-Agent": _user_agent(), SURFACE_HEADER: Surface.CLI.value},
             verify=_VERIFY_TLS,
         )
 

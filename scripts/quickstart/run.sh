@@ -78,6 +78,30 @@ if ! is_truthy "${SKIP_DATA_SEED:-}"; then
     OPENMAGPIE_QUICKSTART=1 sh ./scripts/quickstart/tick.sh
 fi
 
+# Offer anonymous, opt-in telemetry (stays off unless accepted). Only prompt with
+# a real terminal attached: under curl|sh stdin is the pipe, so read from /dev/tty
+# (same guard as configure_engine). Piped / CI / headless -> skip, stays off.
+if [ -t 1 ] && [ -r /dev/tty ]; then
+    printf '\n%s\n' "Help improve OpenMagpie? Share ANONYMOUS usage so we can prioritize what to build."
+    printf '%s\n' "  It's anonymous: never your content or any personal data, and off until you opt in."
+    printf '%s\n' "  What it collects + how to disable: apps/core/TELEMETRY.md"
+    printf '  Enable anonymous telemetry? [y/N]: ' > /dev/tty
+    IFS= read -r _tel < /dev/tty || _tel=""
+    case "$_tel" in
+        [Yy]*)
+            if manage telemetry enable >/dev/null 2>&1; then
+                printf '%s\n' "  Thanks! Anonymous telemetry is on (turn it off any time; see apps/core/TELEMETRY.md)."
+            else
+                printf '%s\n' "  (couldn't enable telemetry; continuing anyway)"
+            fi
+            ;;
+    esac
+fi
+
+# Quickstart funnel completion. Emitted unconditionally; a no-op unless the
+# operator opted into telemetry just above (capture gates on mode).
+manage emit_quickstart_completed >/dev/null 2>&1 || true
+
 # Final summary, printed LAST so the CLI commands + login don't scroll off behind
 # the build/seed output. creds use the same env + defaults as the seed (source of
 # truth: apps/core/feeds/management/commands/seed_quickstart.py).

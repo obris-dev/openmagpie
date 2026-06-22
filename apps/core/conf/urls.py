@@ -36,4 +36,6 @@ urlpatterns = [
     api_include(f"{_V1}/engines", "engine.urls"),
     # Public, unauthenticated waitlist signup (marketing site).
     api_include(f"{_V1}/waitlist", "waitlist.urls"),
+    # Anonymous, opt-in product telemetry mode (read by any user; set by an account owner).
+    api_include(f"{_V1}/telemetry", "telemetry.urls"),
 ]

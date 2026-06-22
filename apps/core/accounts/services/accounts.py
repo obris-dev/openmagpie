@@ -20,6 +20,12 @@ class AccountGlobal:
         return Account.objects.get(id=id)
 
     @staticmethod
+    def count() -> int:
+        """Total accounts on this instance (telemetry gauge: solo self-host vs
+        multi-account)."""
+        return Account.objects.count()
+
+    @staticmethod
     def primary_account_id_for(*, user_id: str) -> str | None:
         """Return the user's primary account_id (or any active one as
         fallback). System-level because we don't have an account context

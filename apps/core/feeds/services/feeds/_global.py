@@ -30,3 +30,8 @@ class FeedGlobal:
             .filter(Q(next_poll_at__isnull=True) | Q(next_poll_at__lte=now))
             .iterator(chunk_size=chunk_size)
         )
+
+    @staticmethod
+    def count() -> int:
+        """Total feeds across all accounts (telemetry gauge)."""
+        return Feed.objects.count()

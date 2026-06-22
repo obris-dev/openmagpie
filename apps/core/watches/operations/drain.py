@@ -24,6 +24,8 @@ from django.utils import timezone
 from feeds.models import FeedItem
 from feeds.services import FeedItemService
 from openmagpie_schema.watch_enums import DeliveryCadence, WatchActionRunState
+from telemetry import events as telemetry_events
+from telemetry.constants import Surface
 from watches import run_messages
 from watches.actions import registry as actions_registry
 from watches.actions.protocol import ActionResult, OutboundActionResult
@@ -108,6 +110,11 @@ class WatchDrainOperation:
                 # Advance to the next action (instant now, or into a digest
                 # window) ; same helper the flush uses, so the path is shared.
                 enqueue_next(self.action_run, action, now=self.now)
+        # First-ever SUCCEEDED run for this watch -> the activation / TTFV signal.
+        # Anonymous telemetry, best-effort; after the commit so the guard query
+        # sees this run's terminal state.
+        if result.state == WatchActionRunState.SUCCEEDED:
+            self._maybe_emit_first_match(action)
         return result
 
     def _resolve(self) -> tuple[WatchAction | None, ActionResult]:
@@ -152,3 +159,16 @@ class WatchDrainOperation:
             logger.exception("run=%s kind=%s failed: %s", run.id, action.kind, exc)
             return action, ActionResult(state=WatchActionRunState.FAILED, error=run_messages.TRANSIENT)
         return action, result
+
+    def _maybe_emit_first_match(self, action: WatchAction | None) -> None:
+        """Called on EVERY successful run; emits the `first_match` milestone only on
+        the watch's first-ever SUCCEEDED run (the activation / TTFV signal). Anonymous
+        + best-effort: a telemetry failure never disturbs the drain."""
+        with telemetry_events.guard():
+            if not telemetry_events.enabled():
+                return  # opted out (the default): skip the has_prior_succeeded query
+            run = self.action_run
+            prior = self.run_svc.has_prior_succeeded(watch_id=str(run.watch_id), exclude_run_id=str(run.pk))
+            if prior or action is None:
+                return  # not the first match, or (defensively) no action to attribute it to
+            telemetry_events.first_match(action_kind=action.kind, surface=Surface.SYSTEM.value)

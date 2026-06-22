@@ -23,6 +23,8 @@ from accounts.api import AccountScopedAPIView
 from common.api_params import is_truthy, parse_limit
 from common.pydantic_errors import pydantic_errors_to_drf
 from openmagpie_schema.feed import FeedItemListResponse, FeedListResponse
+from telemetry import events as telemetry_events
+from telemetry.constants import Surface
 
 from .api import (
     FeedItemNotFound,
@@ -81,6 +83,18 @@ class FeedListCreateView(FeedSvcMixin, AccountScopedAPIView):
             data=d["data"],
             sources=d.get("sources") or None,
         )
+        # Anonymous telemetry (no-op unless opted in). Emitted from this API seam,
+        # not the service layer, so the canned quickstart seed (which creates feeds
+        # via the service) isn't counted as a user-created feed -- quickstart_completed
+        # covers the install. Guarded so a telemetry hiccup never fails the create.
+        with telemetry_events.guard():
+            if telemetry_events.enabled():  # gather only when opted in (skips the Source query when off)
+                kinds = [s.kind for s in self.feed_svc.source_svc.list(feed)]
+                telemetry_events.feed_created(
+                    source_count=len(kinds),
+                    connector_kinds=kinds,
+                    surface=getattr(request, "surface", Surface.API.value),
+                )
         return Response(
             feed_mutation(feed, dry_run=False).model_dump(mode="json"),
             status=status.HTTP_201_CREATED,

@@ -42,6 +42,20 @@ class UserProfileGlobal:
     def any_active_for_user(*, user_id: str) -> UserProfile | None:
         return UserProfile.objects.filter(user_id=user_id, status=PROFILE_STATUS_ACTIVE).order_by("id").first()
 
+    @staticmethod
+    def is_active_owner(*, user_id: str, account_id: str) -> bool:
+        """Whether the user is an ACTIVE owner of the GIVEN account -- a pure
+        per-account ownership predicate (status + role, NOT the is_primary flag, so
+        the caller decides which account). Backs operator gates like telemetry,
+        where the caller resolves the acting account the standard way. A revoked or
+        pending owner does NOT qualify."""
+        return UserProfile.objects.filter(
+            user_id=user_id,
+            account_id=account_id,
+            status=PROFILE_STATUS_ACTIVE,
+            role=PROFILE_ROLE_OWNER,
+        ).exists()
+
 
 class UserProfileService:
     """Account-scoped service for the bound account's profiles. Stub for

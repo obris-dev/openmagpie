@@ -32,7 +32,7 @@ from .columns import (
     _ts,
     col,
 )
-from .errors import _flatten_errors, _handle_api_errors, _print_api_error
+from .errors import _flatten_errors, _handle_api_errors, _print_api_error, _unreachable_message
 from .files import _maybe_to_file, _open_editor_or_abort, _read_file_or_abort
 from .output import (
     _emit_detail,
@@ -70,5 +70,6 @@ __all__ = [
     "_read_file_or_abort",
     "_transpose_option",
     "_ts",
+    "_unreachable_message",
     "col",
 ]

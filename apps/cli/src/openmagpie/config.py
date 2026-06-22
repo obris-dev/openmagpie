@@ -6,7 +6,7 @@ Stored at `~/.magpie/config.json`, mode 0600. File shape:
       "active_env": "local",
       "envs": {
         "local":  {"server_url": "http://localhost:8000", ...},
-        "cloud":  {"server_url": "https://api.openmagpie.dev", ...}
+        "cloud":  {"server_url": "https://api.openmagpie.ai", ...}
       }
     }
 
@@ -63,6 +63,10 @@ class Config(BaseModel):
     refresh_token: str | None = None
     token_expires_at: datetime | None = None
     user: UserInfo | None = None
+    # Whether this machine's CLI has already offered the (server-side) telemetry
+    # opt-in after a login, so we don't re-ask. A UX flag only; the real decision
+    # lives server-side (apps/core/telemetry), not here.
+    telemetry_prompted: bool = False
 
     @property
     def is_authenticated(self) -> bool:

@@ -68,6 +68,9 @@ class WatchActionDelivery(BaseModel):
             # Per-action audit log (magpie watch action deliveries <id>),
             # newest-first by ULID pk. account_id-first for scoping.
             models.Index(fields=["account_id", "action_id", "id"], name="watchdeliv_acct_action_idx"),
+            # Telemetry heartbeat rollup (count_since): cross-tenant count over a
+            # created_at window. DELIBERATELY account-agnostic (a Global scan).
+            models.Index(fields=["created_at"], name="watchdeliv_created_idx"),
         ]
 
     def __str__(self) -> str:

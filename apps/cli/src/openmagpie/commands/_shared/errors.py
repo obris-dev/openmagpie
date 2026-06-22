@@ -5,6 +5,7 @@ from __future__ import annotations
 import functools
 from collections.abc import Callable
 from typing import Any
+from urllib.parse import urlparse
 
 import httpx
 import typer
@@ -32,10 +33,43 @@ def _handle_api_errors[T](fn: Callable[..., T]) -> Callable[..., T]:
             _print_api_error(e)
             raise typer.Exit(code=1) from None
         except httpx.HTTPError as e:
-            console.error(f"Couldn't reach the server ({type(e).__name__}).")
+            console.error(_unreachable_message(e))
             raise typer.Exit(code=1) from None
 
     return wrapper
+
+
+def _unreachable_message(exc: httpx.HTTPError) -> str:
+    """One clean 'can't reach the server' line, tailored to where the CLI points:
+    a self-hoster gets 'is the server running?', the hosted service gets 'try
+    again shortly'. Shared by this command-boundary handler and the login flow."""
+    server = _server_url()
+    where = f" at {server}" if server else ""
+    head = f"Couldn't reach the OpenMagpie server{where} ({type(exc).__name__})."
+    if server and _is_hosted(server):
+        return f"{head} The hosted service may be temporarily unavailable -- try again shortly."
+    return f"{head} If you're self-hosting, check the server is running and the server URL is correct."
+
+
+# OpenMagpie's hosted service lives under openmagpie.ai; anything else is a
+# self-hosted box.
+_HOSTED_DOMAIN = "openmagpie.ai"
+
+
+def _is_hosted(server: str) -> bool:
+    """True if the URL points at OpenMagpie's hosted service (vs a self-hosted box)."""
+    host = (urlparse(server).hostname or "").lower()
+    return host == _HOSTED_DOMAIN or host.endswith(f".{_HOSTED_DOMAIN}")
+
+
+def _server_url() -> str | None:
+    """The CLI's effective server URL, or None if no app context is bound."""
+    from ...context import app_ctx
+
+    try:
+        return app_ctx().config.server_url
+    except RuntimeError:
+        return None
 
 
 def _print_api_error(e: ApiError) -> None:

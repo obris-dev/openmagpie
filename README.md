@@ -265,6 +265,10 @@ scripts/                      quickstart installer (quickstart/{bootstrap,prefli
 - [make/README.md](make/README.md): the important dev `make` commands (`make help` for the full list).
 - [AGENTS.md](AGENTS.md): cross-cutting design conventions, plus per-area notes: [apps/core](apps/core/AGENTS.md), [apps/cli](apps/cli/AGENTS.md), [web](web/AGENTS.md).
 
+## Telemetry
+
+OpenMagpie ships **anonymous, opt-in** usage telemetry, **off by default**. It helps prioritize what to build (a UI? which sources next? is setup too hard?) without ever sending your content. Enable it during `quickstart`, or with `make local-manage CMD="telemetry enable"`; turn it off any time with `make local-manage CMD="telemetry disable"` or `DO_NOT_TRACK=1`. Exactly what is and isn't collected: [apps/core/TELEMETRY.md](apps/core/TELEMETRY.md).
+
 ## License
 
 OpenMagpie is open source under the [Apache License 2.0](LICENSE), with optional enterprise directories (`**/ee/`) reserved for future commercial features.
