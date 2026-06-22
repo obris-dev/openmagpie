@@ -46,6 +46,37 @@ Two edits to make first:
   `REPLACE_WITH_FEED_ID` placeholder. The feed id prints when you create the
   feed.
 
+## Set it up with an AI assistant
+
+Don't want to hand-write YAML? Let an assistant build your config by interviewing
+you. This works best with a coding agent that has shell access (Claude Code,
+Codex, Gemini CLI): it reads the docs, asks what you want, writes the files, runs
+the commands, and fixes any validation error itself. A chat LLM (ChatGPT,
+Claude.ai) works too; you just run the commands it gives you. Paste this in:
+
+```
+I want to set up OpenMagpie, an open-source social-listening tool, to watch for
+something. Read its docs at https://openmagpie.ai/llms-full.txt (or the README,
+config/README.md, and examples/ in this repo, if you have it cloned) for the
+config schema, the source kinds (Reddit, Hacker News, RSS), and worked examples.
+
+Interview me first: ask what I want to catch, which sources fit, how strict to be,
+and where matches should go (the logs or a webhook). Then, from my answers, write
+a feed.yaml and a watch.yaml, using a semantic_filter with a clear plain-language
+instruction and keeping any source query tight.
+
+If you can run shell commands, create the files and run the `magpie feed create -f`
+and `magpie watch create -f` commands yourself, then fix any validation error
+`create` reports and retry. Otherwise, give me the files and the commands to run.
+```
+
+If your assistant can't browse the web, paste the contents of
+[openmagpie.ai/llms-full.txt](https://openmagpie.ai/llms-full.txt) into the chat
+first (or run `magpie feed template` and `magpie watch template` and paste those).
+`create` validates everything, so the assistant just iterates against any error.
+
+Prefer a guided walk-through instead? `magpie quickstart` does one interactively.
+
 ## Where matches show up
 
 - In the pipeline's terminal output: the `log` action writes one line per match,
