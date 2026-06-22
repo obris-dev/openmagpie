@@ -5,6 +5,13 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0](https://github.com/obris-dev/openmagpie/compare/v0.2.0...v0.3.0) (2026-06-22)
+
+
+### Features
+
+* **marketing:** serve /llms.txt + build-generated /llms-full.txt ([#119](https://github.com/obris-dev/openmagpie/issues/119)) ([6e418ac](https://github.com/obris-dev/openmagpie/commit/6e418ac1c21eea4f235784202be0e1eb11c0d3e5))
+
 ## [0.2.0](https://github.com/obris-dev/openmagpie/compare/v0.1.0...v0.2.0) (2026-06-21)
 
 
