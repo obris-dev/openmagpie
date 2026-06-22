@@ -7,7 +7,7 @@
       "release-type": "simple",
       "include-component-in-tag": false,
       "changelog-path": "CHANGELOG.md",
-      "exclude-paths": ["apps/cli"],
+      "exclude-paths": ["apps/cli", "web"],
       "extra-files": ["pyproject.toml"],
       "initial-version": "0.1.0"
     },
