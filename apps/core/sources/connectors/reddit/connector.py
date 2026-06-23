@@ -30,11 +30,22 @@ REDDIT_USER_AGENT = (
     "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 )
 
-# Reddit's anonymous max page size is 100. Cap pagination at MAX_PAGES so a
-# feed that's been silent for weeks doesn't fetch unbounded history on
-# wake; with PAGE_SIZE=100, MAX_PAGES=10 covers the latest ~1000 posts.
+# Reddit's anonymous max page size is 100. Cap pagination at MAX_PAGES *per sub*
+# so a feed silent for weeks doesn't fetch unbounded history on wake; with
+# PAGE_SIZE=100, MAX_PAGES=10 covers the latest ~1000 posts of a single sub. A
+# combined `/r/a+b+c` walk scales the cap by the number of subs (see _walk_new)
+# so each sub keeps that ~1000 budget instead of sharing it - a long pull on
+# catch-up beats dropping a quiet sub starved by a flooded sibling. Reddit's own
+# listing depth dead-ends the walk first if it serves fewer.
 PAGE_SIZE = 100
 MAX_PAGES = 10
+
+# A combined `/r/a+b+c/new/.rss` packs a feed's subs into ONE URL (one
+# rate-limited call, not one per sub). Reddit 414s above ~8192 bytes (measured:
+# 7433 served, 8913 -> 414), so the batch caps the URL under this; ~7500 packs
+# ~1000 subs, so every realistic feed is a single request.
+MAX_COMBINED_URL_BYTES = 7500
+COMBINED_URL_OVERHEAD = 75  # scheme + host + /r//new/.rss + query headroom
 
 # Per-page body cap. Reddit's .rss is typically <100KB ; one corrupted
 # / oversize response shouldn't chew RAM. Streamed + capped via
@@ -206,43 +217,67 @@ class RedditSubRedditConnector(BaseConnector[RedditSubredditSourceSpec]):
         field_map: dict[str, str] | None = None,
         heartbeat: Callable[[], bool] | None = None,
     ) -> Iterator[NewRedditPostPayload]:
-        # Reddit Atom carries fixed, non-overridable fields ; the
-        # connector ignores `field_map` (the Connector contract
-        # accepts it for the RSS variant + future per-source
-        # overrides). Documented as a no-op rather than silently
-        # dropped so a future Reddit field-map use case (e.g. body
-        # vs title-only) lands here intentionally.
+        # Reddit Atom carries fixed, non-overridable fields ; the connector
+        # ignores `field_map` (the Connector contract accepts it for the RSS
+        # variant + future per-source overrides). A no-op by design, not
+        # silently dropped, so a future Reddit field-map need lands here.
         del field_map
-        subreddit = spec.subreddit
-        if not subreddit:
-            # ConnectorParseError, NOT ValueError: only _RECOVERABLE_ERRORS
-            # degrade to a failed source at the polling seam. A bare
-            # ValueError would abort the WHOLE feed cycle on one bad row
-            # (skipping every later source and update_poll_state), exactly
-            # what the per-source contract exists to prevent.
-            raise ConnectorParseError(f"RedditSubredditSourceSpec missing subreddit: {spec}")
+        # A single source is just the one-element multireddit. `spec.subreddit` is
+        # a validated bare slug (see RedditSubredditSourceSpec), so an empty/bad
+        # one is rejected at the spec seam - no check needed here.
+        yield from self._walk_new([spec.subreddit], since, heartbeat)
 
-        # `/new` is sorted newest -> oldest. Reddit has no server-side `since`
-        # filter; the early-return on strict `payload.occurred_at < since` works
-        # only because of that ordering, once we see a post strictly older
-        # than `since`, every remaining post on this page and every later
-        # page is older too. The `after` cursor walks pages newest -> oldest
-        # in the same order.
-        url = f"https://www.reddit.com/r/{subreddit}/new/.rss"
+    def poll_combined(
+        self,
+        subreddits: list[str],
+        since: datetime | None,
+        heartbeat: Callable[[], bool] | None = None,
+    ) -> Iterator[NewRedditPostPayload]:
+        """Poll a combined `/r/a+b+c/new.rss` request, yielding every post newer
+        than `since` (the EARLIEST watermark in the group, so every sub is
+        covered ; FeedItem dedup absorbs the overlap). Each payload carries its
+        own `.subreddit` (the Atom category tag) so the caller scatters per-sub.
+
+        Caller keeps `subreddits` within MAX_COMBINED_URL_BYTES (the batch chunks
+        on that constant) - Reddit 414s a longer URL. Depth is best-effort, and
+        the ~1000-item `/new` cap is PER REQUEST (shared across the combined
+        subs), NOT per sub: if one sub floods past it the merged walk can truncate
+        before a quiet sibling's older posts. That history isn't retrievable from
+        `/new` regardless, so the batch advances each sub only to its OWN newest -
+        a starved sub re-reads next cycle, never stranded."""
+        # Strip, not just truthy-filter: a direct caller (poll_combined takes a
+        # raw list[str]) could slip a whitespace-only slug into the `+`-join.
+        subs = [s.strip() for s in subreddits if s.strip()]
+        if not subs:
+            raise ConnectorParseError(f"reddit poll_combined got no subreddits: {subreddits!r}")
+        yield from self._walk_new(subs, since, heartbeat)
+
+    def _walk_new(
+        self,
+        subreddits: list[str],
+        since: datetime | None,
+        heartbeat: Callable[[], bool] | None,
+    ) -> Iterator[NewRedditPostPayload]:
+        """Walk `/r/<slug>/new/.rss` newest-first, yielding posts with
+        `occurred_at >= since`. `slug` is one sub or an `a+b+c` multireddit
+        (Reddit returns the merged newest-first stream).
+
+        `/new` is sorted newest -> oldest and Reddit has no server-side `since`
+        filter, so the early-return on strict `occurred_at < since` is what
+        bounds the walk: once a post is strictly older than `since`, every
+        remaining post on this and every later page is older too. The `?after=`
+        cursor walks pages in the same newest -> oldest order. One `httpx.Client`
+        across all pages shares the keep-alive pool ; `read_response_capped`
+        keeps a CDN-edge oversize 200 from OOMing instead of parse-erroring."""
+        slug = "+".join(subreddits)
+        url = f"https://www.reddit.com/r/{slug}/new/.rss"
         after: str | None = None
-
-        # One Client across all pages: shares the connection pool, so
-        # `?after=` pagination reuses the keep-alive instead of
-        # handshaking per page. Reddit doesn't strictly need the body
-        # cap (fixed host, bounded pages), but routing through the
-        # shared `read_response_capped` puts the cap policy in one
-        # place ; an unexpected oversize 200 from a CDN edge surfaces
-        # as a parse error instead of an OOM.
-        with httpx.Client(
-            timeout=15.0,
-            headers={"User-Agent": REDDIT_USER_AGENT},
-        ) as client:
-            for _ in range(MAX_PAGES):
+        with httpx.Client(timeout=15.0, headers={"User-Agent": REDDIT_USER_AGENT}) as client:
+            # MAX_PAGES is per-sub: scale by the combine size so a multireddit
+            # walk gives each sub its own ~1000 budget (single-sub parity), not a
+            # shared one. Reddit's listing depth (or the `< since` early-return)
+            # ends the walk sooner when there's less to fetch.
+            for _ in range(MAX_PAGES * len(subreddits)):
                 params: dict[str, str | int] = {"limit": PAGE_SIZE}
                 if after:
                     params["after"] = after
@@ -250,29 +285,18 @@ class RedditSubRedditConnector(BaseConnector[RedditSubredditSourceSpec]):
                 body = self._get_page(client, url, params, heartbeat)
 
                 parsed = feedparser.parse(body)
-                # Gate on `not version`: real feeds set `version`
-                # ('atom10' for Reddit ; HTML pages come back as ''.
-                # Reddit's anti-bot rate-limit / login page is a 200 with
-                # HTML body ; without this gate it silently reads as "no
-                # new posts" and never surfaces the block.
-                #
-                # Bozo is intentionally NOT a fail trigger. feedparser
-                # raises bozo=1 with SAXParseException for non-fatal
-                # quirks (undeclared namespace prefix, etc.) AND for hard
-                # parse failures ; we can't reliably discriminate without
-                # matching exception messages. The trade-off: a truncated
-                # body that recovers 0 entries reads as "empty page" and
-                # the loop returns ; next poll picks up when Reddit
-                # recovers. The Reddit-specific concern (the .rss
-                # endpoint being our anon channel) is fully covered by
-                # the version gate alone.
-                # `getattr(..., "")` because some inputs (empty body,
-                # non-XML) cause feedparser to return a FeedParserDict
-                # that raises AttributeError on `.version` access
-                # instead of returning empty string.
+                # Gate on `not version`: real feeds set `version` ('atom10' for
+                # Reddit) ; HTML pages come back as ''. Reddit's anti-bot
+                # rate-limit / login page is a 200 with an HTML body ; without
+                # this gate it silently reads as "no new posts" and the block
+                # never surfaces. Bozo is deliberately NOT a fail trigger
+                # (feedparser raises bozo=1 for benign quirks too) ; a truncated
+                # body recovering 0 entries reads as an empty page and the next
+                # poll retries. `getattr(..., "")` guards inputs where `.version`
+                # access raises AttributeError instead of returning "".
                 if not parsed.entries and not getattr(parsed, "version", ""):
                     raise ConnectorParseError(
-                        f"reddit /r/{subreddit}/new/.rss returned an unexpected payload "
+                        f"reddit /r/{slug}/new/.rss returned an unexpected payload "
                         "(no feed format detected; likely the anti-bot HTML page)"
                     )
 
@@ -284,29 +308,34 @@ class RedditSubRedditConnector(BaseConnector[RedditSubredditSourceSpec]):
                     published = _entry_published(entry)
                     if published is None:
                         # Reddit Atom always carries <published>; a missing one
-                        # is a Reddit-side schema change. Skip the row instead
-                        # of dropping the whole page (fail loud only on bozo
-                        # + zero entries above).
+                        # is a Reddit-side schema change. Skip the row, don't
+                        # drop the page (fail loud only on the version gate).
                         continue
-                    payload = NewRedditPostPayload.from_feedparser_entry(entry, spec, published)
+                    payload = NewRedditPostPayload.from_feedparser_entry(entry, published)
+                    if not payload.subreddit:
+                        # Every Reddit post carries a <category term> subreddit tag.
+                        # A missing one (unlike the skippable missing <published>
+                        # above) can't be routed per-sub in a combined feed, so
+                        # surface it as a failed fetch rather than silently drop it.
+                        raise ConnectorParseError(
+                            f"reddit /r/{slug}/new/.rss entry {entry.get('id', '?')!r} has no subreddit tag"
+                        )
                     last_atom_id = entry.get("id") or last_atom_id
-                    # Strict `<`, not `<=`: two posts can share `<published>`
-                    # to the second (batch import; same-second submissions),
-                    # and dropping on tie permanently loses the second one
-                    # because the watermark already crossed its second.
-                    # The downstream `external_id` dedup on FeedItem is
-                    # idempotent, so re-yielding the boundary post is
-                    # suppressed at the recorder seam. The early-return
-                    # remains safe: once we see a post strictly older than
-                    # `since`, every remaining post on this and later pages
-                    # is older too.
+                    # Strict `<`, not `<=`: two posts can share `<published>` to
+                    # the second (same-second submissions), and dropping on tie
+                    # permanently loses the second (the watermark already crossed
+                    # its second). The downstream `external_id` dedup makes
+                    # re-yielding the boundary post idempotent. tz-safe without
+                    # feeds' `_ensure_aware` (a layer up, not importable from a
+                    # connector): occurred_at is `_entry_published`'s tzinfo=UTC
+                    # output and `since` is a Django datetime, so both are aware.
                     if since is not None and payload.occurred_at < since:
                         return
                     yield payload
 
-                # Atom has no Reddit-style `after` cursor in the envelope, but
-                # `?after=t3_xxx&limit=N` still works against `.rss`. Use the
-                # last entry's thing-id (already `t3_<post-id>`) as the cursor.
+                # Atom has no Reddit `after` cursor in the envelope, but
+                # `?after=t3_xxx&limit=N` still works against `.rss`. The last
+                # entry's thing-id (already `t3_<post-id>`) is the cursor.
                 if not last_atom_id:
                     return  # nothing to page from
                 after = last_atom_id

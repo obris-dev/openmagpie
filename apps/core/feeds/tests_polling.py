@@ -9,7 +9,10 @@ Four seams of the same contract, each pinned at its own level:
   watermark, a newest-first source would otherwise permanently strand the
   unreached tail below it (PollSourceWatermarkGuardTests);
 - run-loop accounting: all-sources-failed trips `full_outage` and skips
-  the retention prune (FullOutagePruneGuardTests).
+  the retention prune (FullOutagePruneGuardTests);
+- the DB-level watermark write: `advance_watermark` is monotonic for a set
+  mark and bootstraps a NULL one, so a (shouldn't-happen) null source
+  self-heals rather than re-fetching forever (SourceServiceWatermarkTests).
 """
 
 from datetime import UTC, datetime
@@ -20,8 +23,9 @@ import httpx
 import ulid
 from django.test import SimpleTestCase, TestCase
 
-from feeds.models import Feed
+from feeds.models import Feed, Source
 from feeds.services.polling import FeedPollOperation, _PolledSource
+from feeds.services.sources import SourceService
 from openmagpie_schema.configs import RssSourceSpec
 
 
@@ -33,14 +37,17 @@ class PollHeartbeatTests(TestCase):
         feed = Feed.objects.create(account_id=ulid.ulid(), user_id=ulid.ulid(), name="f", kind="curated", data={})
         op = FeedPollOperation(feed, heartbeat=heartbeat)
         sources = [
-            SimpleNamespace(id=f"s{i}", spec={"kind": "rss", "url": f"https://x{i}.test/rss", "name": f"s{i}"})
+            SimpleNamespace(
+                id=f"s{i}", kind="rss", spec={"kind": "rss", "url": f"https://x{i}.test/rss", "name": f"s{i}"}
+            )
             for i in range(n)
         ]
         # Inject fake sources before the cached_property fires (no DB rows).
         # The poll streams via `iter_for_poll` (random order in prod) and reads
         # the total via `count`; here order is irrelevant, so iterate as-is.
         op.__dict__["source_svc"] = SimpleNamespace(
-            iter_for_poll=lambda _feed: iter(sources),
+            iter_for_poll=lambda _feed, **kw: iter(sources),
+            iter_by_kind=lambda _feed, kind: iter(()),  # no reddit sources in these tests
             count=lambda _feed: len(sources),
         )
         return op
@@ -181,11 +188,14 @@ class FullOutagePruneGuardTests(TestCase):
         feed = Feed.objects.create(account_id=ulid.ulid(), user_id=ulid.ulid(), name="f", kind="curated", data={})
         op = FeedPollOperation(feed)
         sources = [
-            SimpleNamespace(id=f"s{i}", spec={"kind": "rss", "url": f"https://x{i}.test/rss", "name": f"s{i}"})
+            SimpleNamespace(
+                id=f"s{i}", kind="rss", spec={"kind": "rss", "url": f"https://x{i}.test/rss", "name": f"s{i}"}
+            )
             for i in range(n)
         ]
         op.__dict__["source_svc"] = SimpleNamespace(
-            iter_for_poll=lambda _feed: iter(sources),
+            iter_for_poll=lambda _feed, **kw: iter(sources),
+            iter_by_kind=lambda _feed, kind: iter(()),  # no reddit sources in these tests
             count=lambda _feed: len(sources),
         )
         item_svc = mock.Mock()
@@ -205,3 +215,43 @@ class FullOutagePruneGuardTests(TestCase):
         with mock.patch.object(op, "_poll_source", side_effect=[httpx.ConnectError("down"), (1, 1)]):
             op.run()
         item_svc.prune_items.assert_called_once()
+
+
+class SourceServiceWatermarkTests(TestCase):
+    """The REAL `advance_watermark` against the DB (the poll-path tests mock it):
+    monotonic for a set mark, and a NULL mark bootstraps instead of no-op'ing on
+    the `last_event_at__lt` guard - the self-heal the batch/single-source converge
+    rely on for a (shouldn't-happen) null watermark."""
+
+    _T1 = datetime(2026, 1, 1, tzinfo=UTC)
+    _T2 = datetime(2026, 1, 2, tzinfo=UTC)
+    _T3 = datetime(2026, 1, 3, tzinfo=UTC)
+
+    def _null_source(self) -> tuple[SourceService, Source]:
+        account_id = str(ulid.ulid())
+        feed = Feed.objects.create(account_id=account_id, user_id=ulid.ulid(), name="f", kind="curated", data={})
+        source = Source.objects.create(
+            id=str(ulid.ulid()),
+            account_id=account_id,
+            feed_id=str(feed.id),
+            kind="reddit_subreddit",
+            spec={"kind": "reddit_subreddit", "subreddit": "python"},
+            spec_hash="h1",
+            last_event_at=None,
+        )
+        return SourceService(account_id=account_id), source
+
+    def test_null_mark_bootstraps_then_advances_monotonically(self) -> None:
+        svc, source = self._null_source()
+        # NULL bootstraps to the first-seen value (the `__lt` guard alone would
+        # no-op here, since `NULL < value` is unknown).
+        self.assertEqual(svc.advance_watermark(source, self._T2), 1)
+        source.refresh_from_db()
+        self.assertEqual(source.last_event_at, self._T2)
+        # Now monotonic: an earlier value is a no-op, a later one advances.
+        self.assertEqual(svc.advance_watermark(source, self._T1), 0)
+        source.refresh_from_db()
+        self.assertEqual(source.last_event_at, self._T2)
+        self.assertEqual(svc.advance_watermark(source, self._T3), 1)
+        source.refresh_from_db()
+        self.assertEqual(source.last_event_at, self._T3)

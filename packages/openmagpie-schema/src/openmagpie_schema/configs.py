@@ -7,12 +7,16 @@ lives in `core` and runs at the server's validation seam. Splitting shape
 from policy is what lets this module be a dependency-free shared package.
 """
 
+import re
 from typing import Annotated, ClassVar, Literal
 from urllib.parse import urlsplit
 
 from pydantic import BaseModel, Field, field_validator
 
 # ── Source specs (discriminated union over kind) ──────────────────────────
+
+# Reddit's max subreddit-name length; the slug validator bounds names to it.
+MAX_SUBREDDIT_LENGTH = 21
 
 
 class RedditSubredditSourceSpec(BaseModel):
@@ -22,6 +26,27 @@ class RedditSubredditSourceSpec(BaseModel):
 
     kind: Literal["reddit_subreddit"] = "reddit_subreddit"
     subreddit: str
+
+    @field_validator("subreddit")
+    @classmethod
+    def _validate_subreddit(cls, value: str) -> str:
+        """Validate + normalize the BARE subreddit name. A pasted `r/` or `/r/`
+        prefix is stripped (callers build the `r/<name>/...` request URL and
+        `display()` re-adds the prefix), the name is held to a URL-safe charset
+        (letters/digits/underscores, <=MAX_SUBREDDIT_LENGTH chars - nothing like
+        `/`, `?`, `#`, `+`, or whitespace that would break a request URL), and the
+        result is lowercased (subreddit names are case-insensitive, so that's the
+        one canonical identity).
+
+        Deliberately a URL-safe subset, not Reddit's exact naming rule: it's looser
+        (allows 1-2 char names) and doesn't special-case `u_` user feeds. Unlike
+        RssSourceSpec.url's validate-only check, this also normalizes."""
+        slug = re.sub(r"^/?r/", "", value.strip(), flags=re.IGNORECASE)
+        if not re.fullmatch(rf"[A-Za-z0-9_]{{1,{MAX_SUBREDDIT_LENGTH}}}", slug):
+            raise ValueError(f"invalid subreddit {value!r}: letters/digits/underscores, <={MAX_SUBREDDIT_LENGTH} chars")
+        # Subreddit names are case-insensitive (r/Python and r/python are the same
+        # sub), so normalize to the one canonical lowercase form.
+        return slug.lower()
 
     def display(self) -> str:
         return f"r/{self.subreddit}"

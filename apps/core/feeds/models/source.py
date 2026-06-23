@@ -64,14 +64,15 @@ class Source(BaseModel):
             ),
         ]
         indexes = [
-            # Name pinned to match what migration 0010 declared so
+            # Name pinned to match what 0001_initial declared so
             # `makemigrations --check` stays clean. Without an explicit
             # name Django auto-generates a per-model hash that drifts
             # from migration history on any subsequent run.
             models.Index(fields=["account_id", "feed_id", "id"], name="feeds_sourc_acct_feed_id_idx"),
-            # (A standalone `kind` index was declared in 0010 + 0012
-            # for the "list all rss sources" query but has no consumer
-            # yet; dropped when one materializes.)
+            # No standalone `kind` index: the per-feed kind queries (poll's
+            # `iter_by_kind` / `iter_for_poll`) ride the (account_id, feed_id)
+            # prefix above and filter `kind` on that already-narrow per-feed set.
+            # Add one only if a cross-feed "all sources of kind X" query lands.
         ]
 
     def __str__(self) -> str:

@@ -115,7 +115,9 @@ class SeedQuickstartTests(TestCase):
         account_id = self._account_id()
         feed = FeedService(account_id=account_id).list(limit=200)[0]
         sources = SourceService(account_id=account_id).list(feed)
-        self.assertEqual(sorted(s.spec["subreddit"] for s in sources), ["LocalLLaMA", "MachineLearning"])
+        # Slugs are stored bare + lowercased by the spec validator (the r/ prefix
+        # and the LocalLLaMA duplicate both collapse).
+        self.assertEqual(sorted(s.spec["subreddit"] for s in sources), ["localllama", "machinelearning"])
 
         watch = WatchService(account_id=account_id).list(limit=200)[0]
         actions = WatchActionService(account_id=account_id).list_for_path(str(watch.initial_path_id))

@@ -60,10 +60,12 @@ class FeedCreateDryRunTests(TestCase):
 
 class SpecHashCanonicalTests(SimpleTestCase):
     def test_reddit_subreddit_pinned_hash(self) -> None:
+        # "ClaudeAI" validates to the bare, lowercased "claudeai"; the pin is the
+        # hash of that canonical dump (changed when the slug validator landed).
         spec = RedditSubredditSourceSpec(subreddit="ClaudeAI")
         self.assertEqual(
             _hash_spec(spec),
-            "0da1f0763888956b29fd3ed95ef61a7b847f94c982ee458fedc7562a6c171a80",
+            "3f21fb2a64266e815c8ca2da8f440528ae864e1acec97a2322fda9e565cbdeb6",
         )
 
     def test_rss_pinned_hash(self) -> None:
@@ -207,7 +209,7 @@ class SourceWireDisplayTests(SimpleTestCase):
 
     def test_display_computed_per_kind_and_in_dump(self) -> None:
         reddit = SourceWire(id="s1", spec=RedditSubredditSourceSpec(subreddit="ClaudeAI"))
-        self.assertEqual(reddit.model_dump(mode="json")["display"], "r/ClaudeAI")
+        self.assertEqual(reddit.model_dump(mode="json")["display"], "r/claudeai")  # slug stored lowercased
         rss_named = SourceWire(id="s2", spec=RssSourceSpec(url="https://a.test/rss", name="Example"))
         self.assertEqual(rss_named.model_dump(mode="json")["display"], "Example")
         rss_bare = SourceWire(id="s3", spec=RssSourceSpec(url="https://b.test/rss"))

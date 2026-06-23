@@ -19,11 +19,10 @@ past datetime on the SourceInput at create.
 import logging
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import datetime
 from functools import cached_property
 from typing import TYPE_CHECKING
 
-import httpx
 from django.utils import timezone
 from pydantic import TypeAdapter, ValidationError
 
@@ -31,11 +30,12 @@ from common.locks import poll_lock
 from feeds.configs import CuratedFeedConfig
 from feeds.models import Feed, Source
 from feeds.registry import load_config
-from openmagpie_schema.configs import SourceSpec
+from openmagpie_schema.configs import RedditSubredditSourceSpec, SourceSpec
 from sources import registry as source_registry
-from sources.connectors.base import ConnectorParseError
 from sources.payloads import SourcePayload
 
+from ._poll_common import _RECOVERABLE_ERRORS, FeedPollProgressCallback, SourcePolled, _ensure_aware
+from ._reddit_batch import RedditBatchMixin
 from .feeds import FeedItemService, FeedService
 
 _SPEC_ADAPTER = TypeAdapter(SourceSpec)
@@ -45,54 +45,12 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger("feeds")
 
-# Per-source failures we expect and recover from (one bad source must not
-# abort the whole feed cycle). Anything else is a bug and should propagate.
-_RECOVERABLE_ERRORS = (
-    httpx.HTTPError,
-    ValidationError,
-    ConnectionError,
-    ConnectorParseError,
-    # `source_registry.get(spec.kind)` raises bare KeyError when the
-    # connector for that kind isn't loaded in this deployment (e.g. a
-    # config-only spec like `rss` whose connector ships later). Without
-    # this, the whole cycle aborts on the first unregistered kind ;
-    # last_polled_at never advances and the feed stays perpetually due.
-    KeyError,
-)
-
-
-@dataclass(frozen=True)
-class SourcePolled:
-    """Per-source progress, emitted once after each source is polled."""
-
-    feed: Feed
-    source_display: str
-    observed: int
-    recorded: int
-
-
-FeedPollProgressCallback = Callable[[SourcePolled], None]
-
 
 @dataclass(frozen=True)
 class FeedPollResult:
     observed: int
     recorded: int
     pruned: int
-
-
-def _ensure_aware(value: datetime) -> datetime:
-    """Tag a naive datetime as UTC; pass through aware datetimes
-    untouched. Defensive belt for the `_PolledSource.newest`
-    comparison ; `Source.last_event_at` is always tz-aware (Django
-    DateTimeField), but the `SourcePayload.occurred_at` contract isn't
-    enforced anywhere, so a future connector returning a naive
-    datetime would crash the comparison with `TypeError` and abort
-    the source mid-poll. Normalizing at this seam keeps the watermark
-    invariant downstream and the failure recoverable."""
-    if value.tzinfo is None:
-        return value.replace(tzinfo=UTC)
-    return value
 
 
 class _PolledSource:
@@ -132,7 +90,7 @@ class _PolledSource:
             yield payload
 
 
-class FeedPollOperation:
+class FeedPollOperation(RedditBatchMixin):
     """One-shot: poll a single Feed's streams, persist + prune its items."""
 
     def __init__(
@@ -176,12 +134,37 @@ class FeedPollOperation:
         recorded = 0
         sources_succeeded = 0
 
-        # Counted up front (cheap COUNT, no row materialization) so the
-        # early-break log + full-outage check have the total ; sources
-        # themselves stream in RANDOM order (see `iter_for_poll`) so a
-        # fixed position can't doom the same sources every cycle.
+        # Sources stream in RANDOM order (see `iter_for_poll`) so a fixed
+        # position can't doom the same sources cycle after cycle. `total_sources`
+        # (for the early-break log + full-outage check) is a cheap COUNT, not a
+        # materialization - a feed can carry 1000+ sources.
         total_sources = self.source_svc.count(self.feed)
-        for source in self.source_svc.iter_for_poll(self.feed):
+        reddit_kind = RedditSubredditSourceSpec.SOURCE_KIND
+
+        # Reddit group first: the batch STREAMS the feed's reddit sources and
+        # packs them into combined `/r/a+b+c/new.rss` request(s) - one
+        # rate-limited call per ~1000-sub chunk instead of one per sub - renewing
+        # the lease per chunk (see poll_reddit_group). A chunk fetch error leaves
+        # that chunk's marks untouched (next cycle re-reads losslessly), like a
+        # single source's failed poll. An empty iterator is a clean no-op.
+        try:
+            g_observed, g_recorded, g_succeeded = self.poll_reddit_group(
+                self.source_svc.iter_by_kind(self.feed, reddit_kind)
+            )
+            observed += g_observed
+            recorded += g_recorded
+            sources_succeeded += g_succeeded
+        except _RECOVERABLE_ERRORS as exc:
+            logger.warning(
+                "reddit batch poll failed feed=%s err=%s: %s",
+                self.feed.id,
+                type(exc).__name__,
+                exc,
+            )
+
+        # The rest, streamed one at a time (never materialized); reddit is
+        # excluded since the batch above handled it.
+        for source in self.source_svc.iter_for_poll(self.feed, exclude_kinds=(reddit_kind,)):
             # Renew the poll lease BEFORE the (potentially slow) fetch, so the
             # lock spans this source's full duration. Renewing per source is
             # what lets a feed of any size poll under one held lock instead of
@@ -228,6 +211,10 @@ class FeedPollOperation:
 
         # Persist poll cadence only ; Source row watermarks are written
         # back per-row inside `_poll_source`; feed.data is not touched.
+        # `sources_succeeded` counts SUBS polled-without-error, not requests: the
+        # reddit batch credits len(chunk) per combined fetch (see poll_reddit_group),
+        # the rest +1 each. Only the `== 0` boundary matters here, and the batch can
+        # only over-credit, so it never fabricates a false outage.
         full_outage = total_sources > 0 and sources_succeeded == 0
         self.feed_svc.update_poll_state(self.feed, last_polled_at=started_at, data=None)
 

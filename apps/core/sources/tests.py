@@ -4,7 +4,7 @@ from unittest import mock
 import feedparser
 import httpx
 from django.test import SimpleTestCase
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from openmagpie_schema.configs import RedditSubredditSourceSpec, RssSourceSpec
 from openmagpie_schema.feed import FeedItemData
@@ -177,13 +177,16 @@ class RedditRateLimitBackoffTests(SimpleTestCase):
         with self.assertRaises(httpx.HTTPStatusError):
             self._poll_with([httpx.Response(429, headers={"Retry-After": "1"})] * (MAX_RATE_LIMIT_RETRIES + 1))
 
-    def test_missing_subreddit_raises_a_recoverable_error(self) -> None:
-        # ConnectorParseError is in the polling seam's _RECOVERABLE_ERRORS,
-        # so one bad spec row degrades to a failed source; a bare ValueError
-        # here would abort the whole feed cycle for every later source.
-        spec = RedditSubredditSourceSpec(kind="reddit_subreddit", subreddit="")
-        with self.assertRaises(ConnectorParseError):
-            list(RedditSubRedditConnector().poll(spec, since=None))
+    def test_subreddit_spec_validation(self) -> None:
+        # Rejected at the spec seam: empty, URL-corrupting chars (`/?#+`,
+        # whitespace - one bad slug would break the whole `+`-joined combined
+        # URL), and over Reddit's 21-char max.
+        for bad in ("", "a/b", "a+b", "a?x", "has space", "x" * 22):
+            with self.assertRaises(ValidationError):
+                RedditSubredditSourceSpec(kind="reddit_subreddit", subreddit=bad)
+        # A pasted `r/` prefix is forgiven; stored bare AND lowercased so
+        # case-only variants (python vs Python) collapse to one source.
+        self.assertEqual(RedditSubredditSourceSpec(kind="reddit_subreddit", subreddit="r/Python").subreddit, "python")
 
     def test_heartbeat_ticks_through_the_wait(self) -> None:
         # A 60s wait sleeps in HEARTBEAT_SLEEP_CHUNK_SECONDS (15s) chunks,

@@ -81,12 +81,14 @@ class NewRedditPostPayload(SourcePayload):
         )
 
     @classmethod
-    def from_feedparser_entry(
-        cls,
-        entry: Any,
-        spec: RedditSubredditSourceSpec,
-        published: datetime,
-    ) -> "NewRedditPostPayload":
+    def from_feedparser_entry(cls, entry: Any, published: datetime) -> "NewRedditPostPayload":
+        # No `spec` param: a combined `/r/a+b+c/new.rss` fetch has no single
+        # source spec, and each entry's own `<category term>` names its
+        # subreddit. `source` is the fixed kind constant (every reddit_subreddit
+        # spec carries the same `kind`). A tag-less entry yields subreddit=""; the
+        # connector (_walk_new) raises ConnectorParseError on it rather than
+        # routing a post with no sub.
+        #
         # Atom id is `t3_<post-id>`; the post id alone matches what the JSON
         # endpoint returned, so existing FeedItems keyed on the bare id stay
         # de-duped across the connector swap.
@@ -103,11 +105,11 @@ class NewRedditPostPayload(SourcePayload):
             external_id=post_id,
             kind=cls.PAYLOAD_KIND,
             occurred_at=published,
-            source=spec.kind,
+            source=RedditSubredditSourceSpec.SOURCE_KIND,
             title=entry.get("title", ""),
             content=_atom_content_to_text(_feedparser_content_html(entry)),
             author=author,
             url=link,
             permalink=permalink,
-            subreddit=subreddit or spec.subreddit,
+            subreddit=subreddit,
         )

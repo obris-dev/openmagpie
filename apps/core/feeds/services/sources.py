@@ -29,7 +29,7 @@ from datetime import datetime
 
 import ulid
 from django.db import transaction
-from django.db.models import Count
+from django.db.models import Count, Q
 
 from common.locks import feed_set_lock
 from feeds.models import Feed, Source
@@ -126,8 +126,10 @@ class SourceService:
         self._assert_scope(str(feed.account_id), "feed")
         return self._scoped(feed).count()
 
-    def iter_for_poll(self, feed: Feed) -> Iterator[Source]:
-        """Stream this feed's sources in RANDOM order for one poll cycle.
+    def iter_for_poll(self, feed: Feed, *, exclude_kinds: tuple[str, ...] = ()) -> Iterator[Source]:
+        """Stream this feed's sources in RANDOM order for one poll cycle,
+        optionally excluding kinds the caller polls separately (e.g.
+        reddit_subreddit, streamed via `iter_by_kind` for combined fetching).
 
         Random (`ORDER BY RANDOM()`), not for aesthetics: it
         decorrelates which sources fail from their POSITION in the
@@ -139,7 +141,21 @@ class SourceService:
         run. `.iterator()` streams instead of materializing the full
         row set (a feed can carry 1000+ sources)."""
         self._assert_scope(str(feed.account_id), "feed")
-        return self._scoped(feed).order_by("?").iterator()
+        qs = self._scoped(feed)
+        if exclude_kinds:
+            qs = qs.exclude(kind__in=exclude_kinds)
+        return qs.order_by("?").iterator()
+
+    def iter_by_kind(self, feed: Feed, kind: str) -> Iterator[Source]:
+        """Stream this feed's sources of one kind in RANDOM order, for batched
+        connectors (e.g. reddit) that pack sources into combined requests. Like
+        `iter_for_poll` it `.iterator()`-streams (a feed can carry 1000+ sources
+        of one kind), so the caller fills budget-bounded chunks on the fly rather
+        than materializing the whole set. The `(account_id, feed_id)` index
+        prefix narrows to the feed ; the `kind` filter runs on that per-feed set
+        (no dedicated kind index needed)."""
+        self._assert_scope(str(feed.account_id), "feed")
+        return self._scoped(feed).filter(kind=kind).order_by("?").iterator()
 
     def advance_watermark(self, source: Source, value: datetime) -> int:
         """Move `last_event_at` strictly forward on one Source row.
@@ -147,7 +163,12 @@ class SourceService:
         The `last_event_at__lt=value` guard makes the UPDATE monotonic
         at the DB so a stale poll (out-of-order completion under
         concurrent pollers, or any future caller outside `poll_lock`)
-        can't clobber a newer watermark. Equivalent guard for an
+        can't clobber a newer watermark. A NULL watermark also matches
+        (`isnull=True`): the feeds.policy invariant says a row can't be
+        NULL, but if one ever is this BOOTSTRAPS it to `value` (its
+        first-seen newest) so it self-heals instead of staying stuck
+        re-fetching every cycle - a NULL has no "newer", so bootstrapping
+        can't break monotonicity. Equivalent guard for an
         operator-initiated backfill: it's a different code path
         (`rewind_watermark`, future) and would bypass this method.
 
@@ -155,11 +176,11 @@ class SourceService:
         update across tenants. Returns the row count affected
         (0 = no-op: already past `value`, or not in scope). Pure
         column UPDATE, no JSONB rewrite."""
-        return Source.objects.filter(
-            account_id=self.account_id,
-            id=source.id,
-            last_event_at__lt=value,
-        ).update(last_event_at=value)
+        return (
+            Source.objects.filter(account_id=self.account_id, id=source.id)
+            .filter(Q(last_event_at__lt=value) | Q(last_event_at__isnull=True))
+            .update(last_event_at=value)
+        )
 
     def delete_for_feed(self, feed: Feed) -> int:
         """Drop every Source row attached to a feed; used by
