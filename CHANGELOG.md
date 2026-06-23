@@ -5,6 +5,13 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.2](https://github.com/obris-dev/openmagpie/compare/v0.3.1...v0.3.2) (2026-06-23)
+
+
+### Bug Fixes
+
+* **sources:** honor Reddit's x-ratelimit-reset for 429 backoff ([#128](https://github.com/obris-dev/openmagpie/issues/128)) ([60d54cb](https://github.com/obris-dev/openmagpie/commit/60d54cb759bc8dab4b1123980868c5a4841d0b92))
+
 ## [0.3.1](https://github.com/obris-dev/openmagpie/compare/v0.3.0...v0.3.1) (2026-06-23)
 
 
