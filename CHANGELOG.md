@@ -10,7 +10,7 @@ and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2
 
 ### Features
 
-* **telemetry:** anonymous, opt-in product telemetry ([#123](https://github.com/obris-dev/openmagpie/issues/123)) ([8b08f66](https://github.com/obris-dev/openmagpie/commit/8b08f66e46737b8fabe5c5ce676dbcbe5991a6f5))
+* **telemetry:** anonymous, opt-in product telemetry — off by default, owner-consented, never sends your content; PostHog Cloud (US); milestone events + a daily rolled-up heartbeat ([#123](https://github.com/obris-dev/openmagpie/issues/123)) ([8b08f66](https://github.com/obris-dev/openmagpie/commit/8b08f66e46737b8fabe5c5ce676dbcbe5991a6f5))
 
 ## [0.2.0](https://github.com/obris-dev/openmagpie/compare/v0.1.0...v0.2.0) (2026-06-21)
 
