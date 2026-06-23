@@ -5,6 +5,13 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.1](https://github.com/obris-dev/openmagpie/compare/v0.3.0...v0.3.1) (2026-06-23)
+
+
+### Performance Improvements
+
+* **reddit:** batch a feed's subreddit sources into one multireddit fetch ([#126](https://github.com/obris-dev/openmagpie/issues/126)) ([5c8e811](https://github.com/obris-dev/openmagpie/commit/5c8e811d6f87022afe840918154c566fb75f00bf))
+
 ## [0.3.0](https://github.com/obris-dev/openmagpie/compare/v0.2.0...v0.3.0) (2026-06-23)
 
 
