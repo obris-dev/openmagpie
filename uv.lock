@@ -655,7 +655,7 @@ wheels = [
 
 [[package]]
 name = "openmagpie"
-version = "0.2.0"
+version = "0.3.0"
 source = { editable = "apps/cli" }
 dependencies = [
     { name = "httpx" },
@@ -768,7 +768,7 @@ requires-dist = [{ name = "pydantic", specifier = ">=2.5" }]
 
 [[package]]
 name = "openmagpie-suite"
-version = "0.2.0"
+version = "0.3.0"
 source = { virtual = "." }
 
 [[package]]
