@@ -14,7 +14,7 @@ from typing import Annotated, Any, ClassVar, Literal
 
 from pydantic import BaseModel, Field, computed_field
 
-from .configs import SourceSpec
+from .configs import SourceFields
 from .wire import ConfigBlob
 
 # ── Config (write-path `data` blob, keyed by kind) ────────────────────────
@@ -99,27 +99,21 @@ class CuratedFeedConfig(FeedConfig):
 # ── Source envelopes (referenced by FeedView / FeedMutationResponse) ──────
 
 
-class SourceInput(BaseModel):
-    """One source on a feed-create or `feed source set` payload.
-
-    `meta` is operator-supplied free-form tags; the recorder copies it
-    onto each FeedItem the source produces. `field_map` overrides the
-    feed-level `default_field_map` for a single source ; empty means
-    inherit. Connectors that don't read `field_map` ignore it.
+class SourceInput(SourceFields):
+    """One source on a feed-create or `feed source set` payload. `spec` / `meta` /
+    `field_map` come from `SourceFields`.
 
     `last_event_at` is the optional starting watermark. None means
     "live mode from now" (server-policy defaulted at save time); a
     past datetime means "fetch items newer than this" ; the operator's
     backfill knob. Server policy rejects future values."""
 
-    spec: SourceSpec
-    meta: dict[str, str] = Field(default_factory=dict)
-    field_map: dict[str, str] = Field(default_factory=dict)
     last_event_at: datetime | None = None
 
 
-class SourceWire(BaseModel):
-    """One Source row on the read path.
+class SourceWire(SourceFields):
+    """One Source row on the read path. `spec` / `meta` / `field_map` come from
+    `SourceFields`.
 
     Relies on pydantic's DEFAULT `extra="ignore"` (no explicit model_config): the
     output-only `display` computed field is absent from the input schema, so
@@ -127,9 +121,6 @@ class SourceWire(BaseModel):
     recomputes, rather than erroring as it would under `extra="forbid"`."""
 
     id: str
-    spec: SourceSpec
-    meta: dict[str, str] = Field(default_factory=dict)
-    field_map: dict[str, str] = Field(default_factory=dict)
     last_event_at: Any = None  # datetime | None; renderer encodes
     created_at: Any = None  # datetime | None; renderer encodes
 

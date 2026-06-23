@@ -16,13 +16,12 @@ would do, and a bespoke "one source" mutation surface invites
 flag-per-kind UX that scales badly.
 
 Uniqueness is enforced by `(account_id, feed_id, spec_hash)` where
-`spec_hash` is the sha256 of the canonical spec dump. Operators
-never see the hash ; it's pure dedup plumbing.
+`spec_hash` is `sha256(canonical_spec(spec))`. Operators never see
+the hash ; it's pure dedup plumbing.
 """
 
 import builtins
 import hashlib
-import json
 import logging
 from collections.abc import Iterator
 from datetime import datetime
@@ -34,7 +33,7 @@ from django.db.models import Count, Q
 from common.locks import feed_set_lock
 from feeds.models import Feed, Source
 from feeds.policy import PolicyError, default_and_enforce_source_watermark, enforce_source_spec_safety
-from openmagpie_schema.configs import SourceSpec
+from openmagpie_schema.configs import SourceSpec, canonical_spec
 from openmagpie_schema.feed import SourceInput, SourceSetResult
 from sources import registry as source_registry
 
@@ -71,19 +70,15 @@ def _assert_connector_registered(specs: list[SourceSpec]) -> None:
 
 
 def _hash_spec(spec: SourceSpec) -> str:
-    """sha256 of the canonical spec dump.
+    """sha256 of the spec's canonical identity.
 
-    Pydantic v2's `model_dump_json` follows field-declaration order,
-    NOT alphabetical, so a future reorder / alias / populate_by_name
-    on a SourceSpec subclass would silently change every hash and
-    break dedup on existing rows. Canonicalize by routing through
-    `json.dumps(model_dump(mode="json"), sort_keys=True)`: the hash
-    depends on field names + values only, never on their order in
-    the class body. Pinned by a regression test in
-    `feeds/tests.py::SpecHashCanonicalTests`."""
-    return hashlib.sha256(
-        json.dumps(spec.model_dump(mode="json"), sort_keys=True, separators=(",", ":")).encode("utf-8")
-    ).hexdigest()
+    Routes through `openmagpie_schema.configs.canonical_spec` - the ONE definition of a
+    source's identity, shared with the magpie CLI's source-diff - so the hash and
+    the CLI's comparison can't drift. That canonicalizer uses sorted-key JSON over
+    `model_dump`, NOT declaration-order `model_dump_json`, so a field reorder /
+    alias on a SourceSpec subclass can't silently change every hash and break
+    dedup. Pinned by a regression test in `feeds/tests.py::SpecHashCanonicalTests`."""
+    return hashlib.sha256(canonical_spec(spec).encode("utf-8")).hexdigest()
 
 
 class SourceGlobal:
@@ -323,7 +318,11 @@ class SourceService:
                 # the input actually changed them. Skipping unchanged
                 # rows turns a 1000-source no-op re-import from N
                 # UPDATEs into zero. Watermarks (last_event_at) are
-                # never touched here.
+                # never touched here. This change surface (spec via
+                # spec_hash + meta + field_map, NOT the watermark) is
+                # captured by `openmagpie_schema.configs.source_identity`,
+                # which the magpie CLI's `feed edit` warning diffs on -
+                # keep this reconcile in sync with that definition.
                 dirty_hashes = [
                     h for h in persisted_hashes if existing[h] != (new_by_hash[h].meta, new_by_hash[h].field_map)
                 ]

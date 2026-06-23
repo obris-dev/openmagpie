@@ -14,6 +14,8 @@ import sys
 import typer
 import yaml
 
+from openmagpie_schema.configs import SourceFields, SourceIdentity, source_identity
+
 from ... import console
 from ...api.feed import FeedEnvelope, FeedMutationResponse, FeedView
 from ...context import AppContext, app_ctx
@@ -98,6 +100,47 @@ def get(
     )
 
 
+def _source_keys(sources: list[SourceFields]) -> list[SourceIdentity]:
+    """Order-independent set of source identities for diffing - one shared
+    `source_identity` (spec via `canonical_spec` + meta + field_map; last_event_at
+    excluded) per source. Accepts either envelope via their `SourceFields` base
+    (SourceInput from the file, SourceWire from the feed)."""
+    return sorted(source_identity(s) for s in sources)
+
+
+# Stand-in for the file path in the `feed source set` hint when the edit came from
+# stdin or $EDITOR (no real path to echo). Shared with the test so they can't drift.
+_FILE_PLACEHOLDER = "<file>"
+
+
+def _sources_ignored_note(
+    body: FeedEnvelope, current_sources: list[SourceFields], file: str | None, feed_id: str
+) -> str | None:
+    """`feed edit` discards `sources` server-side, so warn ONLY when the file's
+    sources would actually change something `feed source set` applies - a source
+    added or removed, OR a persisted source's `meta` / `field_map` edited (not
+    just the spec; set_sources reconciles those too). A full feed.yaml already in
+    sync doesn't nag on a metadata-only edit. Both sides are normalized (file via
+    FeedEnvelope parsing, feed by the server), so the comparison is
+    apples-to-apples. Pure, so it's unit-testable without a CliRunner.
+
+    Blind spot: an empty `body.sources` returns None - YAML can't tell an omitted
+    `sources:` from an authored `sources: []` (Pydantic defaults both to []), and
+    warning on empty would false-fire on every (legitimately source-less) metadata
+    edit. So a deliberate `sources: []` full removal is silently dropped here; use
+    `feed source set` for removals."""
+    if not body.sources:
+        return None
+    if _source_keys(body.sources) == _source_keys(current_sources):
+        return None
+    target = file if file and file != "-" else _FILE_PLACEHOLDER
+    return (
+        "Ignoring the sources block (it differs from the feed's current sources): "
+        f"`feed edit` changes only feed-level config. To apply it, use:\n"
+        f"  magpie feed source set --feed {feed_id} -f {target}"
+    )
+
+
 @feed_app.command("edit")
 @_handle_api_errors
 def edit(
@@ -129,6 +172,13 @@ def edit(
     else:
         body_text = _read_file_or_abort(file)
     body = _parse_yaml_or_abort(body_text, FeedEnvelope)
+    # The server discards `sources` on an edit (feed-level-only PUT). If the file
+    # carries sources that DIFFER from the feed's current set, that change would
+    # be silently lost - warn and point at the dedicated verb. (No nag when they
+    # already match: a full feed.yaml in sync shouldn't warn on a metadata edit.)
+    note = _sources_ignored_note(body, detail.sources, file, feed_id)
+    if note:
+        console.warn(note)
     _run_mutation(ac, body, feed_id=feed_id, dry_run=dry_run, yes=yes)
 
 

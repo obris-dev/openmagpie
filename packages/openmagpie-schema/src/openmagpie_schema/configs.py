@@ -7,8 +7,9 @@ lives in `core` and runs at the server's validation seam. Splitting shape
 from policy is what lets this module be a dependency-free shared package.
 """
 
+import json
 import re
-from typing import Annotated, ClassVar, Literal
+from typing import Annotated, ClassVar, Literal, NamedTuple
 from urllib.parse import urlsplit
 
 from pydantic import BaseModel, Field, field_validator
@@ -143,3 +144,53 @@ SourceSpec = Annotated[
     RedditSubredditSourceSpec | RssSourceSpec | HackerNewsFeedSourceSpec | HackerNewsCommentSourceSpec,
     Field(discriminator="kind"),
 ]
+
+
+def canonical_spec(spec: SourceSpec) -> str:
+    """Canonical JSON for a source spec: the single identity both the server's
+    `spec_hash` (which sha256s this) and the magpie CLI's source-diff compare on.
+    Sorted keys + compact separators make it independent of field-declaration
+    order, so two specs denote the same source iff this string matches. Pure
+    shape; keep it byte-stable - a change reshuffles every stored `spec_hash`
+    (pinned by core's `SpecHashCanonicalTests`)."""
+    return json.dumps(spec.model_dump(mode="json"), sort_keys=True, separators=(",", ":"))
+
+
+class SourceFields(BaseModel):
+    """The identity + operator-tunable config shared by both source envelopes -
+    `SourceInput` (write path) and `SourceWire` (read path).
+
+    `meta` is operator-supplied free-form tags; the recorder copies it onto each
+    FeedItem the source produces. `field_map` overrides the feed-level
+    `default_field_map` for a single source; empty means inherit (connectors that
+    don't read it ignore it). The watermark (`last_event_at`) and server-assigned
+    fields (`id`, `created_at`) live on the envelopes, since they differ by
+    direction."""
+
+    spec: SourceSpec
+    meta: dict[str, str] = Field(default_factory=dict)
+    field_map: dict[str, str] = Field(default_factory=dict)
+
+
+class SourceIdentity(NamedTuple):
+    """A source's full reconcile identity - everything `feed source set` keys on:
+    the spec (`canonical_spec`, the `spec_hash` basis) PLUS the mutable config it
+    refreshes, meta + field_map. Excludes last_event_at (watermarks are never
+    reconciled). Hashable + ordered, so callers diff source sets by plain
+    equality instead of ad-hoc JSON."""
+
+    spec: str
+    meta: tuple[tuple[str, str], ...]
+    field_map: tuple[tuple[str, str], ...]
+
+
+def source_identity(source: SourceFields) -> SourceIdentity:
+    """Build the shared `SourceIdentity` from any source envelope (SourceInput or
+    SourceWire, via their `SourceFields` base) - the ONE definition the magpie
+    CLI's source-diff compares on and that the server's set_sources reconcile
+    mirrors (spec_hash + meta/field_map)."""
+    return SourceIdentity(
+        spec=canonical_spec(source.spec),
+        meta=tuple(sorted(source.meta.items())),
+        field_map=tuple(sorted(source.field_map.items())),
+    )
