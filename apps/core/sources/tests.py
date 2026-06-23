@@ -92,11 +92,12 @@ class ChallengeBypassRecoveryTests(SimpleTestCase):
 
 
 class RedditRateLimitBackoffTests(SimpleTestCase):
-    """The Reddit connector sleeps out 429s instead of aborting the source:
-    Retry-After drives the wait when present, exponential backoff when not,
-    the poll-lease heartbeat ticks through each wait, and exhausted retries
-    surface as the normal HTTPStatusError so the polling orchestrator's
-    recoverable per-source path stays the one fault signal."""
+    """The Reddit connector sleeps out 429s instead of aborting the source: the
+    response's rate-limit header drives the wait (Reddit's anonymous `.rss` sends
+    `x-ratelimit-reset`; `Retry-After` is honored too), exponential backoff when
+    no header is usable, the poll-lease heartbeat ticks through each wait, and
+    exhausted retries surface as the normal HTTPStatusError so the polling
+    orchestrator's recoverable per-source path stays the one fault signal."""
 
     _SPEC = RedditSubredditSourceSpec(kind="reddit_subreddit", subreddit="devops")
     # Valid-but-empty Atom: exercises the fetch/retry seam without needing
@@ -145,6 +146,19 @@ class RedditRateLimitBackoffTests(SimpleTestCase):
         joined = "\n".join(logs.output)
         self.assertIn("rate limited", joined)
         self.assertIn("succeeded after 1 retry", joined)
+
+    def test_x_ratelimit_reset_drives_the_wait(self) -> None:
+        # Reddit's anonymous .rss sends x-ratelimit-reset (seconds until the
+        # window resets), NOT Retry-After: it must drive the wait, not the
+        # exponential fallback (which would be 2.0 on the first attempt).
+        payloads, sleeps = self._poll_with(
+            [
+                httpx.Response(429, headers={"x-ratelimit-reset": "5"}),
+                httpx.Response(200, content=self._EMPTY_ATOM),
+            ]
+        )
+        self.assertEqual(payloads, [])
+        self.assertEqual(sleeps, [5.0])
 
     def test_no_recovery_line_without_a_retry(self) -> None:
         # A clean first hit must not emit the recovery line.

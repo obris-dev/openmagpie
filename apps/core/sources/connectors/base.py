@@ -1,4 +1,5 @@
 import logging
+import math
 import time
 from collections.abc import Callable, Iterator
 from datetime import datetime
@@ -56,6 +57,45 @@ def read_response_capped(
         if len(body) > max_bytes:
             raise ConnectorParseError(f"{url_label} exceeded {max_bytes}-byte cap mid-stream")
     return bytes(body)
+
+
+def _as_positive_float(raw: str | None) -> float | None:
+    """Parse a header value to a finite, positive float, else None. `float()` on
+    a str raises only ValueError - an overflowing literal like "1e400" returns
+    inf, not OverflowError (that's float(huge_int)) - so ValueError is the only
+    catch needed. NaN/inf are then screened explicitly: `float('nan')` parses but
+    every comparison with it is False, so a naive `> 0` check would pass it
+    through to `time.sleep(nan)`."""
+    if raw is None:
+        return None
+    try:
+        value = float(raw)
+    except ValueError:
+        return None
+    return value if math.isfinite(value) and value > 0 else None
+
+
+def parse_rate_limit_wait(response: httpx.Response) -> float | None:
+    """Seconds to wait before retrying a rate-limited (429) response, read from
+    its headers, or None when none is usable (the caller falls back to its own
+    backoff). Domain-agnostic; checks in order:
+
+      - `Retry-After`: a numeric `<delay-seconds>`. (RFC 7231 also allows an
+        HTTP-date; that form returns None - no upstream we poll sends it, so it
+        rides the caller's backoff rather than this seam.)
+      - `X-RateLimit-Reset`: seconds until the window resets. Reddit's anonymous
+        `.rss` sends THIS, not Retry-After (verified: relative seconds, ~39,
+        counting down), as does the IETF RateLimit-Reset draft. Read as a
+        RELATIVE wait. An API that instead sends an absolute Unix epoch (GitHub,
+        old Twitter) would be over-read here and clamped to the caller's backoff
+        cap; add epoch handling alongside the first such connector, not on spec.
+
+    Only a finite, positive result is returned, so the caller never sleeps on a
+    NaN, an infinity, or a non-positive value."""
+    seconds = _as_positive_float(response.headers.get("Retry-After"))
+    if seconds is not None:
+        return seconds
+    return _as_positive_float(response.headers.get("X-RateLimit-Reset"))
 
 
 # ── SSRF-safe fetch of the open web ───────────────────────────────────────

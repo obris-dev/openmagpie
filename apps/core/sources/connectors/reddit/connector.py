@@ -1,5 +1,4 @@
 import logging
-import math
 import time
 from collections.abc import Callable, Iterator
 from datetime import UTC, datetime
@@ -12,7 +11,7 @@ from openmagpie_schema.configs import RedditSubredditSourceSpec
 from sources.payload_registry import register
 from sources.payloads import SourcePayload
 
-from ..base import BaseConnector, ConnectorParseError, read_response_capped
+from ..base import BaseConnector, ConnectorParseError, parse_rate_limit_wait, read_response_capped
 from .payloads import NewRedditPostPayload
 
 logger = logging.getLogger("sources")
@@ -54,16 +53,21 @@ COMBINED_URL_OVERHEAD = 75  # scheme + host + /r//new/.rss + query headroom
 # left generous for any rich Atom payloads.
 MAX_BODY_BYTES = 5 * 1024 * 1024
 
-# Reddit rate-limits the anonymous endpoint by IP and answers 429, usually
-# with a Retry-After. That's "slow down", not "broken": retry the SAME page
-# after the wait it asked for (exponential fallback when the header is
-# absent or unparseable) instead of aborting the source's cycle, which
-# would also roll straight into hammering the sibling subreddit sources.
-# Exhausted retries fall through to `raise_for_status()`, the existing
-# recoverable per-source error path. The cap keeps a hostile / buggy
-# header from stalling a poll worker for minutes.
+# Reddit rate-limits the anonymous endpoint by IP and answers 429. That's
+# "slow down", not "broken": retry the SAME page after the wait the response
+# asks for instead of aborting the source's cycle, which would also roll
+# straight into hammering the sibling subreddit sources. The anonymous `.rss`
+# sends `x-ratelimit-reset` (relative seconds until the window resets), NOT a
+# Retry-After (measured: both 200 and 429 carry x-ratelimit-{used,remaining,
+# reset}, reset counting down ~39s, no Retry-After). Both are read by
+# `parse_rate_limit_wait`; exponential fallback only when no usable header is
+# sent. Exhausted retries fall through to `raise_for_status()`, the existing
+# recoverable per-source error path. The cap keeps a hostile / buggy header
+# from stalling a poll worker for minutes.
 MAX_RATE_LIMIT_RETRIES = 6
-RATE_LIMIT_BACKOFF_BASE_SECONDS = 2.0  # 2s..60s over the 6 retries when Retry-After is absent (6th clamps to the cap)
+RATE_LIMIT_BACKOFF_BASE_SECONDS = (
+    2.0  # 2s..60s over the 6 retries when no rate-limit header is sent (6th clamps to the cap)
+)
 RATE_LIMIT_DELAY_CAP_SECONDS = 60.0
 
 # Backoff sleeps tick the caller's `heartbeat` at this cadence so the poll
@@ -74,27 +78,14 @@ RATE_LIMIT_DELAY_CAP_SECONDS = 60.0
 HEARTBEAT_SLEEP_CHUNK_SECONDS = 15.0
 
 
-def _rate_limit_delay(retry_after: str | None, attempt: int) -> float:
-    """Seconds to wait before retrying a 429'd page: the numeric Retry-After
-    when Reddit sent one, else exponential in the attempt number. Retry-After's
-    HTTP-date form parses as non-numeric and falls back to the exponential.
-
-    The header value is accepted only when finite and positive. "nan" must be
-    screened explicitly: float("nan") parses, every comparison against it is
-    False (so a `<= 0` guard passes it and `min(nan, cap)` returns nan, since
-    min keeps the first argument on a False comparison), and time.sleep(nan)
-    then raises a ValueError that is OUTSIDE the polling orchestrator's
-    recoverable set - aborting the feed's whole cycle, every cycle."""
-    delay: float | None = None
-    if retry_after:
-        try:
-            parsed = float(retry_after)
-        except ValueError:
-            parsed = None
-        if parsed is not None and math.isfinite(parsed) and parsed > 0:
-            delay = parsed
-    if delay is None:
-        delay = RATE_LIMIT_BACKOFF_BASE_SECONDS * (2**attempt)
+def _rate_limit_delay(header_wait: float | None, attempt: int) -> float:
+    """Seconds to wait before retrying a 429'd page: the wait the response's
+    rate-limit header asked for (`parse_rate_limit_wait`), else exponential in
+    the attempt number when no header was usable. Capped so a hostile / buggy
+    header can't stall a poll worker for minutes. (`parse_rate_limit_wait`
+    already screens NaN / inf / non-positive, so `header_wait` is a clean
+    positive float or None.)"""
+    delay = header_wait if header_wait is not None else RATE_LIMIT_BACKOFF_BASE_SECONDS * (2**attempt)
     return min(delay, RATE_LIMIT_DELAY_CAP_SECONDS)
 
 
@@ -197,7 +188,7 @@ class RedditSubRedditConnector(BaseConnector[RedditSubredditSourceSpec]):
                     if attempt > 0:
                         logger.info("%s succeeded after %d retr%s", url, attempt, "y" if attempt == 1 else "ies")
                     return body
-                delay = _rate_limit_delay(response.headers.get("Retry-After"), attempt)
+                delay = _rate_limit_delay(parse_rate_limit_wait(response), attempt)
             # Sleep AFTER the `with` closes the 429 response, so the wait
             # never pins the streamed connection open.
             logger.info(
