@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.2](https://github.com/obris-dev/openmagpie/compare/cli-v0.3.1...cli-v0.3.2) (2026-06-24)
+
+
+### Bug Fixes
+
+* **cli:** `watch action add`/`edit` now preview the change and prompt before applying, with `--dry-run` (validate + show the result, then stop) and `--yes` (skip the prompt; required when piped, for automation) - the flow `watch edit`/`feed edit` already have. And `watch edit` now warns when your file omits an existing action's `id`, since that drops and recreates the action (its pending activity won't complete); it lists the affected ids and points you to `watch action edit`. ([#133](https://github.com/obris-dev/openmagpie/issues/133)) ([0d4cd29](https://github.com/obris-dev/openmagpie/commit/0d4cd29b84648dbb7a5d97327ebb1e90241502f1))
+
 ## [0.3.1](https://github.com/obris-dev/openmagpie/compare/cli-v0.3.0...cli-v0.3.1) (2026-06-24)
 
 
