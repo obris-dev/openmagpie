@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.1](https://github.com/obris-dev/openmagpie/compare/cli-v0.3.0...cli-v0.3.1) (2026-06-24)
+
+
+### Bug Fixes
+
+* **cli:** `feed edit` now warns when your file's `sources:` differ from the feed's current set. `feed edit` only changes feed-level config and silently drops `sources`, so it points you to `feed source set` to actually apply them; no warning when they already match. ([#130](https://github.com/obris-dev/openmagpie/issues/130)) ([d02ace9](https://github.com/obris-dev/openmagpie/commit/d02ace997b10e4f3d5f05785956c4570c4f36a6c))
+
 ## [0.3.0](https://github.com/obris-dev/openmagpie/compare/cli-v0.2.0...cli-v0.3.0) (2026-06-23)
 
 
