@@ -5,6 +5,13 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.3](https://github.com/obris-dev/openmagpie/compare/v0.3.2...v0.3.3) (2026-06-24)
+
+
+### Changed
+
+* **schema/core:** `spec_hash` now derives from a shared `canonical_spec` source-identity used by both the server and the magpie CLI — an internal refactor with byte-identical hashes and no behavior change (shipped alongside the CLI's `feed edit` sources-diff warning). ([#130](https://github.com/obris-dev/openmagpie/issues/130)) ([d02ace9](https://github.com/obris-dev/openmagpie/commit/d02ace997b10e4f3d5f05785956c4570c4f36a6c))
+
 ## [0.3.2](https://github.com/obris-dev/openmagpie/compare/v0.3.1...v0.3.2) (2026-06-23)
 
 
