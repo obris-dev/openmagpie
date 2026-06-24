@@ -23,6 +23,13 @@ def is_truthy(value: str | None) -> bool:
     return value is not None and value.strip().lower() in _TRUTHY
 
 
+def wants_dry_run(request: Request) -> bool:
+    """True when the request asks for a validate-only dry run (`?dry_run=true`).
+    The one home for the dry-run query-param name + truthy parsing, shared by
+    every create/edit endpoint's preview path so the param name can't drift."""
+    return is_truthy(request.query_params.get("dry_run"))
+
+
 def parse_limit(request: Request, *, default: int = DEFAULT_LIMIT, maximum: int = MAX_LIMIT) -> int:
     """Read `?limit=`, clamped to [1, maximum]; falls back to `default`
     when absent or unparseable."""

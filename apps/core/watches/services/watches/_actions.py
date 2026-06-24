@@ -59,6 +59,11 @@ class WatchActionService:
         """The path's actions, dense rank order (the chain)."""
         return builtins.list(WatchAction.objects.filter(account_id=self.account_id, path_id=path_id).order_by("rank"))
 
+    def count_for_path(self, path_id: str, /) -> int:
+        """How many actions are on the path's chain - a COUNT, no row fetch (the
+        dry-run add only needs the length to place the would-be rank)."""
+        return WatchAction.objects.filter(account_id=self.account_id, path_id=path_id).count()
+
     def get(self, action_id: str, /) -> WatchAction:
         """Raises WatchAction.DoesNotExist if missing / other-account."""
         return WatchAction.objects.get(id=action_id, account_id=self.account_id)
@@ -201,13 +206,32 @@ class WatchActionService:
         except (KeyError, ValidationError):
             return False
 
-    def add(self, *, path_id: str, action: WatchActionInput, rank: int | None = None) -> WatchAction:
+    def add(
+        self, *, path_id: str, action: WatchActionInput, rank: int | None = None, dry_run: bool = False
+    ) -> WatchAction:
         """Insert one action into the chain. `rank=None` appends ; an
         explicit rank inserts there, shifting later actions up. Renumbers
         to keep the chain dense. Returns the created row. Raises
-        `ConcurrentChainError` if another chain mutation holds the path
-        lock."""
+        `ConcurrentChainError` if another chain mutation holds the path lock.
+        When `dry_run`, validate + build the would-be row in memory (at its
+        would-be rank) and return it WITHOUT a lock, save, or renumber -
+        nothing is persisted."""
         config = validate_config(action.kind, action.config)
+        if dry_run:
+            # Build the would-be row in the service (no lock/save) so a
+            # single-action preview reuses the watch_action_mutation serializer
+            # for redaction + summary. The whole-watch dry-run reaches the same
+            # serialization via watch_action_input_wire (serializer layer); both
+            # share watch_action_wire, so neither path duplicates the preview.
+            chain_len = self.count_for_path(path_id)
+            insert_at = chain_len if rank is None else max(0, min(rank, chain_len))
+            return WatchAction(
+                account_id=self.account_id,
+                path_id=path_id,
+                kind=action.kind,
+                config=config.model_dump(mode="json"),
+                rank=insert_at,
+            )
         with path_chain_lock(path_id) as acquired:
             if not acquired:
                 raise ConcurrentChainError(f"another chain edit is in progress on path {path_id}; retry")
@@ -228,32 +252,36 @@ class WatchActionService:
                 self._renumber(chain)
         return created
 
-    def set_config(self, action: WatchAction, /, *, spec: WatchActionInput) -> WatchAction:
-        """Replace one action's config in place (same rank, same row).
-                `action` is the existing row ; `spec` is the new desired state.
+    def set_config(self, action: WatchAction, /, *, spec: WatchActionInput, dry_run: bool = False) -> WatchAction:
+        """Replace one action's config in place (same rank, same row). `action` is
+        the existing row ; `spec` is the new desired state.
 
-                The new config is re-validated (shape + merge + policy) so the
-                persisted blob is normalized ; `kind` is the spec's top-level
-                discriminator and MAY change (a node can switch kind, e.g. swap one
-                filter for another). When the kind is UNCHANGED, the prior config
-                is fed to `merge_preserving` so edit-round-trip state (a redacted
-                secret the operator left masked) is carried forward ; on a kind
-                change there's no comparable prior, so the submitted config wins
-                wholesale.
+        The new config is re-validated (shape + merge + policy) so the persisted
+        blob is normalized ; `kind` is the spec's top-level discriminator and MAY
+        change (a node can switch kind, e.g. swap one filter for another). When the
+        kind is UNCHANGED, the prior config is fed to `merge_preserving` so
+        edit-round-trip state (a redacted secret the operator left masked) is
+        carried forward ; on a kind change there's no comparable prior, so the
+        submitted config wins wholesale.
 
-        t        No chain lock: rank is irrelevant here (a digest is allowed at any
-                position, head included), so there's no chain-state race to guard. The
-                row write + window cleanup share one transaction so an edit AWAY from
-                digest can't half-apply (config instant but window lingering = stranded
-                runs, since claim_due excludes a run while its action has a window). An
-                edit INTO digest just leaves any existing window alone; the trigger or
-                the advance opens one when the next item arrives."""
+        No chain lock: rank is irrelevant here (a digest is allowed at any position,
+        head included), so there's no chain-state race to guard. The row write +
+        window cleanup share one transaction so an edit AWAY from digest can't
+        half-apply (config instant but window lingering = stranded runs, since
+        claim_due excludes a run while its action has a window). An edit INTO digest
+        just leaves any existing window alone; the trigger or the advance opens one
+        when the next item arrives.
+
+        When `dry_run`, apply the validated + merged config in memory and return the
+        row WITHOUT saving or clearing windows - nothing is persisted."""
         if str(action.account_id) != self.account_id:
             raise ValueError(f"action account_id mismatch: {action.account_id!r} not in scope {self.account_id!r}")
         prior = load_config(action) if str(action.kind) == spec.kind else None
         merged = merge_config(spec.kind, spec.config, prior)
         action.kind = spec.kind
         action.config = merged.model_dump(mode="json")
+        if dry_run:  # validated + merged in memory; persist nothing, touch no window
+            return action
         is_digest = isinstance(merged, DeliveryConfigBase) and merged.is_digest()
         with transaction.atomic():
             action.save(update_fields=["kind", "config", "updated_at"])

@@ -16,16 +16,18 @@ from __future__ import annotations
 
 import json
 import sys
+from collections.abc import Callable
 from typing import Any
 
 import typer
 import yaml
 
-from openmagpie_schema.watch import WatchActionWire
+from openmagpie_schema.watch import WatchActionMutationResponse, WatchActionWire
 
 from ... import console
 from ...context import app_ctx
 from .._shared import (
+    _abort_unexpected,
     _check_format,
     _columns_option,
     _emit_columns_items,
@@ -85,13 +87,13 @@ def action_get(
     )
 
 
-def _print_action_detail(a: WatchActionWire) -> None:
+def _print_action_detail(a: WatchActionWire | WatchActionMutationResponse, *, title: str | None = None) -> None:
     fields: list[tuple[str, str]] = [
         ("kind", a.kind),
         ("rank", str(a.rank)),
         ("summary", a.summary.detail or console.EMPTY),
     ]
-    _print_detail(f"action {a.id}", fields)
+    _print_detail(title or f"action {a.id}", fields)
     console.log("\nconfig:")  # the server-redacted config blob, in full
     console.log(json.dumps(a.config, indent=2, sort_keys=True))
 
@@ -119,6 +121,8 @@ def action_add(
         None, "--file", "-f", help="YAML/JSON action ('-' for stdin). Omit to fill in a template in $EDITOR."
     ),
     rank: int | None = typer.Option(None, "--rank", "-r", help="Insert position (0-based). Appends when omitted."),
+    dry_run: bool = typer.Option(False, "--dry-run", "-n", help="Validate server-side and show the result, then stop."),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt. Required for piped input."),
 ) -> None:
     """Add one action to a watch's chain.
 
@@ -132,8 +136,15 @@ def action_add(
     else:
         text = _read_file_or_abort(file)
     kind, config = _parse_action_or_abort(text)
-    created = app_ctx().api.watch.add_action(watch_id, kind, config, rank=rank)
-    console.success(f"Added {created.kind} at rank {created.rank} ({created.id})")
+    api = app_ctx().api.watch
+    created = _run_action_mutation(
+        lambda dr: api.add_action(watch_id, kind, config, rank=rank, dry_run=dr),
+        is_edit=False,
+        dry_run=dry_run,
+        yes=yes,
+    )
+    if created is not None:
+        console.success(f"Added {created.kind} at rank {created.rank} ({created.id})")
 
 
 @action_app.command("edit")
@@ -143,6 +154,8 @@ def action_edit(
     file: str | None = typer.Option(
         None, "--file", "-f", help="YAML/JSON action ('-' for stdin). Omit to edit the current config in $EDITOR."
     ),
+    dry_run: bool = typer.Option(False, "--dry-run", "-n", help="Validate server-side and show the result, then stop."),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt. Required for piped input."),
 ) -> None:
     """Replace one action's config in place (same position in the chain).
 
@@ -159,8 +172,14 @@ def action_edit(
     else:
         text = _read_file_or_abort(file)
     kind, config = _parse_action_or_abort(text)
-    updated = api.edit_action(action_id, kind, config)
-    console.success(f"Updated action {updated.id} ({updated.kind}, rank {updated.rank})")
+    updated = _run_action_mutation(
+        lambda dr: api.edit_action(action_id, kind, config, dry_run=dr),
+        is_edit=True,
+        dry_run=dry_run,
+        yes=yes,
+    )
+    if updated is not None:
+        console.success(f"Updated action {updated.id} ({updated.kind}, rank {updated.rank})")
 
 
 @action_app.command("delete")
@@ -208,3 +227,42 @@ def _parse_action_or_abort(text: str) -> tuple[str, dict[str, Any]]:
         console.error("Action `config` must be a mapping.")
         raise typer.Exit(code=1)
     return kind, config
+
+
+def _run_action_mutation(
+    mutate: Callable[[bool], WatchActionMutationResponse], *, is_edit: bool, dry_run: bool, yes: bool
+) -> WatchActionMutationResponse | None:
+    """Shared dry-run preview -> confirm -> apply for `watch action add`/`edit`,
+    mirroring `_run_mutation` for whole-watch (`is_edit` plays the role its
+    `watch_id is not None` does). `mutate(dry_run)` calls the api (True for the
+    validate-only preview, False to apply). Returns the applied action, or None on
+    `--dry-run` (nothing applied). The interactive `[y/N]` confirm still gates a
+    real apply; `--yes` skips it (required when piped)."""
+    noun = "edit" if is_edit else "add"
+    preview = mutate(True)
+    # Server must honor dry_run (mirrors _run_mutation's guard): the preview must
+    # be flagged dry_run, and an ADD preview must not carry an id - an id there
+    # means a row persisted (an edit preview keeps the existing action's id).
+    if not preview.dry_run or (preview.id and not is_edit):
+        raise _abort_unexpected(
+            "asked for a dry run but the server reported a persisted action", preview.id, noun="action"
+        )
+    title = f"Would {noun} action {preview.id}:" if preview.id else f"Would {noun} this action:"
+    _print_action_detail(preview, title=title)
+    if dry_run:
+        console.warn("Dry run only. Nothing was changed.")
+        return None
+    if not yes:
+        if not sys.stdin.isatty():
+            console.warn(
+                f"Piped input: can't prompt for confirmation. Re-run with --yes to {noun}, "
+                f"--dry-run to validate only, or run the command without -f to use $EDITOR."
+            )
+            raise typer.Exit(code=1)
+        if not typer.confirm(f"{noun.capitalize()} this action?"):
+            console.warn("Aborted.")
+            raise typer.Exit(code=1)
+    result = mutate(False)
+    if result.dry_run or not result.id:  # the apply must have actually persisted
+        raise _abort_unexpected(f"{noun} did not confirm persistence", result.id, noun="action")
+    return result

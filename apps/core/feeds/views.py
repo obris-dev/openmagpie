@@ -20,7 +20,7 @@ from rest_framework import status
 from rest_framework.response import Response
 
 from accounts.api import AccountScopedAPIView
-from common.api_params import is_truthy, parse_limit
+from common.api_params import parse_limit, wants_dry_run
 from common.pydantic_errors import pydantic_errors_to_drf
 from openmagpie_schema.feed import FeedItemListResponse, FeedListResponse
 from telemetry import events as telemetry_events
@@ -58,7 +58,7 @@ class FeedListCreateView(FeedSvcMixin, AccountScopedAPIView):
         serializer.is_valid(raise_exception=True)
         d = serializer.validated_data
 
-        if is_truthy(request.query_params.get("dry_run")):
+        if wants_dry_run(request):
             preview = self.feed_svc.build(
                 user_id=str(request.user.id),
                 name=d["name"],
@@ -145,7 +145,7 @@ class FeedDetailView(FeedScopedAPIView):
         # Policy runs on the merged config inside build_update/update;
         # map PolicyError -> 400 (same shape create uses).
         try:
-            if is_truthy(request.query_params.get("dry_run")):
+            if wants_dry_run(request):
                 preview = self.feed_svc.build_update(self.feed, **edit_kwargs)
                 return Response(
                     feed_mutation(preview, dry_run=True).model_dump(mode="json"),

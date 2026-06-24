@@ -20,7 +20,7 @@ from rest_framework import status
 from rest_framework.response import Response
 
 from accounts.api import AccountScopedAPIView
-from common.api_params import is_truthy, parse_limit
+from common.api_params import parse_limit, wants_dry_run
 from common.pydantic_errors import pydantic_errors_to_drf
 from openmagpie_schema.watch import (
     WatchActionInput,
@@ -38,6 +38,8 @@ from .policy import PolicyError
 from .registry import KNOWN_KINDS
 from .serializers import (
     WatchCreateSerializer,
+    watch_action_input_wire,
+    watch_action_mutation,
     watch_action_wire,
     watch_mutation,
     watch_view,
@@ -69,11 +71,13 @@ class WatchListCreateView(WatchSvcMixin, AccountScopedAPIView):
         d = serializer.validated_data
         actions: list[WatchActionInput] = d["actions"]
 
-        if is_truthy(request.query_params.get("dry_run")):
+        if wants_dry_run(request):
             preview = self.watch_svc.build(name=d["name"], is_active=d["is_active"])
             body = watch_mutation(preview, feed_ids=d["feed_ids"], actions=[], dry_run=True).model_dump(mode="json")
             # Preview the chain from the validated inputs (no rows persisted).
-            body["actions"] = [_preview_action_wire(a, rank) for rank, a in enumerate(actions)]
+            body["actions"] = [
+                watch_action_input_wire(a, rank).model_dump(mode="json") for rank, a in enumerate(actions)
+            ]
             body.pop("id", None)
             return Response(body, status=status.HTTP_200_OK)
 
@@ -138,11 +142,13 @@ class WatchDetailView(WatchScopedAPIView):
         d = serializer.validated_data
         edit = {"name": d["name"], "is_active": d["is_active"], "feed_ids": d["feed_ids"], "actions": d["actions"]}
         try:
-            if is_truthy(request.query_params.get("dry_run")):
+            if wants_dry_run(request):
                 body = watch_mutation(self.watch, feed_ids=d["feed_ids"], actions=[], dry_run=True).model_dump(
                     mode="json"
                 )
-                body["actions"] = [_preview_action_wire(a, rank) for rank, a in enumerate(d["actions"])]
+                body["actions"] = [
+                    watch_action_input_wire(a, rank).model_dump(mode="json") for rank, a in enumerate(d["actions"])
+                ]
                 return Response(body, status=status.HTTP_200_OK)
             updated = self.watch_svc.update(self.watch, **edit)
             return Response(
@@ -201,11 +207,13 @@ class WatchActionsView(WatchScopedAPIView):
             return kind_err
         # A committed watch always has an initial path (set at create), so
         # this is the chain's path id directly ; no lazy-create.
+        dry_run = wants_dry_run(request)
         try:
             created = self.action_svc.add(
                 path_id=self.watch.initial_path_id,
                 action=WatchActionInput(kind=str(body["kind"]), config=config),
                 rank=rank,
+                dry_run=dry_run,
             )
         except PydanticValidationError as exc:
             return Response({"config": pydantic_errors_to_drf(exc)}, status=status.HTTP_400_BAD_REQUEST)
@@ -213,7 +221,8 @@ class WatchActionsView(WatchScopedAPIView):
             return Response({"config": [str(exc)]}, status=status.HTTP_400_BAD_REQUEST)
         except ConcurrentChainError as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
-        return Response(watch_action_wire(created).model_dump(mode="json"), status=status.HTTP_201_CREATED)
+        code = status.HTTP_200_OK if dry_run else status.HTTP_201_CREATED
+        return Response(watch_action_mutation(created, dry_run=dry_run).model_dump(mode="json"), status=code)
 
 
 class ActionDetailView(ActionScopedAPIView):
@@ -247,15 +256,18 @@ class ActionDetailView(ActionScopedAPIView):
         kind_err = _validate_kind(body.get("kind"))
         if kind_err is not None:
             return kind_err
+        dry_run = wants_dry_run(request)
         try:
             updated = self.action_svc.set_config(
-                self.action, spec=WatchActionInput(kind=str(body["kind"]), config=config)
+                self.action, spec=WatchActionInput(kind=str(body["kind"]), config=config), dry_run=dry_run
             )
         except PydanticValidationError as exc:
             return Response({"config": pydantic_errors_to_drf(exc)}, status=status.HTTP_400_BAD_REQUEST)
         except PolicyError as exc:
             return Response({"config": [str(exc)]}, status=status.HTTP_400_BAD_REQUEST)
-        return Response(watch_action_wire(updated).model_dump(mode="json"), status=status.HTTP_200_OK)
+        return Response(
+            watch_action_mutation(updated, dry_run=dry_run).model_dump(mode="json"), status=status.HTTP_200_OK
+        )
 
     def delete(self, request, action_id: str):
         try:
@@ -263,19 +275,3 @@ class ActionDetailView(ActionScopedAPIView):
         except ConcurrentChainError as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
         return Response(status=status.HTTP_204_NO_CONTENT)
-
-
-def _preview_action_wire(action: WatchActionInput, rank: int) -> dict:
-    """Render a not-yet-persisted action for a dry-run preview, from the
-    already-validated input (config is the normalized dump)."""
-    from .registry import parse_config
-
-    config = parse_config(action.kind, action.config)
-    return {
-        "id": "",
-        "kind": action.kind,
-        "rank": rank,
-        "config": config.redacted_dump(),
-        "summary": config.summary().model_dump(mode="json"),
-        "created_at": None,
-    }

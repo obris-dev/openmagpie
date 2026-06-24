@@ -25,6 +25,7 @@ from openmagpie_schema.watch import (
     WatchActionDeliveryView,
     WatchActionDeliveryWire,
     WatchActionInput,
+    WatchActionMutationResponse,
     WatchActionRunView,
     WatchActionRunWire,
     WatchActionWire,
@@ -118,7 +119,8 @@ def _action_summary(action: WatchAction) -> WatchActionConfigSummary:
     try:
         return load_config(action).summary()
     except (KeyError, PydanticValidationError, NotImplementedError, ValueError):
-        logger.exception("action %s config failed summary (kind=%s)", action.id, action.kind)
+        ref = "preview" if _is_unsaved(action) else action.id  # unsaved preview row has no real id to log
+        logger.exception("action %s config failed summary (kind=%s)", ref, action.kind)
         return _EMPTY_SUMMARY
 
 
@@ -129,19 +131,60 @@ def _action_redacted(action: WatchAction) -> dict[str, Any]:
     try:
         return load_config(action).redacted_dump()
     except (KeyError, PydanticValidationError, NotImplementedError, ValueError):
-        logger.exception("action %s config failed redaction (kind=%s)", action.id, action.kind)
+        ref = "preview" if _is_unsaved(action) else action.id  # unsaved preview row has no real id to log
+        logger.exception("action %s config failed redaction (kind=%s)", ref, action.kind)
         return {"error": "config_unreadable"}
 
 
+def _is_unsaved(action: WatchAction) -> bool:
+    """Django's flag for an in-memory row never written to the DB - used to give a
+    dry-run preview row an empty/None id. (`pk is None` won't do: BaseModel assigns
+    a ULID default at construction, so an unsaved row still has a pk.)"""
+    return action._state.adding
+
+
 def watch_action_wire(action: WatchAction) -> WatchActionWire:
-    """One action's wire shape (opaque redacted config + display summary)."""
+    """One action's wire shape (opaque redacted config + display summary). `id` is
+    empty for an UNSAVED row (a dry-run preview built in memory), real for a
+    persisted one - so previews and reads share this one serializer."""
     return WatchActionWire(
-        id=str(action.id),
+        id="" if _is_unsaved(action) else str(action.id),
         kind=str(action.kind),
         rank=action.rank,
         config=_action_redacted(action),
         summary=_action_summary(action),
         created_at=action.created_at,
+    )
+
+
+def watch_action_input_wire(action: WatchActionInput, rank: int) -> WatchActionWire:
+    """Wire shape for a not-yet-persisted action (a whole-watch dry-run preview).
+    Re-validates the config (shape + policy) so it redacts the SAME normalized
+    blob the single-action dry-run does - the two preview surfaces stay
+    consistent. Routes the unsaved row through `watch_action_wire`, so redaction +
+    summary + the empty id all come from ONE place; no duplicated preview
+    serialization in the view.
+
+    Caveat: validate-only, with no by-id merge - so a secret left masked (***) on
+    an EDIT previews as *** while the real apply restores the prior value via
+    merge_config. Display is identical (both redact to ***) and the persisted
+    result is correct; only the preview's literal value is the placeholder. The
+    single-action edit path (set_config) DOES merge, so it's exact there."""
+    config = validate_config(action.kind, action.config).model_dump(mode="json")
+    return watch_action_wire(WatchAction(kind=action.kind, config=config, rank=rank))
+
+
+def watch_action_mutation(action: WatchAction, *, dry_run: bool) -> WatchActionMutationResponse:
+    """One action's add/edit response (real or `?dry_run=true`). `id` reflects
+    PERSISTENCE, not the dry_run flag (mirrors `watch_mutation`, which keeps the
+    watch id on an update dry-run): a dry-run ADD builds an unsaved row, so there
+    is no id yet (None); a dry-run EDIT targets the existing row, whose id is
+    unchanged, so it's shown. Spreads `watch_action_wire` (so a new WatchActionWire
+    field can't drift out of this response), overriding only id + dry_run."""
+    return WatchActionMutationResponse(
+        **watch_action_wire(action).model_dump(exclude={"id"}),
+        id=None if _is_unsaved(action) else str(action.id),
+        dry_run=dry_run,
     )
 
 

@@ -128,6 +128,17 @@ class WatchMutationResponse(WatchWire):
     dry_run: bool
 
 
+class WatchActionMutationResponse(WatchActionWire):
+    """Single-action add/edit response (POST `/actions` + PUT `/actions/<id>`,
+    real and `?dry_run=true`). Mirrors WatchMutationResponse: `id` is absent on a
+    dry-run preview (the row isn't persisted) and `dry_run` is True for a
+    validation-only preview, so the CLI's confirm-preview can show the would-be
+    action without applying it."""
+
+    id: str | None = None
+    dry_run: bool
+
+
 class WatchInput(BaseModel):
     """The envelope the CLI constructs for a watch write (request side).
     CLI-owned, distinct from the server-emitted models. `feed_ids` is the

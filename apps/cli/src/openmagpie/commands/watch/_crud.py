@@ -122,7 +122,7 @@ def edit(
     else:
         body_text = _read_file_or_abort(file)
     body = _parse_yaml_or_abort(body_text, WatchInput)
-    _run_mutation(ac, body, watch_id=watch_id, dry_run=dry_run, yes=yes)
+    _run_mutation(ac, body, watch_id=watch_id, dry_run=dry_run, yes=yes, current_actions=detail.actions)
 
 
 @watch_app.command("delete")
@@ -210,7 +210,15 @@ def _mutate(ac: AppContext, envelope: WatchInput, *, dry_run: bool, watch_id: st
     return ac.api.watch.update(watch_id, body, dry_run=dry_run)
 
 
-def _run_mutation(ac: AppContext, body: WatchInput, *, watch_id: str | None, dry_run: bool, yes: bool) -> None:
+def _run_mutation(
+    ac: AppContext,
+    body: WatchInput,
+    *,
+    watch_id: str | None,
+    dry_run: bool,
+    yes: bool,
+    current_actions: list[WatchActionWire] | None = None,
+) -> None:
     is_edit = watch_id is not None
     noun = "update" if is_edit else "create"
 
@@ -220,6 +228,10 @@ def _run_mutation(ac: AppContext, body: WatchInput, *, watch_id: str | None, dry
             "asked for a dry run but the server reported a persisted watch", preview.id, noun="watch"
         )
     _print_watch(preview, f"Would {noun} this watch:")
+    if current_actions is not None:  # edit only: flag a by-id chain clobber under the preview
+        note = _action_recreate_note(current_actions, body.actions)
+        if note:
+            console.warn(note)
 
     if dry_run:
         console.warn("Dry run only. Nothing was changed.")
@@ -253,6 +265,29 @@ def _edit_seed(detail: WatchView) -> WatchInput:
         is_active=detail.is_active,
         feed_ids=detail.feed_ids,
         actions=[WatchActionInput(id=a.id, kind=a.kind, config=a.config) for a in detail.actions],
+    )
+
+
+def _action_recreate_note(
+    current_actions: list[WatchActionWire], submitted_actions: list[WatchActionInput]
+) -> str | None:
+    """`watch edit` reconciles the chain BY ID (server `replace_chain`): a
+    submitted action without an `id` is a brand-new row, and any current action
+    whose id isn't resubmitted is dropped, so its pending activity won't complete.
+    Warn when current actions would be dropped this way, listing each by `id` +
+    `kind` so the ids are a copy-paste lookup (no `watch action list`
+    round-trip). Advisory; the caller still confirms. Returns None when every
+    current action's id is carried back."""
+    resubmitted = {a.id for a in submitted_actions if a.id}
+    dropped = [a for a in current_actions if a.id not in resubmitted]
+    if not dropped:
+        return None
+    rows = "\n".join(f"  {a.id}  {a.kind}" for a in dropped)
+    return (
+        f"{len(dropped)} existing action(s) will be dropped and their pending activity won't complete:\n"
+        f"{rows}\n"
+        "If you didn't mean to drop them, add `id: <id>` to the actions you want to keep, "
+        "or use `magpie watch action edit <id>`."
     )
 
 

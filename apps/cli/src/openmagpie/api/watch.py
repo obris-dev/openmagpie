@@ -12,6 +12,8 @@ import builtins
 from typing import Any
 
 from openmagpie_schema.watch import (
+    WatchActionInput,
+    WatchActionMutationResponse,
     WatchActionWire,
     WatchInput,
     WatchListResponse,
@@ -24,6 +26,7 @@ from .. import routes
 from ..http import MagpieClient
 
 __all__ = [
+    "WatchActionMutationResponse",
     "WatchApi",
     "WatchInput",
     "WatchListResponse",
@@ -31,6 +34,16 @@ __all__ = [
     "WatchView",
     "WatchWire",
 ]
+
+
+def _action_body(kind: str, config: dict[str, Any]) -> dict[str, Any]:
+    """The single-action add/edit request body, built from the shared typed
+    `WatchActionInput` envelope rather than hand-rolled - one definition of the
+    `{kind, config}` wire shape. `id` is minted server-side; `rank` (add only) is
+    layered on by the caller."""
+    # Exclude id (server-minted, never sent) + rank (add re-layers it from the
+    # caller below; edit never positions) - so the dump is exactly {kind, config}.
+    return WatchActionInput(kind=kind, config=config).model_dump(mode="json", exclude={"id", "rank"})
 
 
 class WatchApi:
@@ -84,17 +97,21 @@ class WatchApi:
         return WatchActionWire.model_validate(raw)
 
     def add_action(
-        self, watch_id: str, kind: str, config: dict[str, Any], *, rank: int | None = None
-    ) -> WatchActionWire:
-        body: dict[str, Any] = {"kind": kind, "config": config}
+        self, watch_id: str, kind: str, config: dict[str, Any], *, rank: int | None = None, dry_run: bool = False
+    ) -> WatchActionMutationResponse:
+        body = _action_body(kind, config)
         if rank is not None:
             body["rank"] = rank
-        raw = self._http.post(routes.watches.actions(watch_id), json_body=body)
-        return WatchActionWire.model_validate(raw)
+        params = {"dry_run": "true"} if dry_run else None
+        raw = self._http.post(routes.watches.actions(watch_id), json_body=body, params=params)
+        return WatchActionMutationResponse.model_validate(raw)
 
-    def edit_action(self, action_id: str, kind: str, config: dict[str, Any]) -> WatchActionWire:
-        raw = self._http.put(routes.actions.detail(action_id), json_body={"kind": kind, "config": config})
-        return WatchActionWire.model_validate(raw)
+    def edit_action(
+        self, action_id: str, kind: str, config: dict[str, Any], *, dry_run: bool = False
+    ) -> WatchActionMutationResponse:
+        params = {"dry_run": "true"} if dry_run else None
+        raw = self._http.put(routes.actions.detail(action_id), json_body=_action_body(kind, config), params=params)
+        return WatchActionMutationResponse.model_validate(raw)
 
     def delete_action(self, action_id: str) -> None:
         self._http.delete(routes.actions.detail(action_id))
