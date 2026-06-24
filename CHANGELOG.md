@@ -5,6 +5,13 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.4](https://github.com/obris-dev/openmagpie/compare/v0.3.3...v0.3.4) (2026-06-24)
+
+
+### Bug Fixes
+
+* **watches:** the single-action endpoints (`POST /v1/watches/<id>/actions`, `PUT /v1/actions/<id>`) now accept `?dry_run=true` - validate and return the would-be action without persisting (mirroring the whole-watch create/edit dry-run), so a client can preview a single-action add or edit before applying. ([#133](https://github.com/obris-dev/openmagpie/issues/133)) ([0d4cd29](https://github.com/obris-dev/openmagpie/commit/0d4cd29b84648dbb7a5d97327ebb1e90241502f1))
+
 ## [0.3.3](https://github.com/obris-dev/openmagpie/compare/v0.3.2...v0.3.3) (2026-06-24)
 
 
