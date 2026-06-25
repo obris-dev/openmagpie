@@ -12,6 +12,7 @@ import logging
 from collections.abc import Iterable, Iterator
 from datetime import datetime, timedelta
 
+from django.db.models import Subquery
 from django.utils import timezone
 
 from common.db import ID_IN_CHUNK
@@ -188,6 +189,30 @@ class FeedItemService:
             id__gt=after_id,
             id__lte=through_id,
         ).count()
+
+    def occurred_window_id_subquery(self, *, since: datetime | None, until: datetime | None) -> Subquery:
+        """A `Subquery` of the account's FeedItem ids whose SOURCE time
+        (`occurred_at`) falls in `[since, until)` -- the run report's occurred-window
+        filter (`feed_item_id__in=<this>`; the run table has no FK to FeedItem, so
+        the join is by id). Returns a `Subquery`, NOT a QuerySet, so the ids stay
+        server-side (one SQL statement, nothing materialized in Python) and the
+        caller can't iterate or re-evaluate it. Account-scoped, NOT feed-scoped (the
+        report spans the action's items across feeds).
+
+        NULL `occurred_at` rows are excluded by the bound comparisons. `occurred_at`
+        is unindexed (see feed_item.py), so a wide window is a residual scan over
+        the account's items - retention-bounded, acceptable for the export."""
+        # At least one bound is required: both-None would match every item the
+        # account has (an unbounded subquery), which no caller wants -- harden the
+        # seam rather than trust each future caller to pre-check.
+        if since is None and until is None:
+            raise ValueError("occurred_window_id_subquery needs at least one of since / until")
+        qs = FeedItem.objects.filter(account_id=self.account_id)
+        if since is not None:
+            qs = qs.filter(occurred_at__gte=since)
+        if until is not None:
+            qs = qs.filter(occurred_at__lt=until)
+        return Subquery(qs.values("id"))
 
     def iter_items_in_window(
         self,

@@ -17,9 +17,9 @@ An open-source semantic listener. Tell it what to listen for; it picks out what 
 Three things stay pluggable across the codebase:
 - **Connectors** (Reddit, GitHub, GDocs, Slack, ...): yield typed `SourcePayload` subclasses from each source
 - **Engines** (any OpenAI-compatible `/v1` LLM: Ollama, vLLM, llama.cpp, LM Studio, OpenAI, ...; future keyword/other): BYO LLM that judges a `SourcePayload` for a semantic-filter action
-- **Action kinds** (semantic_filter, webhook, log, future keyword/Slack/email): the steps a Watch runs over each feed item (filter, then deliver)
+- **Action kinds** (semantic_filter, extract, webhook, log, future keyword/Slack/email): the steps a Watch runs over each feed item -- three families: FILTER (gate the chain), EXTRACT (hydrate structured fields onto the run), DELIVER
 
-The product is **only** a listener: watches, judges, learns, notifies. It does NOT auto-reply, post back to sources, run workflows, or generate reports. Scope test: if a feature isn't listening / learning / notifying, it's out.
+The product is **only** a listener: watches, judges, learns, notifies. It does NOT auto-reply, post back to sources, run workflows, or generate new reports/analysis as a product surface. Exporting your OWN activity is in scope though -- e.g. `magpie activity export` dumping an action's runs (incl. extracted fields) to CSV is observability over data you already produced, not report generation. Scope test: if a feature isn't listening / learning / notifying (or surfacing what it already did), it's out.
 
 ## Repo layout
 

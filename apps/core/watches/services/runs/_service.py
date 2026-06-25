@@ -13,6 +13,7 @@ from typing import NamedTuple
 from django.db.models import Count
 from django.utils import timezone
 
+from feeds.services import FeedItemService
 from openmagpie_schema.watch_enums import WatchActionRunState
 from watches.models import WatchActionRun
 
@@ -247,17 +248,46 @@ class WatchActionRunService(DigestBatchMixin):
         after: str | None = None,
         limit: int = 50,
         state: str | None = None,
+        completed_since: datetime | None = None,
+        completed_until: datetime | None = None,
+        occurred_since: datetime | None = None,
+        occurred_until: datetime | None = None,
     ) -> builtins.list[WatchActionRun]:
         """This account's runs for one action, newest-first (ULID pk).
         Cursor-paginated for the audit CLI ; `state` filters by run state.
         Pass `watch_id` to scope the query to that watch (the runs table
         denormalizes it), so cross-watch isolation holds in the query, not
-        only the caller's guard."""
+        only the caller's guard.
+
+        Two independent, optional time windows (each a `[since, until)` bound),
+        for the report export:
+          - `completed_*` filters the run's `completed_at`. The query orders by
+            `-id` (the cursor), so it rides the `(account_id, action_id, id)` index
+            and `completed_at` is a residual filter on that bounded scope.
+          - `occurred_*` filters the FEED ITEM's source time
+            (`FeedItem.occurred_at`) via a `feed_item_id` subquery. NOTE
+            `occurred_at` is unindexed + nullable: items lacking it are excluded
+            from an occurred-window, and a wide window does a residual scan over
+            the account's items (bounded by retention)."""
         qs = WatchActionRun.objects.filter(account_id=self.account_id, action_id=action_id)
         if watch_id:
             qs = qs.filter(watch_id=watch_id)
         if state:
             qs = qs.filter(state=state)
+        if completed_since is not None:
+            qs = qs.filter(completed_at__gte=completed_since)
+        if completed_until is not None:
+            qs = qs.filter(completed_at__lt=completed_until)
+        if occurred_since is not None or occurred_until is not None:
+            # feed_item_id is a plain CharField (no ORM relation), so join by a
+            # subquery of matching item ids; the windowed-item query is owned by
+            # FeedItemService (cross-app reads go through the owning service, which
+            # hands back a ready Subquery, not a QuerySet). NULL occurred_at fails
+            # the bound -> dropped.
+            item_id_subquery = FeedItemService(account_id=self.account_id).occurred_window_id_subquery(
+                since=occurred_since, until=occurred_until
+            )
+            qs = qs.filter(feed_item_id__in=item_id_subquery)
         if after:
             qs = qs.filter(id__lt=after)
         return builtins.list(qs.order_by("-id")[:limit])

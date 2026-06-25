@@ -23,6 +23,7 @@ from openai import (
 from engine import checks, registry
 from engine.engines import EngineRequestRejected, OpenAICompatEngine
 from engine.scripts import probe
+from openmagpie_schema.watch_actions import ExtractField
 from sources.payloads import SourcePayload
 
 ENGINE_MOD = "engine.engines.openai_compat.engine"
@@ -152,6 +153,70 @@ class JudgeErrorBucketTests(SimpleTestCase):
     def test_connection_error_is_transient(self) -> None:
         with self.assertRaises(APIConnectionError):
             self._judge_raising(_conn_error())
+
+
+class ExtractTests(SimpleTestCase):
+    """The extract() hydration call: a dynamic strict schema built from the
+    declared fields, and a reply coerced to exactly those keys (string-valued)."""
+
+    FIELDS = [ExtractField(name="person", description="who"), ExtractField(name="org", description="where")]
+
+    def test_parses_declared_fields(self) -> None:
+        with _patch_client(_client(content='{"person": "Pat", "org": "Acme"}')):
+            out = _engine().extract(PAYLOAD, fields=self.FIELDS)
+        self.assertEqual(out.extracted, {"person": "Pat", "org": "Acme"})
+        self.assertEqual(out.model, "m")  # default_model when no override
+
+    def test_missing_field_coerced_to_empty(self) -> None:
+        with _patch_client(_client(content='{"person": "Pat"}')):
+            out = _engine().extract(PAYLOAD, fields=self.FIELDS)
+        self.assertEqual(out.extracted, {"person": "Pat", "org": ""})
+
+    def test_extra_keys_dropped_and_values_stringified(self) -> None:
+        with _patch_client(_client(content='{"person": "Pat", "org": 5, "extra": "x"}')):
+            out = _engine().extract(PAYLOAD, fields=self.FIELDS)
+        self.assertEqual(out.extracted, {"person": "Pat", "org": "5"})  # only declared keys, all strings
+
+    def test_non_string_scalars_serialized_as_json(self) -> None:
+        # A non-strict backend returning a bool/number -> JSON repr ("true"/"5"),
+        # not Python repr ("True"); consistent with the nested-dict/list branch.
+        with _patch_client(_client(content='{"person": true, "org": 5}')):
+            out = _engine().extract(PAYLOAD, fields=self.FIELDS)
+        self.assertEqual(out.extracted, {"person": "true", "org": "5"})
+
+    def test_non_object_reply_yields_all_empty(self) -> None:
+        with _patch_client(_client(content='["nope"]')):
+            out = _engine().extract(PAYLOAD, fields=self.FIELDS)
+        self.assertEqual(out.extracted, {"person": "", "org": ""})
+
+    def test_malformed_json_is_transient_not_permanent(self) -> None:
+        # No choices -> empty content -> json.loads raises (recoverable FAILED),
+        # NOT a permanent EngineRequestRejected (mirrors judge's backstop).
+        with _patch_client(_client(content=None)), self.assertRaises(Exception) as ctx:
+            _engine().extract(PAYLOAD, fields=self.FIELDS)
+        self.assertNotIsInstance(ctx.exception, EngineRequestRejected)
+
+    def test_builds_strict_schema_from_fields(self) -> None:
+        c = _client(content='{"person": "p", "org": "o"}')
+        with _patch_client(c):
+            _engine().extract(PAYLOAD, fields=self.FIELDS)
+        rf = c.chat.completions.create.call_args.kwargs["response_format"]
+        self.assertEqual(rf["json_schema"]["name"], "extraction")
+        self.assertTrue(rf["json_schema"]["strict"])
+        schema = rf["json_schema"]["schema"]
+        self.assertEqual(set(schema["properties"]), {"person", "org"})  # one property per declared field
+        self.assertEqual(set(schema["required"]), {"person", "org"})  # all required (strict mode)
+        self.assertFalse(schema["additionalProperties"])  # closed object
+
+    def test_per_call_model_override_wins(self) -> None:
+        with _patch_client(_client(content='{"person": "p", "org": "o"}')):
+            out = _engine().extract(PAYLOAD, fields=self.FIELDS, model="big")
+        self.assertEqual(out.model, "big")
+
+    def test_no_model_anywhere_is_permanent(self) -> None:
+        eng = OpenAICompatEngine(base_url="http://llm.test/v1", default_model="")
+        with self.assertRaises(EngineRequestRejected):
+            eng.extract(PAYLOAD, fields=self.FIELDS)
 
 
 class StatusTests(SimpleTestCase):

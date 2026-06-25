@@ -21,13 +21,14 @@ from .options import (
     _print_columns_option,
     _transpose_option,
 )
-from .render import _emit_columns_items, _emit_columns_paginated
+from .render import _emit_columns_items, _emit_columns_paginated, _emit_columns_stream
 
 __all__ = [
     "_Col",
     "_columns_option",
     "_emit_columns_items",
     "_emit_columns_paginated",
+    "_emit_columns_stream",
     "_jsonl_rows_option",
     "_list_output_option",
     "_print_columns_option",

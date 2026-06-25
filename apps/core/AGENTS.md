@@ -31,8 +31,9 @@ watches/
     deliveries.py         WatchActionDeliveryService (record / list) for the HTTP-call audit
   actions/                EXECUTION registry: protocol.py (ONE Action interface: run(items, context) -> ActionResult
                           for every kind, uniform dispatch no branching ; OutboundActionResult adds the `outbound`
-                          OutboundCall record), registry.py (kind -> impl), semantic_filter.py / webhook.py / log.py,
-                          _config.py (load_typed). Webhook emits one self-describing payload (watch + window +
+                          OutboundCall record), registry.py (kind -> impl), the per-kind impls (semantic_filter.py /
+                          extract.py / webhook.py / log.py) + shared mixins (_engine_action.py prepare, _fetch.py /
+                          _external.py), _config.py (load_typed). Webhook emits one self-describing payload (watch + window +
                           per-item source), supports POST | PUT | PATCH, and returns an OutboundActionResult
                           so the operations layer logs a WatchActionDelivery per call.
   operations/             one-shot orchestrators: trigger.py, drain.py, digest_flush.py, advance.py (enqueue_next),

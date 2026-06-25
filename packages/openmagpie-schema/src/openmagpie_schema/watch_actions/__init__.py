@@ -14,18 +14,27 @@ WatchAction.kind column + the write envelope's `kind`), and the server's
 the persisted `config` is the PURE kind-specific shape, no discriminator
 nested inside it. Mirrors how `feeds` keeps `Feed.kind` off `Feed.data`.
 
-A package, one module per kind (mirrors the core-side `watches/actions/`):
-`base` (shared base + summary), `_secrets` (redaction helpers),
-`semantic_filter` (FILTER family), `webhook` + `log` (DELIVERY family).
-Adding / removing a kind is a pure-Python change (no `choices=` on the
-column, no migration) ; import the public names from here, not the
-submodules.
+A package, one module per concern (mirrors the core-side `watches/actions/`); the
+imports below are the authoritative module list. Adding / removing a kind is a
+pure-Python change (no `choices=` on the column, no migration) ; import the public
+names from here, not the submodules.
 """
 
 from ._delivery import DeliveryConfigBase
+from ._engine import ENRICHMENT_STATUS_KEY, EngineActionConfigBase, EngineSpec, ExternalContentStatus
 from .base import WatchActionConfigBase, WatchActionConfigSummary
+from .extract import (
+    EXTRACT_FIELD_NAME_KEY,
+    EXTRACT_FIELDS_KEY,
+    EXTRACT_STATUS_KEY,
+    EXTRACTED_KEY,
+    ExtractConfig,
+    ExtractField,
+    ExtractResult,
+    ExtractStatus,
+)
 from .log import LogConfig, LogResult
-from .semantic_filter import EngineSpec, ExternalContentStatus, SemanticFilterConfig, SemanticFilterResult
+from .semantic_filter import SemanticFilterConfig, SemanticFilterResult
 from .webhook import (
     WebhookConfig,
     WebhookItem,
@@ -37,9 +46,19 @@ from .webhook import (
 )
 
 __all__ = [
+    "ENRICHMENT_STATUS_KEY",
+    "EXTRACTED_KEY",
+    "EXTRACT_FIELDS_KEY",
+    "EXTRACT_FIELD_NAME_KEY",
+    "EXTRACT_STATUS_KEY",
     "DeliveryConfigBase",
+    "EngineActionConfigBase",
     "EngineSpec",
     "ExternalContentStatus",
+    "ExtractConfig",
+    "ExtractField",
+    "ExtractResult",
+    "ExtractStatus",
     "LogConfig",
     "LogResult",
     "SemanticFilterConfig",

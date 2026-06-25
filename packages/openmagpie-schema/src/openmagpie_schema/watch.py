@@ -47,7 +47,7 @@ class WatchActionWire(BaseModel):
     kind: str
     rank: int
     config: ConfigBlob = Field(default_factory=dict)
-    summary: WatchActionConfigSummary = WatchActionConfigSummary()
+    summary: WatchActionConfigSummary = Field(default_factory=WatchActionConfigSummary)
     created_at: datetime | None = None
 
 
@@ -165,9 +165,10 @@ class RunFeedItem(BaseModel):
     projection: a deliberately smaller view of `FeedItem` for the runs response's
     side tables, not the full `FeedItemWire`. `RunFeed` is the same idea for Feed.
 
-    `title` / `url` come from the connector payload (`FeedItem.data`, a
-    SourcePayload dump where both fields live on the base). `source_label` is the
-    operator-visible source string. `feed_id` keys into the response's `feeds`
+    `title` / `url` / `external_url` come from the connector payload
+    (`FeedItem.data`, a SourcePayload dump where all three live on the base ;
+    `external_url` is the off-site link, empty when there's none). `source_label`
+    is the operator-visible source string. `feed_id` keys into the response's `feeds`
     map and is REQUIRED (the structural join key; the display fields default to
     empty, the join key never does). NOT embedded on each run row: returned once
     per item in the response's `feed_items` map (items are ~1:1 with runs, but the
@@ -176,7 +177,12 @@ class RunFeedItem(BaseModel):
     feed_id: str
     title: str = ""
     url: str = ""
+    external_url: str = ""
     source_label: str = ""
+    # The item's SOURCE time (the `occurred_*` window filters on it), so a row can be
+    # sorted / verified on the axis it was filtered by. A FeedItem COLUMN (not from
+    # `data`); nullable, like the column.
+    occurred_at: datetime | None = None
 
 
 class RunFeed(BaseModel):
@@ -217,7 +223,7 @@ class WatchActionRunSummary(BaseModel):
     action doing?" without scrolling the log.
 
     `evaluated` is the per-terminal-state breakdown of runs JUDGED within
-    [since, until) — windowed on completion (evaluation) time, not enqueue
+    [since, until) -- windowed on completion (evaluation) time, not enqueue
     time. `pending` / `running` / `retrying` are the CURRENT live backlog,
     NOT time-bound (those runs have no completion time yet), surfaced so the
     queue stays visible. `window` is the requested preset ; `since` / `until`
@@ -231,8 +237,8 @@ class WatchActionRunSummary(BaseModel):
     window: WatchActivityWindow
     since: datetime
     until: datetime | None = None
-    # Keyed by the run-state enum (identical on the wire — StrEnum serializes
-    # to its value — but typed for the CLI, closing the "state magic strings"
+    # Keyed by the run-state enum (identical on the wire -- StrEnum serializes
+    # to its value -- but typed for the CLI, closing the "state magic strings"
     # door). Backlog states never appear here (they have no completion time).
     # An `evaluated[failed]` count is the EXHAUSTED (terminal) failures only.
     evaluated: dict[WatchActionRunState, int] = Field(default_factory=dict)
@@ -263,7 +269,7 @@ class WatchActionRunListResponse(BaseModel):
     # many runs -> few feeds; a missing key renders by id.
     feed_items: dict[str, RunFeedItem] = Field(default_factory=dict)
     feeds: dict[str, RunFeed] = Field(default_factory=dict)
-    # None means "this is a paged response" (no summary computed) — NOT "no
+    # None means "this is a paged response" (no summary computed) -- NOT "no
     # activity". The first page always carries a summary, all-zero if idle.
     summary: WatchActionRunSummary | None = None
 

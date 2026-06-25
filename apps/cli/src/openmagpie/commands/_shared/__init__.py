@@ -10,6 +10,8 @@ keeps it internal to the commands package, not a public surface.
   output    - detail tables + the table/NDJSON/`-o` emit helpers (read contract)
   choices   - client-side StrEnum filter validation
   authoring - `--format` + documented-template + dry-run-contract plumbing
+  timeflags - the export no-window default + client-side validation of the
+              `--*-since`/`--*-until` flags (server resolves; see run_windows)
 """
 
 from .authoring import (
@@ -25,6 +27,7 @@ from .columns import (
     _columns_option,
     _emit_columns_items,
     _emit_columns_paginated,
+    _emit_columns_stream,
     _jsonl_rows_option,
     _list_output_option,
     _print_columns_option,
@@ -41,18 +44,22 @@ from .output import (
     _print_detail,
     _print_next_page,
 )
+from .timeflags import _DEFAULT_WINDOW, _build_windows
 
 __all__ = [
     "FORMAT_CHOICES",
+    "_DEFAULT_WINDOW",
     "_Col",
     "_Page",
     "_abort_unexpected",
     "_as_enum",
+    "_build_windows",
     "_check_choice",
     "_check_format",
     "_columns_option",
     "_emit_columns_items",
     "_emit_columns_paginated",
+    "_emit_columns_stream",
     "_emit_detail",
     "_emit_doc",
     "_emit_list",

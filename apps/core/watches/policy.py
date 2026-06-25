@@ -6,8 +6,8 @@ the write validation seam (serializer -> 400 ; service). Idempotent; pure
 predicates over the already-shape-valid config.
 
 Guards today:
-  - a semantic_filter's `engine.kind`, when pinned, must be a registered
-    engine (else the run 500s mid-poll instead of failing at create).
+  - a semantic_filter's or extract's `engine.kind`, when pinned, must be a
+    registered engine (else the run 500s mid-poll instead of failing at create).
 """
 
 from django.conf import settings
@@ -16,7 +16,7 @@ from common.ssrf import destination_block_reason
 from engine import registry as engine_registry
 from openmagpie_schema.watch_actions import (
     DeliveryConfigBase,
-    SemanticFilterConfig,
+    EngineActionConfigBase,
     WatchActionConfigBase,
     WebhookConfig,
 )
@@ -31,7 +31,7 @@ def enforce_action_policy(config: WatchActionConfigBase) -> WatchActionConfigBas
     """Apply every server policy guard on the action config; return it or
     raise `PolicyError`. Idempotent. Dispatches per kind ; kinds with no
     settings-coupled policy pass straight through."""
-    if isinstance(config, SemanticFilterConfig):
+    if isinstance(config, EngineActionConfigBase):  # the LLM-backed kinds (filter, extract, + any future)
         _enforce_engine_registered(config)
     if isinstance(config, DeliveryConfigBase):
         _enforce_digest_interval(config)
@@ -68,11 +68,12 @@ def _enforce_webhook_url_safety(config: WebhookConfig) -> None:
         raise PolicyError(f"webhook url rejected: {reason}")
 
 
-def _enforce_engine_registered(config: SemanticFilterConfig) -> None:
-    """A pinned `engine.kind` must be registered in this deployment.
+def _enforce_engine_registered(config: EngineActionConfigBase) -> None:
+    """A pinned `engine.kind` must be registered in this deployment (every
+    engine-backed kind carries an `engine` via EngineActionConfigBase).
 
-    Empty kind means "use the server default" (resolved at judge time
-    by the registry), so only a non-empty pin is checked here. Rejecting
+    Empty kind means "use the server default" (resolved at run time by the
+    registry), so only a non-empty pin is checked here. Rejecting
     at the write boundary means the operator sees a clean 400 naming the
     bad kind + the available set, instead of every judge cycle 500ing on
     an unknown engine."""

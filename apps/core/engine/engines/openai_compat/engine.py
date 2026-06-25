@@ -19,13 +19,14 @@ promise, not a contract):
      prompt, and `JudgmentJSON.model_validate_json` validates the reply whether or
      not the backend honored `response_format`. A backend that silently ignores it
      still works; one that rejects it surfaces a clear `EngineRequestRejected`.
-  3. Structured output goes through the overridable `_apply_structured_output`
+  3. Structured output goes through the overridable `_apply_json_schema`
      hook, so a backend that ever needs a different MECHANISM (e.g. vLLM `guided_*`
      via `extra_body`) is a one-method override - not a rewrite.
 """
 
+import json
 import time
-from typing import Any
+from typing import Any, cast
 
 from openai import (
     AuthenticationError,
@@ -38,20 +39,33 @@ from openai import (
 )
 
 from openmagpie_schema.engine import EngineStatus
+from openmagpie_schema.watch_actions import ExtractField
 from sources.payloads import SourcePayload
 
-from ..base import EngineRequestRejected, JudgmentJSON, JudgmentResult
+from ..base import EngineRequestRejected, ExtractionResult, JudgmentJSON, JudgmentResult
 from .prompts import (
     CONTENT_TRUNCATE,
+    EXTRACT_INSTRUCTIONS_TEMPLATE,
+    EXTRACT_SYSTEM_PROMPT,
+    EXTRACT_USER_TEMPLATE,
     SYSTEM_PROMPT,
     USER_PROMPT_TEMPLATE,
+    render_extract_fields,
     render_linked_article,
 )
+from .request import ChatMessage, ChatRequest
+from .schemas import extraction_schema, judgment_schema
 
 # Reachability/model-list probe timeout (s); the chat call gets a longer one
 # since a local model can be slow to judge.
 _PROBE_TIMEOUT = 5.0
 _CHAT_TIMEOUT = 120.0
+
+# Names for the structured-output `json_schema` blocks (the OpenAI `json_schema.name`
+# label), one per output path. Free-form, but named here so the two call sites don't
+# carry bare literals.
+_JUDGMENT_SCHEMA_NAME = "judgment"
+_EXTRACTION_SCHEMA_NAME = "extraction"
 
 
 class OpenAICompatEngine:
@@ -84,20 +98,72 @@ class OpenAICompatEngine:
             )
         return self._openai
 
-    def _apply_structured_output(self, params: dict[str, Any]) -> None:
-        """Force the JSON shape via the standard OpenAI `response_format`
+    def _apply_json_schema(self, params: dict[str, Any], *, name: str, schema: dict[str, Any]) -> None:
+        """Force a JSON shape via the standard OpenAI `response_format`
         (json_schema, strict) - the way every current mainstream backend accepts.
         THE override point: a backend that ever needs a different mechanism (native
-        grammar via `extra_body`) overrides this whole method."""
-        # Strict structured outputs need additionalProperties:false + all fields
-        # required; JudgmentJSON's score+reason are already required, and we add the
-        # closed-object constraint here (kept off the parser model so the inbound
-        # parse stays lenient - the validation backstop).
-        schema = {**JudgmentJSON.model_json_schema(), "additionalProperties": False}
+        grammar via `extra_body`) overrides this whole method. Strict structured
+        outputs need additionalProperties:false + all fields required; callers pass
+        a schema already satisfying that."""
         params["response_format"] = {
             "type": "json_schema",
-            "json_schema": {"name": "judgment", "schema": schema, "strict": True},
+            "json_schema": {"name": name, "schema": schema, "strict": True},
         }
+
+    def _resolve_model(self, model: str | None) -> str:
+        """The per-call model, or the instance default. No model anywhere
+        (ENGINE_MODEL unset + no per-action pin) is a permanent config defect ->
+        EngineRequestRejected (ERRORED), not a model="" request the backend 4xx's on."""
+        resolved_model = model or self.default_model
+        if not resolved_model:
+            raise EngineRequestRejected(
+                "no model configured: set ENGINE_MODEL (or the action's engine.model). "
+                "List your LLM's models with: python -m engine.scripts.probe <ENGINE_BASE_URL>"
+            )
+        return resolved_model
+
+    def _complete(self, params: dict[str, Any]) -> tuple[str, int]:
+        """Run one chat completion and return (reply_text, elapsed_ms). Maps
+        permanent 4xx config defects to EngineRequestRejected (ERRORED, not
+        retried); transient errors (RateLimit/InternalServer/APITimeout/
+        APIConnection and any other OpenAIError) propagate -> the drain's
+        recoverable FAILED. A loosely-compatible backend may omit choices / the
+        message / its content; each missing piece becomes an empty string so the
+        caller's parse fails into a transient FAILED, not an AttributeError."""
+        started = time.perf_counter()
+        try:
+            completion = self._client().chat.completions.create(**params)
+        except (AuthenticationError, PermissionDeniedError) as exc:
+            raise EngineRequestRejected(
+                f"the LLM at {self.base_url} rejected auth ({exc.status_code}); check ENGINE_API_KEY"
+            ) from exc
+        except NotFoundError as exc:
+            raise EngineRequestRejected(
+                f"the LLM at {self.base_url} has no such endpoint/model ({exc.status_code}); "
+                f"check ENGINE_BASE_URL and ENGINE_MODEL"
+            ) from exc
+        except (BadRequestError, UnprocessableEntityError) as exc:
+            raise EngineRequestRejected(
+                f"the LLM at {self.base_url} rejected the request as malformed ({exc.status_code}); "
+                f"it may not support OpenAI structured outputs (json_schema) - check ENGINE_BASE_URL/ENGINE_MODEL"
+            ) from exc
+        elapsed_ms = int((time.perf_counter() - started) * 1000)
+        choice = completion.choices[0] if completion.choices else None
+        message = choice.message if choice else None
+        content = (message.content if message else None) or ""
+        return content, elapsed_ms
+
+    def _base_params(self, *, model: str, system_prompt: str, user_prompt: str) -> dict[str, Any]:
+        """The typed base chat request (model, greedy temperature, system+user
+        messages) dumped to the kwargs dict the client splats. Callers layer the
+        structured-output schema on via `_apply_json_schema`."""
+        return ChatRequest(
+            model=model,
+            messages=[
+                ChatMessage(role="system", content=system_prompt),
+                ChatMessage(role="user", content=user_prompt),
+            ],
+        ).as_params()
 
     def _chat_params(
         self,
@@ -118,17 +184,41 @@ class OpenAICompatEngine:
             content=payload.content[:CONTENT_TRUNCATE],
             external_section=parts.user_section,
         )
-        params = {
-            "model": model,
-            # temperature=0 -> greedy decoding: same payload + prompt -> same score
-            # across runs, so the prompt is what's under test, not LLM noise.
-            "temperature": 0,
-            "messages": [
-                {"role": "system", "content": SYSTEM_PROMPT.format(article_rule=parts.system_rule)},
-                {"role": "user", "content": user_prompt},
-            ],
-        }
-        self._apply_structured_output(params)
+        params = self._base_params(
+            model=model,
+            system_prompt=SYSTEM_PROMPT.format(article_rule=parts.system_rule),
+            user_prompt=user_prompt,
+        )
+        self._apply_json_schema(params, name=_JUDGMENT_SCHEMA_NAME, schema=judgment_schema())
+        return params
+
+    def _extract_params(
+        self,
+        *,
+        model: str,
+        fields: list[ExtractField],
+        instructions: str,
+        payload: SourcePayload,
+        external_content: str | None = None,
+    ) -> dict[str, Any]:
+        parts = render_linked_article(external_content or "")
+        # Free-form steering is optional; empty leaves the user prompt starting at
+        # the item. instructions/content are .format ARGS (inserted literally), so
+        # any braces inside them stay inert.
+        instructions_section = (
+            EXTRACT_INSTRUCTIONS_TEMPLATE.format(instructions=instructions) if instructions.strip() else ""
+        )
+        user_prompt = EXTRACT_USER_TEMPLATE.format(
+            instructions_section=instructions_section,
+            source=payload.source,
+            title=payload.title,
+            content=payload.content[:CONTENT_TRUNCATE],
+            external_section=parts.user_section,
+        )
+        field_lines = render_extract_fields([(f.name, f.description) for f in fields])
+        system_prompt = EXTRACT_SYSTEM_PROMPT.format(article_rule=parts.system_rule, field_lines=field_lines)
+        params = self._base_params(model=model, system_prompt=system_prompt, user_prompt=user_prompt)
+        self._apply_json_schema(params, name=_EXTRACTION_SCHEMA_NAME, schema=extraction_schema(fields))
         return params
 
     def judge(
@@ -139,58 +229,76 @@ class OpenAICompatEngine:
         model: str | None = None,
         external_content: str | None = None,
     ) -> JudgmentResult:
-        # Per-call model override; None means "use this instance's default"
-        # (settings.ENGINE_MODEL from env).
-        use_model = model or self.default_model
-        # No model anywhere (ENGINE_MODEL unset + no per-action pin) is a permanent
-        # config defect -> ERRORED, not a model="" request the backend would 4xx on.
-        if not use_model:
-            raise EngineRequestRejected(
-                "no model configured: set ENGINE_MODEL (or the action's engine.model). "
-                "List your LLM's models with: python -m engine.scripts.probe <ENGINE_BASE_URL>"
-            )
+        resolved_model = self._resolve_model(model)
         params = self._chat_params(
-            model=use_model, instructions=instructions, payload=payload, external_content=external_content
+            model=resolved_model, instructions=instructions, payload=payload, external_content=external_content
         )
-        started = time.perf_counter()
-        # Permanent 4xx config defects -> EngineRequestRejected (ERRORED, not
-        # retried). Transient errors (RateLimitError/InternalServerError/
-        # APITimeout/APIConnection and any other OpenAIError) propagate -> the
-        # drain's recoverable FAILED.
-        try:
-            completion = self._client().chat.completions.create(**params)
-        except (AuthenticationError, PermissionDeniedError) as exc:
-            raise EngineRequestRejected(
-                f"the LLM at {self.base_url} rejected auth ({exc.status_code}); check ENGINE_API_KEY"
-            ) from exc
-        except NotFoundError as exc:
-            raise EngineRequestRejected(
-                f"the LLM at {self.base_url} has no such endpoint/model ({exc.status_code}); "
-                f"check ENGINE_BASE_URL and ENGINE_MODEL"
-            ) from exc
-        except (BadRequestError, UnprocessableEntityError) as exc:
-            raise EngineRequestRejected(
-                f"the LLM at {self.base_url} rejected the request as malformed ({exc.status_code}); "
-                f"it may not support OpenAI structured outputs (json_schema) - check ENGINE_BASE_URL/ENGINE_MODEL"
-            ) from exc
-        elapsed_ms = int((time.perf_counter() - started) * 1000)
-
-        # A loosely-compatible backend may omit choices, the message, or its
-        # content; handle each explicitly so a missing field is an empty string
-        # (-> JudgmentJSON validation fails -> recoverable transient FAILED), not
-        # an AttributeError that only lands in the right bucket by luck.
-        choice = completion.choices[0] if completion.choices else None
-        message = choice.message if choice else None
-        content = (message.content if message else None) or ""
+        content, elapsed_ms = self._complete(params)
+        # Missing/short field -> JudgmentJSON validation raises -> recoverable
+        # transient FAILED (the lenient-parse backstop for backends that ignore
+        # response_format).
         parsed = JudgmentJSON.model_validate_json(content)
-
         return JudgmentResult(
             score=parsed.score,
             reason=parsed.reason,
-            model=use_model,
+            model=resolved_model,
             latency_ms=elapsed_ms,
             raw_response=content,
         )
+
+    def extract(
+        self,
+        payload: SourcePayload,
+        *,
+        fields: list[ExtractField],
+        instructions: str = "",
+        model: str | None = None,
+        external_content: str | None = None,
+    ) -> ExtractionResult:
+        resolved_model = self._resolve_model(model)
+        params = self._extract_params(
+            model=resolved_model,
+            fields=fields,
+            instructions=instructions,
+            payload=payload,
+            external_content=external_content,
+        )
+        content, elapsed_ms = self._complete(params)
+        # Malformed / non-JSON reply -> json.loads raises -> recoverable transient
+        # FAILED (mirrors judge's validation backstop for backends that ignore the
+        # json_schema). A valid-JSON-but-wrong-shape reply is coerced below.
+        raw = json.loads(content)
+        return ExtractionResult(
+            extracted=self._coerce_extracted(raw, fields),
+            model=resolved_model,
+            latency_ms=elapsed_ms,
+            raw_response=content,
+        )
+
+    @staticmethod
+    def _coerce_extracted(raw: object, fields: list[ExtractField]) -> dict[str, str]:
+        """Reduce a parsed reply to exactly the declared keys, string-valued. A
+        non-object reply, a missing key, or a null becomes "" for that field; extra
+        keys the model invented are dropped. So the result shape is always the
+        declared field set regardless of how loosely the backend complied. `raw` is
+        a json.loads result: `object`, not `Any`, so the isinstance narrowing below
+        is enforced rather than assumed."""
+        # Confirmed an object -> its JSON keys are strings (values stay unknown and
+        # are narrowed per-field below); cast satisfies the type checker for that.
+        mapping = cast(dict[str, object], raw) if isinstance(raw, dict) else {}
+        out: dict[str, str] = {}
+        for f in fields:
+            value = mapping.get(f.name, "")
+            if value is None:
+                out[f.name] = ""
+            elif isinstance(value, str):
+                out[f.name] = value
+            else:
+                # Only reachable on a non-strict backend (the schema declares string
+                # fields): a dict/list, or a bool/number. Serialize as JSON so it's
+                # `true` / `123` / `["a"]`, never Python repr ("True").
+                out[f.name] = json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+        return out
 
     def available_models(self) -> list[str]:
         """Model ids the endpoint serves (`models.list()` -> `data[].id`).

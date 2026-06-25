@@ -19,6 +19,7 @@ from accounts.api import AccountScopedAPIView
 from common.api_params import parse_limit
 from feeds.models import Feed, FeedItem
 from feeds.services import FeedItemService, FeedService
+from openmagpie_schema.run_windows import RUN_WINDOW_PARAMS, RunWindows, resolve_run_windows
 from openmagpie_schema.watch import (
     WatchActionDeliveryListResponse,
     WatchActionRunListResponse,
@@ -84,6 +85,22 @@ def _validate_state(raw: str | None, enum: type[StrEnum]) -> Response | None:
     return None
 
 
+def _parse_time_windows(request) -> tuple[RunWindows, Response | None]:
+    """Read the run-window query params (the shared `RUN_WINDOW_PARAMS` wire
+    contract) into kwargs for `list_for_action`. Each value is a relative duration
+    (`7d`) or an absolute ISO datetime, RESOLVED here against the server clock (the
+    one source of truth) via the shared `resolve_run_windows`, which also bounds a
+    lone `*_until` and rejects an inverted window. Any bad value / inverted window
+    is a 400; absent params are omitted (the service treats missing as unbounded)."""
+    raw = {name: value for name in RUN_WINDOW_PARAMS if (value := request.query_params.get(name))}
+    try:
+        return resolve_run_windows(raw, now=timezone.now()), None
+    except ValueError as exc:
+        # Distinct key from the `--window` preset's 400; the message names the real
+        # offending param (occurred_*/completed_*), which is embedded in `exc`.
+        return {}, Response({"windows": [str(exc)]}, status=status.HTTP_400_BAD_REQUEST)
+
+
 class ActionRunsView(ActionScopedAPIView):
     """GET /v1/actions/<action_id>/activity: the action's run log ("activity"),
     newest-first, cursor-paginated. `?state=` filters by run state. Account
@@ -107,9 +124,17 @@ class ActionRunsView(ActionScopedAPIView):
                 {"window": [f"unknown window {window_raw!r}; known: {choices(WatchActivityWindow)}"]},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        # Optional row-window filters (the report export); each an ISO bound on the
+        # run's completion or the feed item's source time. Scope only the row list.
+        windows, bad_window = _parse_time_windows(request)
+        if bad_window is not None:
+            return bad_window
         limit = parse_limit(request)
         after = request.query_params.get("after") or None
-        runs = self.run_svc.list_for_action(str(action.id), after=after, limit=limit, state=state)
+        # windows' keys ARE the list_for_action kwarg names (the RUN_WINDOW_PARAMS
+        # single source); spread rather than re-spell them (a rename can't silently
+        # drop a filter via a stale .get()).
+        runs = self.run_svc.list_for_action(str(action.id), after=after, limit=limit, state=state, **windows)
         next_cursor = str(runs[-1].id) if len(runs) == limit else None
         items = [watch_action_run_wire(r) for r in runs]
         # Side tables the rows key into (no embedding): the judged feed items for
@@ -120,10 +145,14 @@ class ActionRunsView(ActionScopedAPIView):
         feed_items_map = {fid: run_feed_item_wire(item) for fid, item in feed_items.items()}
         feeds = FeedService(account_id=request.account_id).get_many({str(item.feed_id) for item in feed_items.values()})
         feeds_map = {fid: run_feed_wire(feed) for fid, feed in feeds.items()}
-        # Summary on the first page only (skipped while paging) — keeps a
-        # deep-paging call a pure row fetch.
+        # Summary on the first page only (skipped while paging), AND only when no
+        # row-window filter is set. A row-windowed request is the export draining
+        # rows -- it discards the summary, and the summary is over the `window`
+        # PRESET (a different time basis than occurred_*/completed_*), so it'd be
+        # both wasted and misleading. The interactive `activity list` sends no
+        # row-windows, so it still gets its first-page summary.
         summary = None
-        if after is None:
+        if after is None and not windows:
             since, until = _window_bounds(window, timezone.now())
             summ = self.run_svc.summary_for_action(str(action.id), since=since, until=until)
             summary = WatchActionRunSummary(

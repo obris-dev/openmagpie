@@ -2,29 +2,15 @@
 
 from __future__ import annotations
 
-from enum import StrEnum
 from typing import Any, ClassVar
 
 from pydantic import BaseModel, Field
 
+from ._engine import EngineActionConfigBase, ExternalContentStatus
 from .base import WatchActionConfigBase, WatchActionConfigSummary
 
 
-class EngineSpec(BaseModel):
-    """Which engine + model a semantic filter uses to score relevance.
-
-    `kind == ""` means "use the server default" ; the server fills it
-    from settings and rejects an unregistered kind (policy ; the pure
-    package can't know the registry). `model`, when non-empty, is the
-    per-call model override the engine judges with for this filter (else
-    the engine's server-side default).
-    """
-
-    kind: str = ""
-    model: str = ""
-
-
-class SemanticFilterConfig(WatchActionConfigBase):
+class SemanticFilterConfig(EngineActionConfigBase):
     """Config for a WatchAction with kind == 'semantic_filter'.
 
     The LLM relevance gate: scores each item against `instructions` with
@@ -39,19 +25,11 @@ class SemanticFilterConfig(WatchActionConfigBase):
     # What the engine scores items against (required ; an empty filter
     # would pass everything and defeat the purpose).
     instructions: str
-    # default = EngineSpec(kind=""); the server fills the real default
-    # kind from settings + validates it (policy).
-    engine: EngineSpec = Field(default_factory=EngineSpec)
     # The run passes (advances the chain) when score >= threshold, else
     # GATES. Strict `gt=0.0` so a 0 threshold can't pass every item ; an
     # engine returning 0 for "irrelevant" would otherwise never gate.
     threshold: float = Field(default=0.8, gt=0.0, le=1.0)
-    # When the item has an `external_url` (an off-site link, e.g. an HN link
-    # post), fetch that page and fold its readable text into the judge so a bare
-    # link is scored on its substance, not just the title. ON by default; set
-    # false to skip the fetch (saves a network call per judged item). No-ops when
-    # the item has no external_url (Reddit, Ask HN, RSS today).
-    fetch_external_content: bool = True
+    # engine + fetch_external_content are inherited from EngineActionConfigBase.
 
     model_config = {"extra": "ignore"}
 
@@ -63,30 +41,14 @@ class SemanticFilterConfig(WatchActionConfigBase):
         return self.model_dump(mode="json")
 
     def summary(self) -> WatchActionConfigSummary:
-        # engine.kind == "" is the documented "use server default" ; render
-        # a placeholder rather than an empty token so the preview reads
-        # (e.g. "engine(default) >= 0.80", not a bare ">= 0.80").
-        kind = self.engine.kind or "default"
-        engine = f"{kind} | {self.engine.model}" if self.engine.model else f"engine({kind})"
-        return WatchActionConfigSummary(detail=f"{engine} >= {self.threshold:.2f}")
+        # engine_label() renders the "use server default" placeholder, so the preview
+        # reads "engine(default) >= 0.80", not a bare ">= 0.80".
+        return WatchActionConfigSummary(detail=f"{self.engine_label()} >= {self.threshold:.2f}")
 
     def merge_preserving(self, prior: WatchActionConfigBase) -> SemanticFilterConfig:
         """Nothing to carry forward: a semantic filter has no masked
         secrets or runtime state, so the submitted config wins wholesale."""
         return self
-
-
-class ExternalContentStatus(StrEnum):
-    """How the linked-article enrichment fared for one judgment, recorded on the
-    result so a SUCCEEDED/GATED score carries its own provenance: judged WITH the
-    article, or without it (none to fetch / disabled / the fetch yielded nothing).
-    A judgment is never failed for missing enrichment ; this is the status of it."""
-
-    NOT_APPLICABLE = "not_applicable"  # item had no external_url (Reddit, Ask HN, RSS)
-    DISABLED = "disabled"  # fetch_external_content was off
-    INCLUDED = "included"  # fetched + extracted, folded into the judge
-    UNAVAILABLE = "unavailable"  # the fetch FAILED (network / HTTP error, blocked host, timeout, oversize)
-    MISSING = "missing"  # fetched OK, but no usable article text came out (paywall / JS-only / non-article)
 
 
 class SemanticFilterResult(BaseModel):

@@ -6,8 +6,11 @@ import contextlib
 import os
 import shlex
 import subprocess
+import sys
 import tempfile
+from collections.abc import Iterator
 from pathlib import Path
+from typing import TextIO
 
 import typer
 
@@ -78,16 +81,28 @@ def _open_editor_or_abort(seed: str) -> str:
 
 
 @contextlib.contextmanager
-def _maybe_to_file(output: str | None):
-    """Redirect stdout to `output` for the duration, or pass through when None.
-    The page renderers stay stdout-only ; this is the single seam that turns
-    `-o <file>` into 'write the rows there instead'."""
+def _maybe_to_file(output: str | None, *, newline: str | None = None) -> Iterator[TextIO]:
+    """The single seam that turns `-o <file>` into 'write there instead of stdout'.
+    `yield`s the stream to write to: the open file when `output` is set, else
+    `sys.stdout`. ALSO redirects `sys.stdout` to that file for the duration, so the
+    console.*-based renderers (table / NDJSON) -- which only ever write to stdout
+    and take no handle -- land in the file transparently. So a caller either takes
+    the yielded stream for an explicit writer (`as fh: csv.writer(fh)`) or ignores
+    it and writes via `console.*`; both end up in the same place.
+
+    `newline` is passed straight to `open`: the default (None) keeps universal
+    newline translation for line-oriented writers (tables / NDJSON). The CSV writer
+    MUST pass `newline=""` so the csv module owns line endings - else a quoted
+    field's embedded newline won't round-trip and Windows doubles the CR."""
     if output is None:
-        yield
+        yield sys.stdout
         return
     try:
-        with open(output, "w") as fh, contextlib.redirect_stdout(fh):
-            yield
+        # encoding pinned (not the locale default): the export carries unicode
+        # (LLM-extracted fields) and --jsonl emits non-ASCII (ensure_ascii=False), so
+        # a non-UTF-8 box would otherwise raise mid-stream or mojibake.
+        with open(output, "w", encoding="utf-8", newline=newline) as fh, contextlib.redirect_stdout(fh):
+            yield fh
     except OSError as exc:
         console.error(f"failed to write {output}: {exc}")
         raise typer.Exit(code=1) from None

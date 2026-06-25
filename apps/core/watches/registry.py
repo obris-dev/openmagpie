@@ -9,6 +9,7 @@ the `config` blob), so the blob is the pure kind-specific shape.
 """
 
 from openmagpie_schema.watch_actions import (
+    ExtractConfig,
     LogConfig,
     SemanticFilterConfig,
     WatchActionConfigBase,
@@ -19,6 +20,7 @@ from watches.policy import PolicyError, enforce_action_policy
 
 _REGISTRY: dict[str, type[WatchActionConfigBase]] = {
     SemanticFilterConfig.CONFIG_KIND: SemanticFilterConfig,
+    ExtractConfig.CONFIG_KIND: ExtractConfig,
     WebhookConfig.CONFIG_KIND: WebhookConfig,
     LogConfig.CONFIG_KIND: LogConfig,
 }

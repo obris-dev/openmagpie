@@ -8,6 +8,7 @@ rollup) and one run's detail (`/v1/action-activity/<id>`). Shapes live once in
 
 from __future__ import annotations
 
+from openmagpie_schema.run_windows import run_window_params
 from openmagpie_schema.watch import WatchActionRunListResponse, WatchActionRunView
 
 from .. import routes
@@ -27,11 +28,25 @@ class ActivityApi:
         after: str | None = None,
         limit: int | None = None,
         window: str | None = None,
+        occurred_since: str | None = None,
+        occurred_until: str | None = None,
+        completed_since: str | None = None,
+        completed_until: str | None = None,
     ) -> WatchActionRunListResponse:
         # `window` is the summary preset (server resolves it to bounds); the
-        # first page carries the summary rollup, paged calls don't.
-        params = list_params(state=state, after=after, limit=limit, window=window)
-        raw = self._http.get(routes.actions.runs(action_id), params=params)
+        # first page carries the summary rollup, paged calls don't. The
+        # `*_since`/`*_until` ISO bounds filter the row list itself (the report
+        # export) - on the run's completion or the feed item's source time.
+        params = list_params(state=state, after=after, limit=limit, window=window) or {}
+        params.update(
+            run_window_params(
+                occurred_since=occurred_since,
+                occurred_until=occurred_until,
+                completed_since=completed_since,
+                completed_until=completed_until,
+            )
+        )
+        raw = self._http.get(routes.actions.runs(action_id), params=params or None)
         return WatchActionRunListResponse.model_validate(raw)
 
     def get(self, activity_id: str) -> WatchActionRunView:

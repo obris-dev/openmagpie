@@ -75,6 +75,29 @@ def _parse_columns(selected: str | None, default: list[_Col]) -> list[_Col]:
     return cols
 
 
+def _dedupe_headers(cols: list[_Col]) -> list[_Col]:
+    """Make column headers unique so a CSV / DictReader consumer can't silently
+    COLLAPSE duplicates (a user's extracted field named like a fixed column, or
+    two result keys that upper-case to the same header). First occurrence keeps
+    its header; each later dup gets a `_2` / `_3` suffix. The dot-path each column
+    projects is untouched - only the display header is disambiguated."""
+    seen: set[str] = set()  # case-folded headers already EMITTED (incl. generated ones)
+    out: list[_Col] = []
+    for c in cols:
+        header, key = c.header, c.header.casefold()
+        if key in seen:
+            # Bump until the generated name is itself unused -- so a literal "X_2"
+            # can't silently collide with the "X_2" generated from a second "X".
+            n = 2
+            while f"{header}_{n}".casefold() in seen:
+                n += 1
+            header = f"{header}_{n}"
+            key = header.casefold()
+        seen.add(key)
+        out.append(c if header == c.header else c._replace(header=header))
+    return out
+
+
 def _ts(value: Any) -> str:
     """A column `fmt` collapsing an ISO-8601 datetime string to seconds in the
     caller's LOCAL zone, else `-`. The explicit per-column opt-in for datetimes (a

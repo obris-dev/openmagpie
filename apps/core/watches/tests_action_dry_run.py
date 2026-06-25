@@ -66,6 +66,25 @@ class WatchActionDryRunTests(TestCase):
         self.assertEqual(resp.status_code, 400, resp.content)  # same validation as a real add
         self.assertEqual(WatchAction.objects.count(), before)  # nothing persisted on the error path
 
+    def test_extract_dry_run_previews_and_validates(self) -> None:
+        # A valid extract action previews (200, nothing persisted)...
+        before = WatchAction.objects.count()
+        ok = self.client.post(
+            f"/v1/watches/{self.watch_id}/actions?dry_run=true",
+            {"kind": "extract", "config": {"fields": [{"name": "person", "description": "who"}]}},
+            format="json",
+        )
+        self.assertEqual(ok.status_code, 200, ok.content)
+        self.assertTrue(ok.json()["dry_run"])
+        # ...and an empty field set fails validation the same as a real add.
+        bad = self.client.post(
+            f"/v1/watches/{self.watch_id}/actions?dry_run=true",
+            {"kind": "extract", "config": {"fields": []}},
+            format="json",
+        )
+        self.assertEqual(bad.status_code, 400, bad.content)
+        self.assertEqual(WatchAction.objects.count(), before)  # neither persisted
+
     def test_dry_run_add_redacts_secrets(self) -> None:
         # A dry-run must redact secrets exactly as a real write does - never echo
         # a plaintext header value back in the preview.

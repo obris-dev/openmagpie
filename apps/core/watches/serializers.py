@@ -198,8 +198,10 @@ def run_feed_item_wire(item: FeedItem) -> RunFeedItem:
     return RunFeedItem(
         title=str(data.get("title", "")),
         url=str(data.get("url", "")),
+        external_url=str(data.get("external_url", "")),
         source_label=str(item.source_label),
         feed_id=str(item.feed_id),
+        occurred_at=item.occurred_at,  # a FeedItem column (the occurred_* filter axis), not from data
     )
 
 

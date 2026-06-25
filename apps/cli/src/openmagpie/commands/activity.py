@@ -20,7 +20,12 @@ from openmagpie_schema.watch import (
     WatchActionRunWire,
     WatchActionWire,
 )
-from openmagpie_schema.watch_actions import ExternalContentStatus
+from openmagpie_schema.watch_actions import (
+    ENRICHMENT_STATUS_KEY,
+    EXTRACT_STATUS_KEY,
+    EXTRACTED_KEY,
+    ExternalContentStatus,
+)
 from openmagpie_schema.watch_enums import (
     BACKLOG_STATES,
     WatchActionKind,
@@ -112,14 +117,34 @@ class FilterRunFormatter(RunFormatter):
         # Linked-article enrichment provenance, shown only when there's something
         # to say: NOT_APPLICABLE (no off-site link) and absent are omitted, so a
         # title-only score is explained (included / unavailable / missing / disabled).
-        status = run.result.get("enrichment_status")
+        status = run.result.get(ENRICHMENT_STATUS_KEY)
         if status is not None and status != ExternalContentStatus.NOT_APPLICABLE.value:
             fields.append(("enrichment", str(status)))
         return fields
 
 
+class ExtractRunFormatter(RunFormatter):
+    """`extract`: the hydrated fields + completeness `status` + enrichment on the
+    `get` detail (so the interactive view surfaces the same blob the export does,
+    not a state-only row)."""
+
+    def detail_fields(self, run: WatchActionRunWire) -> list[tuple[str, str]]:
+        extracted = run.result.get(EXTRACTED_KEY) or {}
+        fields = [(name, str(value)) for name, value in extracted.items()]
+        status = run.result.get(EXTRACT_STATUS_KEY)
+        if status:
+            fields.append(("status", str(status)))
+        # Enrichment provenance, shown only when meaningful (NOT_APPLICABLE / absent
+        # omitted), mirroring FilterRunFormatter.
+        enrichment = run.result.get(ENRICHMENT_STATUS_KEY)
+        if enrichment is not None and enrichment != ExternalContentStatus.NOT_APPLICABLE.value:
+            fields.append(("enrichment", str(enrichment)))
+        return fields
+
+
 _RUN_FORMATTERS: dict[WatchActionKind, RunFormatter] = {
     WatchActionKind.SEMANTIC_FILTER: FilterRunFormatter(),
+    WatchActionKind.EXTRACT: ExtractRunFormatter(),
 }
 _BASE_RUN_FORMATTER = RunFormatter()
 

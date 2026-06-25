@@ -6,13 +6,30 @@
 #
 # `kind` selects the action type; `config` is its kind-specific settings.
 # A chain's first action is typically a semantic_filter (an LLM relevance
-# gate that STOPS the chain when an item scores below `threshold`); delivery
-# actions (log, webhook) follow. Each kind has its own `config` shape; the
-# semantic_filter below is the common starting point (see `magpie watch
-# template` for a full chain, or `magpie watch action get <id>` for a live one).
+# gate that STOPS the chain when an item scores below `threshold`); an extract
+# (pull structured fields onto the run) and delivery actions (log, webhook)
+# follow. Each kind has its own `config` shape; the semantic_filter below is the
+# common starting point (see `magpie watch template` for a full chain, or
+# `magpie watch action get <id>` for a live one).
 
 kind: semantic_filter
 config:
   instructions: posts about an interesting new open-source LLM release
   threshold: 0.7   # pass when relevance >= this (0.0 < threshold <= 1.0)
   # engine: {kind: "", model: ""}   # optional; empty = server default
+
+# --- Other kinds (replace the `kind` + `config` above with one of these) -----
+#
+# extract: pull a declared set of fields out of each item with the LLM and
+# record them on the run, to export later with `magpie activity export`. Hydration only
+# -- it never gates, every item passes through. Put it AFTER a semantic_filter.
+# kind: extract
+# config:
+#   fields:                 # what to pull out (>= 1; `name` is unique, becomes a report column)
+#     - {name: company, description: the organization named in the item}
+#     - {name: event,   description: what happened (hiring, funding, launch, ...)}
+#   instructions: ""        # optional extra steering for the whole extraction
+#   fetch_external_content: true   # also read the item's linked article (default true)
+#   # engine: {kind: "", model: ""}   # optional; empty = server default
+#
+# webhook: POST matched items to a URL.  log: write them to the server log.

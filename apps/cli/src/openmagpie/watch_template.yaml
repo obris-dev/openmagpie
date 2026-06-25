@@ -27,3 +27,15 @@ actions:
       instructions: posts about an interesting new open-source LLM release
       threshold: 0.7   # pass when relevance >= this (0.0 < threshold <= 1.0)
       # engine: {kind: "", model: ""}   # optional; empty = server default
+
+  # Optional next step -- extract: pull structured fields out of each passing
+  # item onto the run, to export later with `magpie activity export`. Hydration only; it
+  # never gates. (Uncomment to add it after the filter above.)
+  # - kind: extract
+  #   config:
+  #     fields:   # what to pull out (>= 1; each `name` becomes a report column)
+  #       - {name: company, description: the organization named in the item}
+  #       - {name: event,   description: what happened (hiring, funding, launch, ...)}
+  #     instructions: ""               # optional extra steering for the whole extraction
+  #     fetch_external_content: true   # also read the item's linked article (default true)
+  #     # engine: {kind: "", model: ""}   # optional; empty = server default

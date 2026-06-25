@@ -7,6 +7,7 @@ registers its impl here ; same shape as `engine.registry` /
 `sources.registry`.
 """
 
+from .extract import ExtractAction
 from .log import LogAction
 from .protocol import Action
 from .semantic_filter import SemanticFilterAction
@@ -14,6 +15,7 @@ from .webhook import WebhookAction
 
 _REGISTRY: dict[str, Action] = {
     SemanticFilterAction.kind: SemanticFilterAction(),
+    ExtractAction.kind: ExtractAction(),
     WebhookAction.kind: WebhookAction(),
     LogAction.kind: LogAction(),
 }

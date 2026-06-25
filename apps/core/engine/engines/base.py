@@ -4,6 +4,7 @@ from typing import Protocol
 from pydantic import BaseModel, Field
 
 from openmagpie_schema.engine import EngineStatus
+from openmagpie_schema.watch_actions import ExtractField
 from sources.payloads import SourcePayload
 
 
@@ -33,9 +34,23 @@ class JudgmentResult:
     raw_response: str
 
 
+@dataclass(frozen=True)
+class ExtractionResult:
+    """In-memory result from an Engine's `extract()`. `extracted` is the
+    `{declared field name: value}` map, already coerced to the declared keys
+    with string values (a field the model couldn't fill is `""`). The caller
+    (the extract action) maps this onto the persisted result shape and decides
+    completeness; the engine stays free of the result-status enum."""
+
+    extracted: dict[str, str]
+    model: str
+    latency_ms: int
+    raw_response: str
+
+
 class EngineRequestRejected(ValueError):
-    """A `judge()` call was rejected by the engine in a way that PROVES a
-    permanent request/config defect - retrying won't fix it. The cases: the
+    """A `judge()` / `extract()` call was rejected by the engine in a way that
+    PROVES a permanent request/config defect - retrying won't fix it. The cases: the
     backend doesn't support OpenAI structured outputs (json_schema), or the
     auth/endpoint/model 4xx's (401/403 bad `ENGINE_API_KEY`; 404 wrong
     `ENGINE_BASE_URL`/`ENGINE_MODEL`; 400/422 a malformed request).
@@ -69,6 +84,26 @@ class Engine(Protocol):
         linked article (the caller fetched it); the engine folds it into the
         judged input alongside title + content. None = judge on the payload
         alone.
+        """
+        ...
+
+    def extract(
+        self,
+        payload: SourcePayload,
+        *,
+        fields: list[ExtractField],
+        instructions: str = "",
+        model: str | None = None,
+        external_content: str | None = None,
+    ) -> ExtractionResult:
+        """Pull the declared `fields` out of the payload (hydration, not scoring).
+
+        Returns an `ExtractionResult` whose `extracted` map has exactly the
+        declared field names as keys and string values (a field the model
+        couldn't determine is `""`). `instructions` is optional free-form
+        steering for the whole extraction. `model` / `external_content` mean the
+        same as in `judge`. Raises `EngineRequestRejected` on a permanent
+        request/config defect; a malformed reply propagates as a transient error.
         """
         ...
 

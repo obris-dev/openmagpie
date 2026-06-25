@@ -4,6 +4,11 @@ from __future__ import annotations
 
 import typer
 
+# `activity export` lives in its own module (its size would push activity.py over
+# the file-length cap) but registers onto activity.py's `activity_app` via an
+# @activity_app.command decorator; importing it here runs that decorator. The only
+# command split this way, hence the side-effect import (F401).
+from .commands import activity_export as _activity_export  # noqa: F401
 from .commands.activity import activity_app
 from .commands.auth import auth_app
 from .commands.delivery import delivery_app
@@ -52,7 +57,7 @@ app.add_typer(
 app.add_typer(
     activity_app,
     name="activity",
-    help="Audit an action's runs: summary / list / one in full.",
+    help="Audit an action's runs: summary / list / one in full / export.",
 )
 app.add_typer(
     delivery_app,

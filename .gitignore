@@ -74,3 +74,10 @@ cli/.venv/
 /config/*
 !/config/README.md
 !/config/templates/
+
+# Local export artifacts from `magpie activity export -o <file>` (CSV / NDJSON).
+# Generated data dumps, not source; root-anchored so test fixtures under
+# apps/*/tests/ are unaffected. Force-add (`git add -f`) if you ever need one.
+/*.csv
+/*.ndjson
+/*.jsonl
