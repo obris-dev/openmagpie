@@ -41,6 +41,24 @@ POLL_DEADLINE_GRACE_SECONDS = 5.0
 # letting the loop run indefinitely.
 MAX_DEVICE_LOGIN_SECONDS = 30 * 60
 
+# Shown when the device flow can't open a browser on THIS machine. Opening the URL
+# on another device IS the normal login (you authorize in the web app there), so
+# that's the lead; `--token` is the alternative for a headless/automated box that
+# can't do the interactive login at all. No "you need a token" implication -- most
+# people don't.
+_NO_BROWSER_HINT = (
+    "Open the URL above on another device to finish, or use `magpie auth login --token` for a headless setup."
+)
+
+# Shown above the INTERACTIVE --token prompt: how to obtain a token if you don't
+# have one (the prompt itself does the asking). Plain, not a warning -- it's
+# neutral guidance, matching the device flow's instruction lines; yellow is for
+# actual problems. On-topic here (the user chose the token path).
+_TOKEN_PROMPT_HINT = (
+    "Don't have a token? Sign in with `magpie auth login`, then `magpie auth token create`,\n"
+    "or ask your admin to generate your first one."
+)
+
 
 def _print_signed_in(email: str) -> None:
     console.success(f"Signed in as {email}")
@@ -77,8 +95,10 @@ def _read_token_secret() -> str:
     the ambient credential, used directly, no login needed).
     """
     if not sys.stdin.isatty():
-        # Piped / redirected: take the first line.
+        # Piped / redirected: take the first line (no human to hint).
         return sys.stdin.readline().strip()
+    # Interactive: tell the operator where a token comes from before prompting.
+    console.log(_TOKEN_PROMPT_HINT)
     try:
         return getpass.getpass("Personal access token: ").strip()
     except (EOFError, KeyboardInterrupt):
@@ -176,10 +196,10 @@ def login(
         try:
             opened = webbrowser.open(created.authorize_url)
         except webbrowser.Error as e:
-            console.warn(f"Couldn't launch a browser ({e}). Open the URL above to continue.")
+            console.warn(f"Couldn't launch a browser ({e}). {_NO_BROWSER_HINT}")
         else:
             if not opened:
-                console.warn("No browser available. Open the URL above to continue.")
+                console.warn(f"No browser available. {_NO_BROWSER_HINT}")
 
     console.log("Waiting for authorization...")
 
