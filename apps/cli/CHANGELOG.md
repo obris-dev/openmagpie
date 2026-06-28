@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.3](https://github.com/obris-dev/openmagpie/compare/cli-v0.3.2...cli-v0.3.3) (2026-06-28)
+
+
+### Bug Fixes
+
+* **cli:** auth-login UX for headless / no-browser sign-in ([#138](https://github.com/obris-dev/openmagpie/issues/138)) ([120edda](https://github.com/obris-dev/openmagpie/commit/120edda72a9205b2dfd15ad23654cd58cfaf3954))
+
 ## [0.3.2](https://github.com/obris-dev/openmagpie/compare/cli-v0.3.1...cli-v0.3.2) (2026-06-24)
 
 
