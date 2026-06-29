@@ -46,7 +46,7 @@ pyproject.toml + uv.lock    uv workspace root (one lock for all members)
 ## Cross-cutting code rules
 
 - **State-machine values get a const object + derived type from the start.** No bare string literals in match arms or status checks. Python: `class Status(Enum): ...`. TypeScript: `const PHASE = {...} as const; type Phase = typeof PHASE[keyof typeof PHASE]`.
-- **No em dashes.** Use commas or periods. Applies to UI text, comments, docs.
+- **No em dashes, and no `--` as a stand-in for one.** Rewrite: commas, parens, or two sentences. Applies to UI text, comments, docs.
 - **Shell scripts are POSIX `sh`.** `#!/bin/sh`, no bashisms (`[[ ]]`, `=~`, arrays, `local`, `set -o pipefail`, `${BASH_SOURCE}`, `< <(...)`). Everything in `scripts/` must pass `shellcheck -s sh` (enforced in pre-commit + CI).
 - **Convention docs describe what to do.** No justifications, no historical context, no "we chose X because of Y." Forward-looking constraints are fine; past-decision narratives are not.
 - **Branch names are `<type>/<kebab-slug>`.** Type is a Conventional-Commits prefix (`feat` | `fix` | `docs` | `refactor` | `test` | `chore` | `ci` | `perf` | `build` | `style` | `revert`); `main` is exempt. Enforced by `scripts/check-branch-name.sh` (pre-commit + CI). See [CONTRIBUTING.md](CONTRIBUTING.md) for the per-type meanings and the PR flow.
@@ -87,3 +87,24 @@ make local-types          ty
 make local-check          lint + types + test
 make help               full list
 ```
+
+## Releases & changelog
+
+release-please owns versioning + the changelogs, generated from the
+conventional-commit history, in TWO tracks: the product (`CHANGELOG.md` +
+`version.txt`, tag `v<x.y.z>`) and the CLI (`apps/cli/CHANGELOG.md`, tag
+`cli-v<x.y.z>` = the PyPI `openmagpie`). Each entry comes from a merged commit's
+SUBJECT line.
+
+- **A changelog entry says what the feature DOES for a user, not how it's built.**
+  Lead with the capability ("a watch action that pulls fields you declare out of
+  each item"); leave out internal types, migration notes, and engine internals
+  (that's implementation). Frame the product track for a server/product reader, the
+  CLI track for a CLI user.
+- **For notes richer than the subject, write the commit / PR BODY.** release-please
+  appends it under the entry, so the body is the DURABLE home for release notes.
+- **release-please OWNS the release branches** (`release-please--branches--main*`):
+  it regenerates and force-pushes the changelog on every merge to main. A hand edit
+  to a release PR's `CHANGELOG.md` is clobbered if release-please re-runs before that
+  PR merges, so only touch one up right before merging (else use the commit body).
+- Prose follows the no-em-dash rule above.
