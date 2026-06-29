@@ -11,6 +11,8 @@ and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2
 ### Features
 
 * extract action (hydrate runs) + magpie activity export ([#137](https://github.com/obris-dev/openmagpie/issues/137)) ([e1d7e08](https://github.com/obris-dev/openmagpie/commit/e1d7e08430783224d70fefd3be5c016834980459))
+  * **`extract` action kind**: a watch action that uses the LLM to pull a set of fields you declare (each a `name` + a plain-language `description`) out of every item the watch matches, and records them on the item's run. It turns fuzzy incoming content (a headline, a post) into structured data you can report on. It only enriches (it never drops items), so it runs after a relevance filter rather than in place of one.
+  * **Activity time windows**: you can now scope a watch's activity to a time range, by when an item was published (`occurred`) or when its run finished (`completed`), given as either a duration like `7d` or an exact date. Lets a view or export cover, say, just the last 30 days.
 
 ## [0.3.4](https://github.com/obris-dev/openmagpie/compare/v0.3.3...v0.3.4) (2026-06-24)
 
