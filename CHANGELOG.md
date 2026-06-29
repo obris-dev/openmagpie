@@ -5,6 +5,13 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0](https://github.com/obris-dev/openmagpie/compare/v0.3.4...v0.4.0) (2026-06-29)
+
+
+### Features
+
+* extract action (hydrate runs) + magpie activity export ([#137](https://github.com/obris-dev/openmagpie/issues/137)) ([e1d7e08](https://github.com/obris-dev/openmagpie/commit/e1d7e08430783224d70fefd3be5c016834980459))
+
 ## [0.3.4](https://github.com/obris-dev/openmagpie/compare/v0.3.3...v0.3.4) (2026-06-24)
 
 
