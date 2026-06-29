@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.0](https://github.com/obris-dev/openmagpie/compare/cli-v0.3.3...cli-v0.4.0) (2026-06-29)
+
+
+### Features
+
+* extract action (hydrate runs) + magpie activity export ([#137](https://github.com/obris-dev/openmagpie/issues/137)) ([e1d7e08](https://github.com/obris-dev/openmagpie/commit/e1d7e08430783224d70fefd3be5c016834980459))
+
 ## [0.3.3](https://github.com/obris-dev/openmagpie/compare/cli-v0.3.2...cli-v0.3.3) (2026-06-28)
 
 
