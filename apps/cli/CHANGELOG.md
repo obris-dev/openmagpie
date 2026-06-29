@@ -6,6 +6,8 @@
 ### Features
 
 * extract action (hydrate runs) + magpie activity export ([#137](https://github.com/obris-dev/openmagpie/issues/137)) ([e1d7e08](https://github.com/obris-dev/openmagpie/commit/e1d7e08430783224d70fefd3be5c016834980459))
+  * **`magpie activity export`**: export a watch action's runs to a file (CSV by default, or `--jsonl`), so you can take a watch's output into a spreadsheet, an LLM, or a script. The columns match the action: an `extract` action gives you the extracted fields (one row per item), a relevance filter gives the score and reason, a log gives the delivered line. Scope it to a time range with `--occurred-*` / `--completed-*` (a duration like `7d` or an exact date); with no window it covers the last 7 days.
+  * **`extract` action support**: create the new extract action with `magpie watch action add` (`--rank` places it in the chain), and see an extract run's pulled fields in `magpie activity get`.
 
 ## [0.3.3](https://github.com/obris-dev/openmagpie/compare/cli-v0.3.2...cli-v0.3.3) (2026-06-28)
 
