@@ -5,6 +5,15 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.1](https://github.com/obris-dev/openmagpie/compare/v0.4.0...v0.4.1) (2026-06-30)
+
+
+### Bug Fixes
+
+* **telemetry:** make anonymous telemetry opt-out (Next.js-style) ([#144](https://github.com/obris-dev/openmagpie/issues/144)) ([e8c1f68](https://github.com/obris-dev/openmagpie/commit/e8c1f6858a6f359fbe0f26e5c84332eb478518db))
+  * Anonymous usage telemetry is now **on by default** (opt-out), rather than only after an explicit opt-in. It stays anonymous (a random per-install id, never your account or content) and is easy to turn off: `telemetry disable`, `DO_NOT_TRACK=1`, or an empty `POSTHOG_API_KEY`.
+  * **Upgrading:** an existing install left on the default starts emitting after this upgrade with no action on your part; opt out with any of the above. Full details in `apps/core/TELEMETRY.md`.
+
 ## [0.4.0](https://github.com/obris-dev/openmagpie/compare/v0.3.4...v0.4.0) (2026-06-29)
 
 
