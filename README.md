@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  Open-source, self-hostable listening for the conversations that matter to you, so you can join in while they're active.
+  Open-source social listening
 </p>
 
 <p align="center">
