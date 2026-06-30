@@ -54,6 +54,7 @@ class FeedEnvelope(BaseModel):
     name: str
     kind: str = "curated"
     poll_interval_seconds: int = 300
+    is_active: bool = True  # False pauses the feed (the server stops polling its sources)
     data: ConfigBlob = {}
     sources: list[SourceInput] = []
 
@@ -96,6 +97,12 @@ class FeedApi:
         params = {"dry_run": "true"} if dry_run else None
         raw = self._http.put(routes.feeds.detail(feed_id), json_body=body, params=params)
         return FeedMutationResponse.model_validate(raw)
+
+    def set_active(self, feed_id: str, *, is_active: bool) -> FeedView:
+        """PATCH the active flag only (pause/resume): the server stops/starts polling
+        this feed's sources. No config replace, unlike update()."""
+        raw = self._http.patch(routes.feeds.detail(feed_id), json_body={"is_active": is_active})
+        return FeedView.model_validate(raw)
 
     def delete(self, feed_id: str) -> None:
         self._http.delete(routes.feeds.detail(feed_id))

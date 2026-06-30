@@ -39,6 +39,7 @@ from .policy import PolicyError
 from .serializers import (
     SOURCE_INPUT_LIST_ADAPTER,
     FeedCreateSerializer,
+    FeedSetActiveSerializer,
     feed_item_wire,
     feed_mutation,
     feed_view,
@@ -65,6 +66,7 @@ class FeedListCreateView(FeedSvcMixin, AccountScopedAPIView):
                 kind=d["kind"],
                 poll_interval_seconds=d["poll_interval_seconds"],
                 data=d["data"],
+                is_active=d["is_active"],
             )
             preview_data = feed_mutation(preview, dry_run=True).model_dump(mode="json")
             preview_data.pop("id", None)  # empty placeholder pre-save
@@ -81,6 +83,7 @@ class FeedListCreateView(FeedSvcMixin, AccountScopedAPIView):
             kind=d["kind"],
             poll_interval_seconds=d["poll_interval_seconds"],
             data=d["data"],
+            is_active=d["is_active"],
             sources=d.get("sources") or None,
         )
         # Anonymous telemetry (no-op only when opted out). Emitted from this API seam,
@@ -141,6 +144,7 @@ class FeedDetailView(FeedScopedAPIView):
             "name": d["name"],
             "poll_interval_seconds": d["poll_interval_seconds"],
             "data": d["data"],
+            "is_active": d["is_active"],
         }
         # Policy runs on the merged config inside build_update/update;
         # map PolicyError -> 400 (same shape create uses).
@@ -158,6 +162,16 @@ class FeedDetailView(FeedScopedAPIView):
             )
         except PolicyError as exc:
             return Response({"data": [str(exc)]}, status=status.HTTP_400_BAD_REQUEST)
+
+    def patch(self, request, feed_id: str):
+        """Pause/resume: flip is_active only (the poll pass skips inactive feeds).
+        Distinct from PUT, which full-replaces the config. Deliberately returns the
+        detail view (feed_view), NOT the *_mutation envelope POST/PUT use: a one-bit
+        toggle has no dry-run, so the mutation/dry_run wrapper doesn't apply."""
+        serializer = FeedSetActiveSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        self.feed_svc.set_active(self.feed, is_active=serializer.validated_data["is_active"])
+        return Response(feed_view(self.feed).model_dump(mode="json"), status=status.HTTP_200_OK)
 
     def delete(self, request, feed_id: str):
         self.feed_svc.delete(self.feed)

@@ -5,12 +5,14 @@ import ulid
 from django.conf import settings
 from django.test import TestCase
 from django.utils import timezone
+from rest_framework.test import APIClient
 
+from auth_api.operations.signup import SignupOperation
 from openmagpie_schema.watch import WatchActionInput
 from openmagpie_schema.watch_actions import WebhookConfig
 from openmagpie_schema.watch_enums import WatchActionRunState
 from watches.management.commands.process_due_runs import _breakdown, _fmt_duration, _progress
-from watches.models import WatchAction, WatchActionRun
+from watches.models import Watch, WatchAction, WatchActionRun
 from watches.policy import PolicyError
 from watches.registry import load_config
 from watches.services import WatchActionRunService, WatchService
@@ -129,6 +131,60 @@ class ReplaceChainUpsertTests(TestCase):
                     ),
                 ],
             )
+
+
+class SetActiveTests(TestCase):
+    """set_active is the lightweight pause/resume: it flips is_active and leaves the
+    action chain alone (unlike update(), which full-replaces and recreates it)."""
+
+    def setUp(self) -> None:
+        self.account_id = ulid.ulid()
+        self.wsvc = WatchService(account_id=self.account_id)
+
+    def test_pause_resume_preserves_action_ids(self) -> None:
+        watch = self.wsvc.create(
+            user_id=ulid.ulid(),
+            name="t",
+            feed_ids=[],
+            actions=[WatchActionInput(kind="log", config={"prefix": "[A]"})],
+        )
+        ids = [str(r.id) for r in self.wsvc.action_svc.list_for_path(watch.initial_path_id)]
+        self.wsvc.set_active(watch, is_active=False)
+        watch.refresh_from_db()
+        self.assertFalse(watch.is_active)
+        # the chain is untouched: same rows, not recreated (a full update() would churn them)
+        self.assertEqual([str(r.id) for r in self.wsvc.action_svc.list_for_path(watch.initial_path_id)], ids)
+        self.wsvc.set_active(watch, is_active=True)
+        watch.refresh_from_db()
+        self.assertTrue(watch.is_active)
+
+
+class WatchPutOmitResetsActiveTests(TestCase):
+    """PUT is full-replace: a watch edit that OMITS is_active resets it to active (the
+    serializer defaults it True), like an omitted feed_ids/actions clearing those. The
+    flag-only toggle is pause/resume (PATCH). Mirrors the feed-side guarantee."""
+
+    def setUp(self) -> None:
+        self.user = SignupOperation(email="wpr@example.com", password="Str0ng-Passw0rd!").run()
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.user)
+        resp = self.client.post(
+            "/v1/watches",
+            {"name": "w", "feed_ids": [], "actions": [{"kind": "log", "config": {"prefix": "[A]"}}]},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 201, resp.content)
+        self.watch_id = resp.json()["id"]
+
+    def test_put_without_is_active_resets_to_active(self) -> None:
+        self.client.patch(f"/v1/watches/{self.watch_id}", {"is_active": False}, format="json")
+        resp = self.client.put(
+            f"/v1/watches/{self.watch_id}",
+            {"name": "w", "feed_ids": [], "actions": [{"kind": "log", "config": {"prefix": "[A]"}}]},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 200, resp.content)
+        self.assertTrue(Watch.objects.get(id=self.watch_id).is_active)  # PUT-omit reset it to active
 
 
 class ActionRunListTests(TestCase):

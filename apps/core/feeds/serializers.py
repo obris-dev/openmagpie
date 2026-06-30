@@ -52,6 +52,9 @@ class FeedCreateSerializer(serializers.Serializer):
     name = serializers.CharField(max_length=255, trim_whitespace=True)
     kind = serializers.CharField(max_length=32, default="curated")
     poll_interval_seconds = serializers.IntegerField(min_value=MIN_POLL_INTERVAL_SECONDS, default=300)
+    # False creates/leaves the feed paused: the poll pass skips inactive feeds. Default
+    # True so an existing client (or a create that omits it) keeps today's behavior.
+    is_active = serializers.BooleanField(default=True)
     data = serializers.DictField(child=serializers.JSONField())
     sources = serializers.ListField(child=serializers.DictField(), required=False, default=list)
 
@@ -82,6 +85,13 @@ class FeedCreateSerializer(serializers.Serializer):
         else:
             attrs["sources"] = []
         return attrs
+
+
+class FeedSetActiveSerializer(serializers.Serializer):
+    """PATCH /v1/feeds/<id> body: the pause/resume toggle. Just the one bit, so the
+    config / sources are untouched (a full PUT would re-validate + merge)."""
+
+    is_active = serializers.BooleanField()
 
 
 # ── Output ─────────────────────────────────────────────────────────────

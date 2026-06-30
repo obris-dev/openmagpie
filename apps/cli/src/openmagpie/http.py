@@ -244,6 +244,16 @@ class MagpieClient:
     ) -> Any:
         return self._authed_request("PUT", path, json_body=json_body or {}, params=params, headers=headers)
 
+    def patch(
+        self,
+        path: str,
+        *,
+        json_body: dict[str, Any] | None = None,
+        params: dict[str, Any] | None = None,
+        headers: dict[str, str] | None = None,
+    ) -> Any:
+        return self._authed_request("PATCH", path, json_body=json_body or {}, params=params, headers=headers)
+
     def delete(
         self,
         path: str,

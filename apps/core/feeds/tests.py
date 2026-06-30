@@ -156,6 +156,72 @@ class FeedItemAndSourceRouteTests(TestCase):
         self.assertEqual(self.client.get(f"/v1/feed-sources/{source_id}").status_code, 200)
 
 
+class FeedPauseResumeTests(TestCase):
+    """PATCH /v1/feeds/<id> toggles is_active (pause/resume) without touching config or
+    sources; create can start a feed paused; account-scoped."""
+
+    def setUp(self) -> None:
+        self.user = SignupOperation(email="fpr@example.com", password="Str0ng-Passw0rd!").run()
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.user)
+        resp = self.client.post(
+            "/v1/feeds",
+            {
+                "name": "f",
+                "kind": "curated",
+                "poll_interval_seconds": 300,
+                "data": {"retention_days": 30},
+                "sources": [{"spec": {"kind": "rss", "url": "https://a.test/rss", "name": "A"}}],
+            },
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 201, resp.content)
+        self.feed_id = resp.json()["id"]
+
+    def test_patch_pauses_and_resumes_keeping_sources(self) -> None:
+        resp = self.client.patch(f"/v1/feeds/{self.feed_id}", {"is_active": False}, format="json")
+        self.assertEqual(resp.status_code, 200, resp.content)
+        self.assertFalse(resp.json()["is_active"])
+        self.assertFalse(Feed.objects.get(id=self.feed_id).is_active)
+        # a pause is config-neutral: the source set survives (a PUT would replace it)
+        self.assertEqual(len(self.client.get(f"/v1/feeds/{self.feed_id}/sources").json()["items"]), 1)
+        resp = self.client.patch(f"/v1/feeds/{self.feed_id}", {"is_active": True}, format="json")
+        self.assertTrue(resp.json()["is_active"])
+
+    def test_create_paused(self) -> None:
+        resp = self.client.post(
+            "/v1/feeds",
+            {
+                "name": "p",
+                "kind": "curated",
+                "poll_interval_seconds": 300,
+                "is_active": False,
+                "data": {"retention_days": 30},
+            },
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 201, resp.content)
+        self.assertFalse(Feed.objects.get(id=resp.json()["id"]).is_active)
+
+    def test_put_without_is_active_resets_to_active(self) -> None:
+        # PUT is full-replace: omitting is_active takes the serializer default (True),
+        # exactly like an omitted poll_interval. The flag-only toggle is pause/resume.
+        self.client.patch(f"/v1/feeds/{self.feed_id}", {"is_active": False}, format="json")
+        resp = self.client.put(
+            f"/v1/feeds/{self.feed_id}",
+            {"name": "f", "kind": "curated", "poll_interval_seconds": 300, "data": {"retention_days": 30}},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 200, resp.content)
+        self.assertTrue(Feed.objects.get(id=self.feed_id).is_active)  # PUT-omit reset it to active
+
+    def test_account_isolation(self) -> None:
+        other = APIClient()
+        other.force_authenticate(user=SignupOperation(email="fpr-other@example.com", password="Str0ng-Passw0rd!").run())
+        self.assertEqual(other.patch(f"/v1/feeds/{self.feed_id}", {"is_active": False}, format="json").status_code, 404)
+        self.assertTrue(Feed.objects.get(id=self.feed_id).is_active)  # untouched
+
+
 class FeedItemPayloadUnionTests(SimpleTestCase):
     """`FeedItemWire.data` parses the connector payload dump into the typed
     `FeedItemData` union: a known `kind` resolves to its variant (typed

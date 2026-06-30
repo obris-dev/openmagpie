@@ -1,8 +1,9 @@
 """Create/edit/template authoring plumbing shared by feed + watch.
 
 The `--format` option helpers + the documented-template emitter + the dry-run
-contract guards. Byte-identical across the feed + watch command groups (only the
-noun / envelope class vary), so they live here once; the resource-specific
+contract guards + the edit-time pause-flip warning. Byte-identical across the
+feed + watch command groups (only the noun / envelope class vary), so they live
+here once; the resource-specific
 mutation flow (`_run_mutation` / `_print_*` / `_edit_seed`) stays per-module,
 where it differs in real ways a 2-caller parameterization would only obscure.
 """
@@ -78,3 +79,18 @@ def _parse_yaml_or_abort[T: BaseModel](text: str, envelope_cls: type[T]) -> T:
             path = ".".join(str(p) for p in err["loc"]) or "_"
             console.error(f"  {path}: {err['msg']}")
         raise typer.Exit(code=1) from None
+
+
+def _active_flip_note(*, current: bool, submitted: bool, noun: str, resource_id: str) -> str | None:
+    """Warn when a full-replace edit (PUT) flips is_active. YAML can't tell an OMITTED
+    is_active from an explicit `true` (both parse True), so an `-f` file that doesn't
+    mention it silently un-pauses a paused feed/watch. Returns the warning on a
+    pause-state flip (pointing at the direct verb), else None. The $EDITOR seed carries
+    the current value, so this only fires on a real change. Pure, so it's unit-testable."""
+    if current == submitted:
+        return None
+    verb = "resume" if submitted else "pause"
+    return (
+        f"This edit will {verb} the {noun} (is_active {current} -> {submitted}); a -f file that "
+        f"omits is_active defaults it to true. To change only the pause state: magpie {noun} {verb} {resource_id}"
+    )

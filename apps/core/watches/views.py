@@ -38,6 +38,7 @@ from .policy import PolicyError
 from .registry import KNOWN_KINDS
 from .serializers import (
     WatchCreateSerializer,
+    WatchSetActiveSerializer,
     watch_action_input_wire,
     watch_action_mutation,
     watch_action_wire,
@@ -164,6 +165,23 @@ class WatchDetailView(WatchScopedAPIView):
             return Response({"actions": [str(exc)]}, status=status.HTTP_400_BAD_REQUEST)
         except ConcurrentChainError as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
+
+    def patch(self, request, watch_id: str):
+        """Pause/resume: flip is_active only (the trigger pass skips inactive watches).
+        Distinct from PUT, which full-replaces the action chain. Deliberately returns
+        the detail view (watch_view), NOT the *_mutation envelope POST/PUT use: a
+        one-bit toggle has no dry-run, so the mutation/dry_run wrapper doesn't apply."""
+        serializer = WatchSetActiveSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        self.watch_svc.set_active(self.watch, is_active=serializer.validated_data["is_active"])
+        return Response(
+            watch_view(
+                self.watch,
+                feed_ids=self.watch_svc.feed_ids(self.watch),
+                actions=self.watch_svc.initial_actions(self.watch),
+            ).model_dump(mode="json"),
+            status=status.HTTP_200_OK,
+        )
 
     def delete(self, request, watch_id: str):
         self.watch_svc.delete(self.watch)

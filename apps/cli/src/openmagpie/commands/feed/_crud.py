@@ -21,6 +21,7 @@ from ...api.feed import FeedEnvelope, FeedMutationResponse, FeedView
 from ...context import AppContext, app_ctx
 from .._shared import (
     _abort_unexpected,
+    _active_flip_note,
     _check_format,
     _columns_option,
     _emit_columns_paginated,
@@ -34,9 +35,9 @@ from .._shared import (
     _print_columns_option,
     _read_file_or_abort,
     _transpose_option,
-    col,
 )
 from ._apps import FEED_TEMPLATE_YAML, feed_app
+from ._render import _FEED_COLUMNS, _print_feed
 
 # ── Template ───────────────────────────────────────────────────────────
 
@@ -172,13 +173,15 @@ def edit(
     else:
         body_text = _read_file_or_abort(file)
     body = _parse_yaml_or_abort(body_text, FeedEnvelope)
-    # The server discards `sources` on an edit (feed-level-only PUT). If the file
-    # carries sources that DIFFER from the feed's current set, that change would
-    # be silently lost - warn and point at the dedicated verb. (No nag when they
-    # already match: a full feed.yaml in sync shouldn't warn on a metadata edit.)
-    note = _sources_ignored_note(body, detail.sources, file, feed_id)
-    if note:
-        console.warn(note)
+    # Both guards below no-op on the $EDITOR path (its seed matches the live record);
+    # they fire only for an `-f` file that diverges. The PUT discards a changed sources
+    # block, and an omitted is_active defaults true (silently un-pausing).
+    sources_note = _sources_ignored_note(body, detail.sources, file, feed_id)
+    if sources_note:
+        console.warn(sources_note)
+    flip_note = _active_flip_note(current=detail.is_active, submitted=body.is_active, noun="feed", resource_id=feed_id)
+    if flip_note:
+        console.warn(flip_note)
     _run_mutation(ac, body, feed_id=feed_id, dry_run=dry_run, yes=yes)
 
 
@@ -204,18 +207,6 @@ def delete(
 
 
 # ── List ───────────────────────────────────────────────────────────────
-
-
-# Default `feed list` columns, as dot-paths into a feed record. POLL appends the
-# unit the value can't (`300s`); ACTIVE maps the bool to the same active/paused
-# label `feed get` shows, so list + detail agree. `fmt` is the per-cell hook.
-_FEED_COLUMNS = [
-    col("ID:id"),
-    col("NAME:name"),
-    col("KIND:kind"),
-    col("POLL:poll_interval_seconds", fmt=lambda v: f"{v}s"),
-    col("ACTIVE:is_active", fmt=console.active_or_paused),
-]
 
 
 @feed_app.command("list")
@@ -306,7 +297,7 @@ def _edit_seed(detail: FeedView) -> FeedEnvelope:
     naive `model_validate(detail.model_dump())`. The seed YAML
     rendered to $EDITOR would then carry a `sources:` block that the
     server's PUT path silently discards (FeedService.update reads
-    only name / poll_interval_seconds / data). Explicit pop is the
+    only name / poll_interval_seconds / is_active / data). Explicit pop is the
     right shape: source list changes go through `feed source set` /
     `delete`, and the operator should never see an editable
     sources block here."""
@@ -317,33 +308,3 @@ def _edit_seed(detail: FeedView) -> FeedEnvelope:
     for key in ("sources", "source_count", "summary"):
         body.pop(key, None)
     return FeedEnvelope.model_validate(body)
-
-
-def _sources_value(obj: FeedMutationResponse | FeedView) -> str:
-    """The `sources` cell: `(count) name, name, ...`. The table renderer
-    truncates the long list to the column cap (a 1093-source feed shows the
-    count + a peek, not the whole roster) ; the full list is `feed source list`.
-    `(count)` alone when rows aren't echoed (e.g. the create dry-run, which
-    reports the would-be count without materializing Source rows) or a 0 feed `(0)`."""
-    # SourceWire.spec is the typed SourceSpec union; use `.display()`
-    # (every variant implements it) ; `.get(...)` would AttributeError.
-    display = ", ".join(s.spec.display() for s in obj.sources)
-    return f"({obj.source_count}) {display}" if display else f"({obj.source_count})"
-
-
-def _print_feed(obj: FeedMutationResponse | FeedView, title: str) -> None:
-    """Render a feed's config as a pivoted FIELD | VALUE table (the shared
-    list renderer), so it reads like every other view and one long cell
-    (sources) truncates instead of blowing out the line."""
-    console.header(title)
-    rows: list[tuple[str, str]] = [
-        ("name", obj.name),
-        ("kind", obj.kind),
-        ("poll interval", f"{obj.poll_interval_seconds}s"),
-        ("sources", _sources_value(obj)),
-    ]
-    columns: list[console.Column[tuple[str, str]]] = [
-        console.Column("FIELD", lambda kv: kv[0], width=16),
-        console.Column("VALUE", lambda kv: kv[1], width=64),
-    ]
-    console.table(rows, columns)

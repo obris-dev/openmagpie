@@ -11,6 +11,7 @@
 name: my-feed
 kind: curated
 poll_interval_seconds: 300
+is_active: true        # set false to pause: the server stops polling this feed's sources
 
 data:
   retention_days: 30   # how long polled items are kept for reading

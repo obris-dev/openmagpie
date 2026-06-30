@@ -80,6 +80,12 @@ class WatchApi:
         raw = self._http.put(routes.watches.detail(watch_id), json_body=body, params=params)
         return WatchMutationResponse.model_validate(raw)
 
+    def set_active(self, watch_id: str, *, is_active: bool) -> WatchView:
+        """PATCH the active flag only (pause/resume): the trigger pass stops/starts
+        running this watch. No chain replace, unlike update()."""
+        raw = self._http.patch(routes.watches.detail(watch_id), json_body={"is_active": is_active})
+        return WatchView.model_validate(raw)
+
     def delete(self, watch_id: str) -> None:
         self._http.delete(routes.watches.detail(watch_id))
 

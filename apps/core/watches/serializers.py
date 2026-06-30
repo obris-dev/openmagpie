@@ -106,6 +106,13 @@ class WatchCreateSerializer(serializers.Serializer):
             raise serializers.ValidationError({"feed_ids": errors})
 
 
+class WatchSetActiveSerializer(serializers.Serializer):
+    """PATCH /v1/watches/<id> body: the pause/resume toggle. Just the one bit, so the
+    feed set + action chain are untouched (a full PUT would replace the chain)."""
+
+    is_active = serializers.BooleanField()
+
+
 # ── Output ─────────────────────────────────────────────────────────────
 
 

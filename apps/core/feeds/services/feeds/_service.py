@@ -99,8 +99,10 @@ class FeedService:
         kind: str,
         poll_interval_seconds: int,
         data: dict[str, Any],
+        is_active: bool = True,
     ) -> Feed:
-        """Validate inputs and return an UNSAVED Feed (dry-run preview)."""
+        """Validate inputs and return an UNSAVED Feed (dry-run preview). `is_active`
+        False creates the feed paused (the poll pass skips inactive feeds)."""
         validated = validate_config(kind, data)
         normalized_data = validated.model_dump(mode="json")
         return Feed(
@@ -110,6 +112,7 @@ class FeedService:
             name=name,
             poll_interval_seconds=poll_interval_seconds,
             data=normalized_data,
+            is_active=is_active,
         )
 
     def create(
@@ -120,6 +123,7 @@ class FeedService:
         kind: str,
         poll_interval_seconds: int,
         data: dict[str, Any],
+        is_active: bool = True,
         # builtins.list: the class defines a `list` method that shadows the
         # builtin in annotation scope.
         sources: builtins.list[SourceInput] | None = None,
@@ -137,6 +141,7 @@ class FeedService:
             kind=kind,
             poll_interval_seconds=poll_interval_seconds,
             data=data,
+            is_active=is_active,
         )
         with transaction.atomic():
             feed.save()
@@ -152,9 +157,15 @@ class FeedService:
         name: str,
         poll_interval_seconds: int,
         data: dict[str, Any],
+        is_active: bool,
     ) -> Feed:
         """Validate an edit, apply to the EXISTING feed (unsaved). `kind`
-        is immutable (changing it would swap the config schema)."""
+        is immutable (changing it would swap the config schema). `is_active`
+        toggles polling (False pauses); it's a required ARG here (no service-level
+        default) so update()'s full replace always states it. NOTE the PUT wire is
+        full-replace: its serializer defaults is_active to True, so a PUT body that
+        OMITS it resets the feed to active (same as an omitted poll_interval). The
+        targeted, flag-only toggle is set_active() (PATCH / `feed pause|resume`)."""
         self._assert_scope(str(feed.account_id), "feed")
 
         # parse_config = shape only. Policy runs on the MERGE OUTPUT (what
@@ -171,6 +182,7 @@ class FeedService:
 
         feed.name = name
         feed.poll_interval_seconds = poll_interval_seconds
+        feed.is_active = is_active
         feed.data = merged.model_dump(mode="json")
         return feed
 
@@ -182,9 +194,21 @@ class FeedService:
         name: str,
         poll_interval_seconds: int,
         data: dict[str, Any],
+        is_active: bool,
     ) -> Feed:
-        feed = self.build_update(feed, name=name, poll_interval_seconds=poll_interval_seconds, data=data)
-        feed.save(update_fields=["name", "poll_interval_seconds", "data", "updated_at"])
+        feed = self.build_update(
+            feed, name=name, poll_interval_seconds=poll_interval_seconds, data=data, is_active=is_active
+        )
+        feed.save(update_fields=["name", "poll_interval_seconds", "is_active", "data", "updated_at"])
+        return feed
+
+    def set_active(self, feed: Feed, /, *, is_active: bool) -> Feed:
+        """Pause/resume: flip is_active ONLY, touching no config or sources. The poll
+        pass skips inactive feeds, so this is the whole 'stop/start syncing' op. A
+        lightweight alternative to update() (which re-validates + merges the config)."""
+        self._assert_scope(str(feed.account_id), "feed")
+        feed.is_active = is_active
+        feed.save(update_fields=["is_active", "updated_at"])
         return feed
 
     def delete(self, feed: Feed, /) -> None:

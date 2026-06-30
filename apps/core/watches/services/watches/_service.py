@@ -156,6 +156,12 @@ class WatchService:
         """Full-replace edit of the aggregate: watch scalars, the feed
         subscription set, and the action chain. `actions` are pre-validated.
 
+        NOTE the PUT wire is full-replace: its serializer defaults is_active to True,
+        so a PUT body that OMITS it resets the watch to active (the same full-replace
+        rule by which an omitted feed_ids / actions resets the subscription set /
+        chain to empty). The targeted, flag-only toggle is set_active() (PATCH /
+        `watch pause|resume`), which leaves the chain and feeds untouched.
+
         Two scopes, not one: the scalar + feed writes are one transaction;
         the chain replace is a SEPARATE lock+transaction owned by
         `replace_chain` (the chain lock serializes against concurrent
@@ -175,6 +181,16 @@ class WatchService:
             self._set_feeds(watch, feed_ids)
 
         self.action_svc.replace_chain(path_id=path_id, actions=actions)
+        return watch
+
+    def set_active(self, watch: Watch, /, *, is_active: bool) -> Watch:
+        """Pause/resume: flip is_active ONLY. Deliberately NOT update(), which
+        full-replaces the chain (recreating action rows + disconnecting run history)
+        for what should be a one-bit toggle. The trigger pass (`iter_active`) only
+        iterates active watches, so a paused watch simply stops triggering."""
+        self._assert_scope(str(watch.account_id), "watch")
+        watch.is_active = is_active
+        watch.save(update_fields=["is_active", "updated_at"])
         return watch
 
     def delete(self, watch: Watch, /) -> None:

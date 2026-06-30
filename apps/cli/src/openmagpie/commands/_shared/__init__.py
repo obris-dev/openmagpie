@@ -17,6 +17,7 @@ keeps it internal to the commands package, not a public surface.
 from .authoring import (
     FORMAT_CHOICES,
     _abort_unexpected,
+    _active_flip_note,
     _check_format,
     _emit_doc,
     _parse_yaml_or_abort,
@@ -52,6 +53,7 @@ __all__ = [
     "_Col",
     "_Page",
     "_abort_unexpected",
+    "_active_flip_note",
     "_as_enum",
     "_build_windows",
     "_check_choice",

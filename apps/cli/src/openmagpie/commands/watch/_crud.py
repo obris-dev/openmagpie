@@ -20,6 +20,7 @@ from ...api.watch import WatchActionWire, WatchInput, WatchMutationResponse, Wat
 from ...context import AppContext, app_ctx
 from .._shared import (
     _abort_unexpected,
+    _active_flip_note,
     _check_format,
     _columns_option,
     _emit_columns_paginated,
@@ -33,9 +34,9 @@ from .._shared import (
     _print_columns_option,
     _read_file_or_abort,
     _transpose_option,
-    col,
 )
 from ._apps import WATCH_TEMPLATE_YAML, watch_app
+from ._render import _WATCH_COLUMNS, _print_watch
 
 # ── Template ───────────────────────────────────────────────────────────
 
@@ -122,6 +123,12 @@ def edit(
     else:
         body_text = _read_file_or_abort(file)
     body = _parse_yaml_or_abort(body_text, WatchInput)
+    # A full-replace PUT resumes a paused watch if the body's is_active is true, and an
+    # -f file that omits it defaults it true, so warn on the flip (the $EDITOR seed
+    # carries the current value, so this only fires for a real change).
+    flip = _active_flip_note(current=detail.is_active, submitted=body.is_active, noun="watch", resource_id=watch_id)
+    if flip:
+        console.warn(flip)
     _run_mutation(ac, body, watch_id=watch_id, dry_run=dry_run, yes=yes, current_actions=detail.actions)
 
 
@@ -147,18 +154,6 @@ def delete(
 
 
 # ── List ───────────────────────────────────────────────────────────────
-
-
-# Default `watch list` columns, as dot-paths into a watch record. ACTIVE maps the
-# bool to the same active/paused label `watch get` shows; FEEDS is a list of feed
-# ids the renderer joins with `, ` (scalars), not a JSON array. Empty cells render
-# `-` on both surfaces (the uniform table convention; `get` aligns to it too).
-_WATCH_COLUMNS = [
-    col("ID:id"),
-    col("NAME:name"),
-    col("ACTIVE:is_active", fmt=console.active_or_paused),
-    col("FEEDS:feed_ids"),
-]
 
 
 @watch_app.command("list")
@@ -289,33 +284,3 @@ def _action_recreate_note(
         "If you didn't mean to drop them, add `id: <id>` to the actions you want to keep, "
         "or use `magpie watch action edit <id>`."
     )
-
-
-def _print_watch(obj: WatchMutationResponse | WatchView, title: str) -> None:
-    """Render a watch's config as a pivoted FIELD | VALUE table (the shared
-    list renderer, matching feed get), then the action chain as its own
-    table. is_active rides in the title, so it's not repeated as a row."""
-    console.header(title)
-    config_rows: list[tuple[str, str]] = [
-        ("name", obj.name),
-        ("feeds", ", ".join(obj.feed_ids) or console.EMPTY),
-        ("chain", f"{len(obj.actions)} action(s)"),
-    ]
-    config_columns: list[console.Column[tuple[str, str]]] = [
-        console.Column("FIELD", lambda kv: kv[0], width=16),
-        # Uncapped: `feeds` is comma-joined feed ids, and there is no other
-        # command that lists a watch's feed ids in full, so hiding them behind
-        # an ellipsis strands the user. (Unlike feed get's `sources`, which is
-        # a deliberate summary backed by `feed source list`.)
-        console.Column("VALUE", lambda kv: kv[1], width=0),
-    ]
-    console.table(config_rows, config_columns)
-    if not obj.actions:
-        return
-    console.log("")  # blank line between the config + chain tables
-    chain_columns: list[console.Column[WatchActionWire]] = [
-        console.Column("RANK", lambda a: str(a.rank)),
-        console.Column("KIND", lambda a: a.kind),
-        console.Column("SUMMARY", lambda a: a.summary.detail or console.EMPTY),
-    ]
-    console.table(obj.actions, chain_columns)
