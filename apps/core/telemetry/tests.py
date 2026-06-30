@@ -1,11 +1,13 @@
 """Telemetry tests, focused on the privacy-critical contract.
 
-The load-bearing properties: nothing is emitted unless the instance is in
-ANONYMOUS mode, DO_NOT_TRACK is honored, the capture path never raises, the
-instance_id is anonymous + stable, IDENTIFIED is refused on self-hosted, the
-surface tag can't be spoofed, and the setter is owner-only.
+The load-bearing properties: telemetry is opt-OUT, so the UNSET default and
+ANONYMOUS both emit and only an explicit OFF is silent; DO_NOT_TRACK is honored,
+the capture path never raises, the instance_id is anonymous + stable, IDENTIFIED
+is refused on self-hosted, the surface tag can't be spoofed, and the setter is
+owner-only.
 """
 
+import io
 import os
 from unittest import mock
 
@@ -26,10 +28,14 @@ from telemetry.views import TelemetryView
 
 class CaptureGatingTests(TestCase):
     @mock.patch("telemetry.client.get_client")
-    def test_no_op_when_unset(self, get_client):
+    def test_emits_by_default_when_unset(self, get_client):
         fake = get_client.return_value
-        client.capture("e")  # default mode is UNSET
-        fake.capture.assert_not_called()
+        client.capture("e")  # opt-OUT: the default UNSET mode emits
+        fake.capture.assert_called_once()
+        args, kwargs = fake.capture.call_args
+        self.assertEqual(args[0], "e")
+        # the instance_id is minted at row creation, so the default row has one
+        self.assertEqual(kwargs["distinct_id"], TelemetrySettings.current().instance_id)
 
     @mock.patch("telemetry.client.get_client")
     def test_no_op_when_off(self, get_client):
@@ -38,6 +44,18 @@ class CaptureGatingTests(TestCase):
         fake.capture.reset_mock()
         client.capture("e")
         fake.capture.assert_not_called()
+
+    @mock.patch("telemetry.client.get_client")
+    def test_emits_when_identified(self, get_client):
+        # The send/no-send gate is deployment-agnostic (emit unless OFF), so IDENTIFIED
+        # -- the hosted, account-keyed mode -- emits too. set_mode refuses it on
+        # self-hosted; the gate never special-cases it (how it's keyed is capture's job).
+        fake = get_client.return_value
+        row = TelemetrySettings.current()
+        TelemetrySettings.objects.filter(pk=row.pk).update(mode=TelemetryMode.IDENTIFIED.value)
+        fake.capture.reset_mock()
+        client.capture("e")
+        fake.capture.assert_called_once()
 
     @mock.patch("telemetry.client.get_client")
     def test_emits_when_anonymous(self, get_client):
@@ -94,14 +112,23 @@ class InstanceIdAndModeTests(TestCase):
         self.assertEqual(TelemetryService.Global.set_enabled(enabled=False).mode, TelemetryMode.OFF.value)
 
     @mock.patch("telemetry.client.get_client")
-    def test_opt_in_emits_telemetry_enabled_once(self, get_client):
+    def test_reenable_after_off_emits_telemetry_enabled_once(self, get_client):
         fake = get_client.return_value
-        TelemetryService.Global.set_mode(TelemetryMode.ANONYMOUS.value)
-        events_sent = [c.args[0] for c in fake.capture.call_args_list]
-        self.assertIn("telemetry_enabled", events_sent)
+        TelemetryService.Global.set_mode(TelemetryMode.OFF.value)  # opt out first
+        fake.capture.reset_mock()
+        TelemetryService.Global.set_mode(TelemetryMode.ANONYMOUS.value)  # off -> anonymous: a real re-enable
+        self.assertIn("telemetry_enabled", [c.args[0] for c in fake.capture.call_args_list])
         fake.capture.reset_mock()
         TelemetryService.Global.set_mode(TelemetryMode.ANONYMOUS.value)  # already anonymous -> no re-emit
         fake.capture.assert_not_called()
+
+    @mock.patch("telemetry.client.get_client")
+    def test_affirming_the_default_does_not_emit_telemetry_enabled(self, get_client):
+        # unset already emits (opt-out); unset -> anonymous changes nothing observable,
+        # so it must not fire a "turned on" event.
+        fake = get_client.return_value
+        TelemetryService.Global.set_mode(TelemetryMode.ANONYMOUS.value)  # from the unset default
+        self.assertNotIn("telemetry_enabled", [c.args[0] for c in fake.capture.call_args_list])
 
 
 class GuardTests(SimpleTestCase):
@@ -174,6 +201,8 @@ class TelemetryEndpointTests(TestCase):
         force_authenticate(req, user=self._owner("owner-get@x.io"))
         resp = TelemetryView.as_view()(req)
         self.assertTrue(resp.data["can_set"])
+        # Server computes emission (the CLI can't): opt-out default (unset) is emitting.
+        self.assertTrue(resp.data["emitting"])
 
     @mock.patch("telemetry.client.get_client")
     def test_setter_forbidden_for_non_owner(self, _):
@@ -191,6 +220,8 @@ class TelemetryEndpointTests(TestCase):
         resp = TelemetryView.as_view()(req)
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.data["mode"], TelemetryMode.ANONYMOUS.value)
+        # POST returns emitting like GET (not the null "old server" sentinel).
+        self.assertTrue(resp.data["emitting"])
 
     @mock.patch("telemetry.client.get_client")
     def test_setter_rejects_missing_enabled(self, _):
@@ -216,11 +247,12 @@ class TelemetryEndpointTests(TestCase):
 
 class HeartbeatThrottleTests(TestCase):
     """The heartbeat rides the pipeline tickers, so it must self-throttle: a no-op
-    when not opted in, and at most one emit per window however often it's called."""
+    when opted out (OFF), and at most one emit per window however often it's called."""
 
     @mock.patch("telemetry.client.get_client")
-    def test_no_op_when_not_opted_in(self, get_client):
-        call_command("emit_telemetry_heartbeat")  # default mode is UNSET
+    def test_no_op_when_off(self, get_client):
+        TelemetryService.Global.set_mode(TelemetryMode.OFF.value)  # opt-OUT: only OFF is silent
+        call_command("emit_telemetry_heartbeat")
         get_client.return_value.capture.assert_not_called()
         self.assertIsNone(TelemetrySettings.current().last_heartbeat_at)
 
@@ -231,8 +263,7 @@ class HeartbeatThrottleTests(TestCase):
     @mock.patch("telemetry.client.get_client")
     def test_emits_once_then_throttles_within_window(self, get_client, _engine):
         fake = get_client.return_value
-        TelemetryService.Global.set_mode(TelemetryMode.ANONYMOUS.value)
-        fake.capture.reset_mock()  # drop the telemetry_enabled emit from opt-in
+        # opt-OUT: the default UNSET mode emits, no explicit opt-in needed
 
         call_command("emit_telemetry_heartbeat")
         self.assertIn("instance_heartbeat", [c.args[0] for c in fake.capture.call_args_list])
@@ -243,6 +274,36 @@ class HeartbeatThrottleTests(TestCase):
         call_command("emit_telemetry_heartbeat")  # again, within _MIN_INTERVAL
         self.assertNotIn("instance_heartbeat", [c.args[0] for c in fake.capture.call_args_list])
         self.assertEqual(TelemetrySettings.current().last_heartbeat_at, stamped)
+
+
+class StatusCommandTests(TestCase):
+    """`telemetry status` is the transparency surface TELEMETRY.md points operators
+    at, so its `emitting:` line must track the real (opt-out) gate, not a stale copy
+    of it (this regressed once: it kept gating on is_anonymous after the flip)."""
+
+    @override_settings(POSTHOG_API_KEY="phc_test")
+    def test_default_unset_reports_emitting_yes(self):
+        out = io.StringIO()
+        call_command("telemetry", "status", stdout=out)  # opt-out: the default emits
+        self.assertRegex(out.getvalue(), r"emitting:\s+yes")
+
+    @override_settings(POSTHOG_API_KEY="phc_test")
+    def test_off_reports_emitting_no(self):
+        TelemetryService.Global.set_mode(TelemetryMode.OFF.value)
+        out = io.StringIO()
+        call_command("telemetry", "status", stdout=out)
+        self.assertRegex(out.getvalue(), r"emitting:\s+no")
+
+
+class TestRunnerGuardTests(SimpleTestCase):
+    def test_posthog_sdk_is_stubbed_for_the_whole_suite(self):
+        # The custom TEST_RUNNER (conf.test_runner) patches posthog.Posthog so opt-out
+        # telemetry (the UNSET default emits) can't ship real events from a throwaway
+        # test DB. If this fails, the suite is one un-mocked capture() away from emitting
+        # to the shared project -- the regression flipping to opt-out introduced.
+        import posthog
+
+        self.assertIsInstance(posthog.Posthog, mock.MagicMock)
 
 
 class GetClientTests(SimpleTestCase):

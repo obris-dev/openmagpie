@@ -83,12 +83,12 @@ class FeedListCreateView(FeedSvcMixin, AccountScopedAPIView):
             data=d["data"],
             sources=d.get("sources") or None,
         )
-        # Anonymous telemetry (no-op unless opted in). Emitted from this API seam,
+        # Anonymous telemetry (no-op only when opted out). Emitted from this API seam,
         # not the service layer, so the canned quickstart seed (which creates feeds
         # via the service) isn't counted as a user-created feed -- quickstart_completed
         # covers the install. Guarded so a telemetry hiccup never fails the create.
         with telemetry_events.guard():
-            if telemetry_events.enabled():  # gather only when opted in (skips the Source query when off)
+            if telemetry_events.enabled():  # gather only when emitting (skips the Source query when off)
                 kinds = [s.kind for s in self.feed_svc.source_svc.list(feed)]
                 telemetry_events.feed_created(
                     source_count=len(kinds),

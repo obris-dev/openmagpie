@@ -1,8 +1,9 @@
 """PostHog client wrapper: the single choke point for emitting telemetry.
 
 Everything goes through `capture`, which enforces the privacy contract: it emits
-ONLY when the instance is in ANONYMOUS mode (the sole self-hosted "on" state),
-`DO_NOT_TRACK` is unset, and an ingestion key is configured. It attaches the
+UNLESS the instance is explicitly OFF (telemetry is opt-OUT, so the UNSET default
+and ANONYMOUS both emit), `DO_NOT_TRACK` is unset, and an ingestion key is
+configured. It attaches the
 anonymous `instance_id` as the distinct_id plus the product version, and it
 NEVER raises: a telemetry failure must never disturb the request / poll / drain
 path it is called from. Telemetry is uniformly best-effort -- every emit path
@@ -88,11 +89,12 @@ def _product_version() -> str:
 
 
 def enabled() -> bool:
-    """Whether telemetry will actually emit: opted into ANONYMOUS, DO_NOT_TRACK
+    """Whether telemetry will actually emit: NOT explicitly OFF, DO_NOT_TRACK
     unset, and an ingestion key configured. A hot call site can check this to skip
     expensive prop-gathering before it builds an event (capture() re-checks too).
-    UNSET / OFF emit nothing (opt-in); IDENTIFIED is hosted-only + refused on
-    self-hosted, so ANONYMOUS is the only emitting mode here."""
+    Telemetry is opt-OUT and the mode gate is deployment-agnostic: every mode emits
+    except an explicit OFF (IDENTIFIED is an on mode too, just refused by set_mode on
+    self-hosted; how an event is keyed is capture()'s concern, not this gate's)."""
     # Free checks first (env var + settings string). A stock install ships the
     # baked-in key, so POSTHOG_API_KEY is non-empty and this falls through to the
     # singleton read on every call (only a keyless / DO_NOT_TRACK install skips the
@@ -100,7 +102,7 @@ def enabled() -> bool:
     # drain or a user-driven create -- so it's deliberately left uncached.
     if do_not_track() or not settings.POSTHOG_API_KEY:
         return False
-    return TelemetrySettings.current().is_anonymous
+    return TelemetrySettings.current().is_emitting
 
 
 def capture(event: str, properties: dict[str, Any] | None = None) -> None:
@@ -112,10 +114,11 @@ def capture(event: str, properties: dict[str, Any] | None = None) -> None:
         if do_not_track() or not settings.POSTHOG_API_KEY:
             return
         row = TelemetrySettings.current()
-        # `not instance_id` defends an anonymous row whose id was never minted (a
-        # restored backup / hand-edited row): a distinct_id="" would lump every such
-        # install under one empty id. set_mode always mints it on the normal path.
-        if not row.is_anonymous or not row.instance_id:
+        # Opt-OUT: emit unless the operator set OFF (`row.is_emitting`). `not instance_id`
+        # defends a row whose id was never minted (a restored backup / hand-edited
+        # row): a distinct_id="" would lump every such install under one empty id.
+        # current() mints it at creation.
+        if not row.is_emitting or not row.instance_id:
             return
         client = get_client()
         if client is None:

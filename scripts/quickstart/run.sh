@@ -78,28 +78,19 @@ if ! is_truthy "${SKIP_DATA_SEED:-}"; then
     OPENMAGPIE_QUICKSTART=1 sh ./scripts/quickstart/tick.sh
 fi
 
-# Offer anonymous, opt-in telemetry (stays off unless accepted). Only prompt with
-# a real terminal attached: under curl|sh stdin is the pipe, so read from /dev/tty
-# (same guard as configure_engine). Piped / CI / headless -> skip, stays off.
-if [ -t 1 ] && [ -r /dev/tty ]; then
-    printf '\n%s\n' "Help improve OpenMagpie? Share ANONYMOUS usage so we can prioritize what to build."
-    printf '%s\n' "  It's anonymous: never your content or any personal data, and off until you opt in."
-    printf '%s\n' "  What it collects + how to disable: apps/core/TELEMETRY.md"
-    printf '  Enable anonymous telemetry? [y/N]: ' > /dev/tty
-    IFS= read -r _tel < /dev/tty || _tel=""
-    case "$_tel" in
-        [Yy]*)
-            if manage telemetry enable >/dev/null 2>&1; then
-                printf '%s\n' "  Thanks! Anonymous telemetry is on (turn it off any time; see apps/core/TELEMETRY.md)."
-            else
-                printf '%s\n' "  (couldn't enable telemetry; continuing anyway)"
-            fi
-            ;;
-    esac
+# Anonymous telemetry is opt-OUT (on by default). Print a one-time NOTICE only when
+# stdout is a real terminal (`[ -t 1 ]`). Under curl|sh only stdin is the pipe, so
+# stdout is still the terminal and the notice DOES print (intended); it's skipped only
+# when stdout itself isn't a tty (output redirected to a file, some CI). Telemetry
+# stays on regardless (turn it off with `telemetry disable` or DO_NOT_TRACK=1).
+if [ -t 1 ]; then
+    printf '\n%s\n' "OpenMagpie collects ANONYMOUS usage telemetry (no content, no personal data) to help prioritize what to build."
+    printf '%s\n' "  It's on by default. Turn it off any time: magpie telemetry disable (or DO_NOT_TRACK=1)."
+    printf '%s\n' "  What it collects and how to disable: apps/core/TELEMETRY.md"
 fi
 
-# Quickstart funnel completion. Emitted unconditionally; a no-op unless the
-# operator opted into telemetry just above (capture gates on mode).
+# Quickstart funnel completion. Emitted unconditionally; rides the opt-out default,
+# so it's a no-op only if telemetry was turned off (capture gates on mode).
 manage emit_quickstart_completed >/dev/null 2>&1 || true
 
 # Final summary, printed LAST so the CLI commands + login don't scroll off behind

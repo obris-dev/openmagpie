@@ -63,10 +63,13 @@ class Config(BaseModel):
     refresh_token: str | None = None
     token_expires_at: datetime | None = None
     user: UserInfo | None = None
-    # Whether this machine's CLI has already offered the (server-side) telemetry
-    # opt-in after a login, so we don't re-ask. A UX flag only; the real decision
-    # lives server-side (apps/core/telemetry), not here.
-    telemetry_prompted: bool = False
+    # Whether this machine's CLI has shown the telemetry OPT-OUT disclosure after a
+    # login, so we don't repeat it. Deliberately NOT the retired opt-in "prompted"
+    # flag: that one got set for owners who DECLINED the old opt-in, so reusing it
+    # would suppress the new disclosure for the exact people now silently emitting
+    # under opt-out. A fresh field defaults False for everyone on upgrade, so they get
+    # disclosed once. UX-only; the real decision lives server-side (apps/core/telemetry).
+    telemetry_disclosed: bool = False
 
     @property
     def is_authenticated(self) -> bool:

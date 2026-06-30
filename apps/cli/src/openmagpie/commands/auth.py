@@ -19,7 +19,7 @@ from ..context import app_config, app_ctx
 from ..http import ApiError, AuthError
 from ._shared import _unreachable_message
 from .auth_token import token_app
-from .telemetry import prompt_after_login
+from .telemetry import notice_after_login
 
 auth_app = typer.Typer(no_args_is_help=True)
 
@@ -130,7 +130,7 @@ def _login_with_token() -> None:
         console.error(_unreachable_message(e))
         raise typer.Exit(code=1) from None
     _print_signed_in(me.email)
-    prompt_after_login(ac)
+    notice_after_login(ac)
 
 
 @auth_app.command("login")
@@ -238,7 +238,7 @@ def login(
             if isinstance(poll, DeviceSessionCompleted):
                 ac.sign_in(poll)
                 _print_signed_in(poll.user.email)
-                prompt_after_login(ac)
+                notice_after_login(ac)
                 return
             if isinstance(poll, DeviceSessionExpired):
                 console.error("Session expired.")

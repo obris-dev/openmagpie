@@ -93,7 +93,7 @@ class WatchListCreateView(WatchSvcMixin, AccountScopedAPIView):
             return Response({"actions": [str(exc)]}, status=status.HTTP_400_BAD_REQUEST)
         except ConcurrentChainError as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
-        # Anonymous telemetry (no-op unless opted in). Emitted from this API seam,
+        # Anonymous telemetry (no-op only when opted out). Emitted from this API seam,
         # not the service, so the quickstart seed isn't counted (quickstart_completed
         # covers the install). No enabled() pre-gate like feed_created: the props are
         # already in memory (no query to skip) and capture() self-gates. Guarded so a

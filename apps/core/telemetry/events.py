@@ -61,7 +61,9 @@ def enabled() -> bool:
 
 
 def telemetry_enabled() -> None:
-    """The opt-in moment (consent just given) -- the clean numerator event."""
+    """Fires on a genuine re-enable (off -> anonymous): telemetry turned back ON after
+    an explicit OFF. The opt-out default (unset) already emits, so affirming it
+    (unset -> anonymous) is no emission change and does NOT fire this."""
     client.capture("telemetry_enabled")
 
 
@@ -85,9 +87,9 @@ def first_match(*, action_kind: str, surface: str) -> None:
 
 
 def quickstart_completed(*, surface: str) -> None:
-    """Quickstart finished successfully (emitted post-consent, so it only sends
-    if the operator opted in). Pairs with the consent-free /install.sh hit count
-    for the quickstart funnel (started -> completed)."""
+    """Quickstart finished successfully (opt-out, so it sends unless the operator
+    turned telemetry off). Pairs with the unconditional /install.sh hit count for
+    the quickstart funnel (started -> completed)."""
     client.capture("quickstart_completed", {"surface": surface})
 
 

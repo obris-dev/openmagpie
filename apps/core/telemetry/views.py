@@ -18,6 +18,7 @@ from rest_framework.views import APIView
 from accounts.services import AccountService, UserProfileService
 from openmagpie_schema.telemetry import TelemetryState
 
+from . import client
 from .models import TelemetrySettings
 from .serializers import TelemetryConsentInput
 from .service import TelemetryService
@@ -41,7 +42,11 @@ class TelemetryView(APIView):
 
     def get(self, request):
         # can_set lets a client (the CLI) prompt only the owner who can act on it.
-        state = TelemetryState(mode=TelemetrySettings.current().mode, can_set=_is_owner(request.user))
+        state = TelemetryState(
+            mode=TelemetrySettings.current().mode,
+            can_set=_is_owner(request.user),
+            emitting=client.enabled(),  # server-only gate (mode + DO_NOT_TRACK + key); a client can't derive it
+        )
         return Response(state.model_dump())
 
     def post(self, request):
@@ -53,5 +58,6 @@ class TelemetryView(APIView):
         serializer = TelemetryConsentInput(data=request.data)
         serializer.is_valid(raise_exception=True)
         row = TelemetryService.Global.set_enabled(enabled=serializer.validated_data["enabled"])
-        # can_set is True: we just passed the owner gate above.
-        return Response(TelemetryState(mode=row.mode, can_set=True).model_dump())
+        # can_set is True: we just passed the owner gate above. Include emitting like GET
+        # does, so the POST response isn't wire-indistinguishable from an old server (null).
+        return Response(TelemetryState(mode=row.mode, can_set=True, emitting=client.enabled()).model_dump())

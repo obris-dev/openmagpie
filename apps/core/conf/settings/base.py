@@ -386,17 +386,23 @@ SOURCE_CHALLENGE_BYPASS_URL = os.environ.get("SOURCE_CHALLENGE_BYPASS_URL", "")
 # trade-off.
 SOURCE_ALLOW_INSECURE_TLS = env_bool("SOURCE_ALLOW_INSECURE_TLS", "false")
 
-# Product telemetry (anonymous, opt-in; see apps/core/telemetry + TELEMETRY.md).
+# Product telemetry (anonymous, opt-out; see apps/core/telemetry + TELEMETRY.md).
 # POSTHOG_API_KEY defaults to the baked-in PUBLIC, WRITE-ONLY PostHog project key
-# (OpenMagpie's anonymous self-hosted project, PostHog Cloud US) so an opt-in
-# self-hoster reaches our project with zero config -- the same kind of capture-only
-# key every PostHog-instrumented web page exposes in page source (it cannot read
-# data or administer the project). Override via env to route to your own PostHog,
-# or set it empty to hard-disable ingestion. The real gate is the telemetry mode
-# (off / anonymous), default UNSET, which emits nothing until an operator opts in.
+# (OpenMagpie's anonymous self-hosted project, PostHog Cloud US) so a self-hoster
+# reaches our project with zero config -- the same kind of capture-only key every
+# PostHog-instrumented web page exposes in page source (it cannot read data or
+# administer the project). Override via env to route to your own PostHog, or set it
+# empty to hard-disable ingestion. The real gate is the telemetry mode (off /
+# anonymous), default UNSET, which emits by default until an operator opts out (off).
 # Personal/admin keys never live in the repo.
 POSTHOG_API_KEY = os.environ.get("POSTHOG_API_KEY", "phc_mVK4VyhTsbamByvtK42fPQH47irS9fbZMrarsaGP8bw6")
 POSTHOG_HOST = os.environ.get("POSTHOG_HOST", "https://us.i.posthog.com")
+
+# Telemetry is opt-OUT + the key is baked in, so a test DB's UNSET singleton would
+# otherwise emit real events to the shared project (many tests fire telemetry without
+# mocking the client). This runner stubs the PostHog SDK for the whole suite so
+# `manage.py test` (local + CI) can never send. See conf/test_runner.py.
+TEST_RUNNER = "conf.test_runner.NoTelemetryTestRunner"
 
 # ── Logging ────────────────────────────────────────────────────────────
 #

@@ -5,7 +5,7 @@ Shared, zero-Django source of truth for the telemetry mode and the
 the CLI compare against `TelemetryMode`, so the values live here and neither side
 hard-codes the strings. `TelemetryState.mode` stays a plain `str` on the wire
 (forward-compatible: an older CLI talking to a newer server with an unknown mode
-just doesn't match `UNSET` and skips the prompt, rather than failing to parse).
+just doesn't match `UNSET` and skips the notice, rather than failing to parse).
 """
 
 from enum import StrEnum
@@ -16,12 +16,14 @@ from pydantic import BaseModel
 class TelemetryMode(StrEnum):
     """How an instance reports product telemetry.
 
-    - UNSET: never asked. Emits NOTHING (so opt-in holds) but signals that an
-      interactive entry point (quickstart, first admin CLI login) should prompt.
-      Distinct from OFF so "not asked yet" is not confused with "declined".
-    - OFF: explicitly opted out. Emits nothing, never re-prompted.
-    - ANONYMOUS: opted in to anonymous telemetry, keyed by a random instance_id
-      (no account, no PII). The only "on" mode self-hosted uses.
+    - UNSET: the default, never explicitly chosen. EMITS anonymous telemetry
+      (opt-OUT) and signals that an interactive entry point (quickstart, first
+      admin CLI login) should show the one-time disclosure notice. Distinct from
+      OFF so "default / not yet decided" is not confused with "explicitly declined".
+    - OFF: explicitly opted out. Emits nothing, never re-notified.
+    - ANONYMOUS: explicitly kept on. Same anonymous emission as UNSET, keyed by a
+      random instance_id (no account, no PII). Self-hosted emits in UNSET (default)
+      and ANONYMOUS; only OFF is silent.
     - IDENTIFIED: account-keyed telemetry, reserved for the future hosted product
       (built with it, against the real account model). Refused on self-hosted.
     """
@@ -33,7 +35,8 @@ class TelemetryMode(StrEnum):
 
 
 class TelemetryState(BaseModel):
-    """The instance's telemetry mode + whether this user may change it.
+    """The instance's telemetry mode, whether this user may change it (`can_set`), and
+    the server-computed `emitting` (will an event actually send right now; see the field).
 
     The `is_*` helpers keep callers off the raw `mode` string -- the enum
     comparison happens once, here, so a consumer reads `state.is_unset` rather
@@ -42,6 +45,11 @@ class TelemetryState(BaseModel):
 
     mode: str
     can_set: bool
+    # Server-computed "will an event actually send right now": the same gate capture()
+    # uses (opt-out mode AND DO_NOT_TRACK unset AND a configured key). All three are
+    # server-side, so a client can't derive it; `None` only when talking to a server too
+    # old to report it. Lets the CLI status show that e.g. `unset` means on-and-sending.
+    emitting: bool | None = None
 
     @property
     def is_unset(self) -> bool:

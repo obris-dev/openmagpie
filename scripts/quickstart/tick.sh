@@ -62,7 +62,7 @@ fi
 
 # Heartbeat after the tick, mirroring `make local-tick` (this script is local-tick
 # minus the hosted-only email send). Self-throttled + best-effort: it no-ops unless
-# telemetry is opted in AND ~a day has elapsed, so it's safe to run every tick; the
+# telemetry is on (not opted out) AND ~a day has elapsed, so it's safe to run every tick; the
 # `|| true` keeps a telemetry hiccup from failing the tick under `set -e`, and the
 # emit is silent so it doesn't clutter the quickstart output.
 manage emit_telemetry_heartbeat >/dev/null 2>&1 || true

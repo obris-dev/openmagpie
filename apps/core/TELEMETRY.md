@@ -1,8 +1,8 @@
 # Telemetry
 
-OpenMagpie can send **anonymous, opt-in** usage telemetry. This document is the
-full, honest description of it: what it's for, exactly what is (and isn't) sent,
-and every way to turn it off.
+OpenMagpie sends **anonymous, opt-out** usage telemetry by default. This document
+is the full, honest description of it: what it's for, exactly what is (and isn't)
+sent, and every way to turn it off.
 
 ## Why it exists
 
@@ -14,10 +14,21 @@ actually helps the people running it. That's the entire purpose.
 
 ## The guarantees
 
-- **Off by default.** A fresh install is in `unset` mode and sends **nothing**.
-  Telemetry only flows after you explicitly opt in (`anonymous`).
+- **On by default, easy to turn off.** A fresh install emits anonymous telemetry
+  (the `unset` default), so there's a usage signal without an opt-in step. Turn it
+  off any time with `telemetry disable`, `DO_NOT_TRACK=1`, or an empty
+  `POSTHOG_API_KEY` (see [How to control it](#how-to-control-it)); once `off`, it
+  sends nothing.
+
+> **Upgrading from a pre-opt-out version?** Telemetry used to be opt-IN: an install
+> left in the `unset` mode sent **nothing**. After upgrading, that same `unset`
+> install **begins emitting anonymous telemetry with no action on your part** (only
+> an explicit `off` is silent now). If you don't want that, opt out once with
+> `make local-manage CMD="telemetry disable"`, `DO_NOT_TRACK=1`, or an empty
+> `POSTHOG_API_KEY`. The CLI also shows a one-time notice on your next
+> `magpie auth login`.
 - **Anonymous, not pseudonymous.** Events are keyed by a random per-install
-  `instance_id` (a UUID generated when you opt in). It is not linked to your
+  `instance_id` (a UUID minted at first run). It is not linked to your
   account, your email, or anything you monitor. Geolocation is disabled
   (`disable_geoip`), so no location is derived from it; and because events are
   captured server-side, the only IP that reaches PostHog is your instance's own
@@ -41,17 +52,16 @@ scheduler, e.g. `first_match`).
 
 | Event | Properties |
 |---|---|
-| `telemetry_enabled` | (the opt-in moment) |
+| `telemetry_enabled` | (telemetry turned back on after a disable) |
 | `feed_created` | `source_count`, `connector_kinds`, `surface` |
 | `watch_created` | `action_kinds`, `feed_count`, `surface` |
 | `first_match` | `action_kind`, `surface` (a watch's first-ever match) |
 | `quickstart_completed` | `surface` |
 
-> Funnel caveat: these events fire only on installs that opted in -- and the
-> consent prompt itself runs *after* the quickstart seeds its feed/watch -- so the
-> counts reflect *opted-in* activity, not all installs (and the seeded feed/watch
-> aren't counted as `feed_created`/`watch_created`). Estimate totals against the
-> consent-free install signals, not this stream.
+> Funnel caveat: these fire on every install except those that turned telemetry
+> off, so the counts approximate all installs minus opt-outs. The quickstart seeds
+> its feed/watch directly (not through the API), so those aren't counted as
+> `feed_created`/`watch_created`.
 
 **Daily heartbeat (`instance_heartbeat`, one event per install per day):** current
 gauges + a 24h rollup, so a busy install sends one event/day, not thousands.
@@ -86,15 +96,21 @@ but geolocation is disabled, so no location is derived from it.)
 
 ## How to control it
 
-Run the management command against your stack with `make local-manage CMD="…"`
-(the same wrapper the quickstart uses; in a dev checkout you can call
-`manage.py …` directly):
+The `magpie` CLI is the universal way (it works against any deployment you can
+reach, self-hosted or larger; changing the mode requires an account owner):
 
-- **Status:** `make local-manage CMD="telemetry status"`
-- **Opt in:** `make local-manage CMD="telemetry enable"` (also offered by the quickstart)
-- **Opt out:** `make local-manage CMD="telemetry disable"`
+- **Status:** `magpie telemetry status`
+- **Turn off (opt out):** `magpie telemetry disable`
+- **Turn back on:** `magpie telemetry enable`
+
+Environment-level, needs no login or CLI (works headless, and before any setup):
+
 - **Hard off (any mode):** set `DO_NOT_TRACK=1` ([standard](https://consoledonottrack.com/)), or leave `POSTHOG_API_KEY` empty.
 - **Send to your own PostHog instead:** set `POSTHOG_API_KEY` (and `POSTHOG_HOST`) to your project.
+
+On the server host you can also run the management command directly (same effect,
+no CLI auth): `make local-manage CMD="telemetry disable"` in a dev checkout, or
+`manage.py telemetry disable`.
 
 ## Where it goes & retention
 

@@ -5,8 +5,8 @@ self-throttles on `TelemetrySettings.last_heartbeat_at`, emitting at most once p
 `_MIN_INTERVAL` however often it's called, so it survives a self-hoster who
 starts/stops the jobs stack rather than assuming a steady daily cron. Emits a
 single `instance_heartbeat` with config gauges + a 24h rollup (one event/day, not
-the thousands per-poll events would produce). A no-op unless the instance is in
-ANONYMOUS mode; the capture path never raises into the cron.
+the thousands per-poll events would produce). A no-op when opted out (OFF /
+DO_NOT_TRACK / no key); the capture path never raises into the cron.
 
 All cross-tenant reads go through each owning service's `Global` aggregate (no
 direct `Model.objects` here). There is no `engine_kind` -- the relevance engine is
@@ -38,18 +38,24 @@ _MIN_INTERVAL = timedelta(hours=20)  # min spacing between heartbeats (see handl
 
 
 class Command(BaseCommand):
-    help = "Emit one rolled-up anonymous telemetry heartbeat, at most once per ~day (no-op unless opted in)."
+    help = "Emit one rolled-up anonymous telemetry heartbeat, at most once per ~day (no-op when opted out)."
 
     def handle(self, *args, **options):
-        # Atomically claim the slot (opted in + due) with one conditional UPDATE, so
-        # two overlapping pipeline ticks (local-tick / up-jobs) can't both pass a
+        # Cheap pre-gate before the DB claim: skip DO_NOT_TRACK / keyless / OFF
+        # installs with no write, and (via current() inside enabled()) lazily create
+        # the singleton so the atomic claim below has a row to update. Opt-out:
+        # enabled() is true for the UNSET default, not only ANONYMOUS.
+        if not client.enabled():
+            return
+        # Atomically claim the slot (not opted out + due) with one conditional UPDATE,
+        # so two overlapping pipeline ticks (local-tick / up-jobs) can't both pass a
         # read-then-act gap check and double-emit. The tickers start/stop and run at
         # varying cadences, so the heartbeat can't assume a steady daily cron -- it
         # rides whatever tick runs and self-throttles to once per _MIN_INTERVAL
         # (sub-24h, so a roughly-daily cadence never skips a day).
         now = timezone.now()
         if not TelemetryService.Global.claim_heartbeat(now=now, min_interval=_MIN_INTERVAL):
-            return  # opted out, not due yet, or another tick already claimed it
+            return  # not due yet, or another tick already claimed it
         # Claiming stamped last_heartbeat_at up front; guard the gather+emit so a
         # stray aggregate error can't break the tick (a guarded failure misses this
         # window rather than double-sending).

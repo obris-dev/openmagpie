@@ -1,9 +1,10 @@
 """Telemetry API resource client.
 
-Wraps `/v1/telemetry`: read the server's anonymous-telemetry mode (any user)
+Wraps `/v1/telemetry`: read the server's anonymous-telemetry state (any user)
 and enable/disable it (account owner only). The client sends a consent INTENT;
-the server resolves the concrete mode. Used by the post-login consent prompt; the
-decision lives server-side (see apps/core/telemetry).
+the server resolves the concrete mode. `get()` backs the post-login disclosure
+notice + `telemetry status`; `set_enabled()` backs `telemetry enable`/`disable`
+(the decision lives server-side, see apps/core/telemetry).
 """
 
 from __future__ import annotations

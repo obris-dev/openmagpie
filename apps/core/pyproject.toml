@@ -18,7 +18,7 @@ dependencies = [
     "httpx>=0.28",
     "openai>=1.40",  # official client; the lingua franca every OpenAI-compatible backend tests against
     "openmagpie-schema",
-    "posthog>=7",  # anonymous, opt-in product telemetry (apps/core/telemetry)
+    "posthog>=7",  # anonymous, opt-out product telemetry (apps/core/telemetry)
     "psycopg>=3.3",  # impl extra is env-specific: [binary] in dev, [c] in cloud
     "pydantic>=2.5",
     "python-dotenv>=1.1",

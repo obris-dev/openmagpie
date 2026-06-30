@@ -9,17 +9,17 @@ See apps/core/TELEMETRY.md for exactly what anonymous telemetry collects.
 
 from __future__ import annotations
 
-import logging
 import sys
 
+import httpx
 import typer
+from pydantic import ValidationError
 
 from .. import console
 from ..config import save
 from ..context import AppContext, app_ctx
+from ..http import ApiError
 from ._shared import _handle_api_errors
-
-logger = logging.getLogger("openmagpie")
 
 telemetry_app = typer.Typer(no_args_is_help=True)
 
@@ -35,6 +35,11 @@ def status() -> None:
     ac = app_ctx()
     state = ac.api.telemetry.get()
     console.log(f"Telemetry mode: {state.mode}")
+    # Server-computed: the mode alone is ambiguous (opt-out: `unset` means ON), and the
+    # client can't derive emission (DO_NOT_TRACK / key are server-side). Omit if the
+    # server didn't report it (older server).
+    if state.emitting is not None:
+        console.log(f"Emitting now:   {'yes' if state.emitting else 'no'}")
     console.log(
         "Change it with `magpie telemetry enable` / `disable`."
         if state.can_set
@@ -61,48 +66,68 @@ def disable() -> None:
     console.success(f"Telemetry disabled (mode: {state.mode}).")
 
 
-def _mark_prompted(ac: AppContext) -> None:
-    """Record (on this machine) that we've offered the opt-in, so we don't re-ask."""
-    ac.config.telemetry_prompted = True
+def _mark_disclosed(ac: AppContext) -> None:
+    """Record (on this machine) that we've shown the telemetry disclosure, so we don't
+    repeat it on every login."""
+    ac.config.telemetry_disclosed = True
     save(ac.config)
 
 
-def prompt_after_login(ac: AppContext) -> None:
-    """Offer the anonymous-telemetry opt-in once after a successful login -- to an
-    account owner, when the server is still undecided. Best-effort + interactive-
-    only (skips piped/headless logins); never disrupts login. `telemetry_prompted`
-    in the local config stops us re-asking on this machine.
+def notice_after_login(ac: AppContext) -> None:
+    """Show the one-time anonymous-telemetry disclosure once after a successful
+    login, while the server is still on the opt-out default (UNSET). Telemetry is
+    opt-OUT (on by default) and INSTANCE-wide, so EVERY user is disclosed to, not
+    just owners, but the text is tailored: an owner gets the off switch, a member
+    (who can't change the account setting) gets a 'managed by your owner' note
+    instead, never the `telemetry disable` verb that would 403 for them. This only
+    INFORMS, never changes the mode. Best-effort + interactive-only (skips piped/
+    headless logins); never disrupts login. `telemetry_disclosed` in the local config
+    stops the repeat on this machine.
     """
     try:
-        if ac.config.telemetry_prompted or not sys.stdin.isatty():
+        if ac.config.telemetry_disclosed or not sys.stdin.isatty():
             return
         state = ac.api.telemetry.get()
         if not state.is_unset:
-            _mark_prompted(ac)  # already decided server-side
+            _mark_disclosed(ac)  # a genuine server-side decision already exists; nothing to disclose
             return
-        if not state.can_set:
-            return  # not an account owner; leave the decision to an owner login
-        # Persist `prompted` BEFORE the prompt + network call, so an EOF/abort or a
-        # failed enable doesn't re-offer on every later login (change it later with
-        # `magpie telemetry enable` / `disable`).
-        _mark_prompted(ac)
+        if state.emitting is not True:
+            # unset but not actually emitting: suppressed server-side (emitting False:
+            # DO_NOT_TRACK / no key) or a server too old to report it (emitting None,
+            # pre-opt-out where unset is silent). Nothing to disclose YET, and crucially
+            # do NOT mark disclosed: emission can later turn on (suppression lifted, or
+            # the server upgraded to opt-out), and a future login must still fire the
+            # one-time notice. Costs one GET per interactive login until then; marking
+            # would burn the one-shot permanently.
+            return
+        # unset AND positively emitting: disclose once (to owners AND members, since
+        # opt-out collects for the whole instance), marking so it doesn't repeat.
+        _mark_disclosed(ac)
         console.log("")
-        console.log("Help improve OpenMagpie? Share ANONYMOUS usage so we can prioritize what to build.")
-        console.log("It's anonymous (never your content or any personal data) and off until you opt in.")
-        if typer.confirm("Enable anonymous telemetry?", default=False):
-            try:
-                ac.api.telemetry.set_enabled(enabled=True)
-            except Exception as exc:
-                # They said yes but the POST failed -- tell them, or they'd believe
-                # telemetry is on (a swallowed warning is invisible).
-                console.warn("Couldn't enable telemetry right now -- run `magpie telemetry enable` to retry.")
-                logger.warning("telemetry opt-in POST failed: %s", exc)
-                return
-            console.success("Anonymous telemetry enabled. Turn it off any time: magpie telemetry disable")
-    except (typer.Abort, KeyboardInterrupt):
-        return  # EOF / Ctrl-C at the prompt; login already succeeded, don't fail it
-    except Exception:
-        # The expected paths -- abort/cancel and a failed opt-in POST -- are handled
-        # above, so reaching here is genuinely unexpected; log with a traceback like
-        # the other telemetry swallow paths (capture / events.guard).
-        logger.exception("post-login telemetry prompt failed")
+        if state.can_set:
+            console.log(
+                "OpenMagpie collects ANONYMOUS usage telemetry (no content, no personal data) to help prioritize what to build."
+            )
+            console.log("It's on by default. Turn it off any time: magpie telemetry disable (or set DO_NOT_TRACK=1).")
+        else:
+            # A member can't flip the account-level setting (it 403s) and can't reach
+            # the server's DO_NOT_TRACK, so point at the owner + the doc, not a verb
+            # they can't run.
+            console.log(
+                "This OpenMagpie instance sends ANONYMOUS usage telemetry (no content, no personal data) to help prioritize what to build."
+            )
+            console.log(
+                "It's on by default and managed by your account owner. "
+                "Details: https://github.com/obris-dev/openmagpie/blob/main/apps/core/TELEMETRY.md"
+            )
+    except KeyboardInterrupt:
+        return  # login already succeeded; a Ctrl-C during the status read must not disturb it
+    except (ApiError, httpx.HTTPError, OSError, ValidationError, ValueError):
+        # Swallow ONLY the expected best-effort failures: the status read (API /
+        # transport error; a wrong-shaped body the wire model rejects -> ValidationError;
+        # a corrupt JSON 2xx body -> json.JSONDecodeError, a ValueError) and the config
+        # save (OSError). ValueError also covers a closed stdin from isatty(). None should
+        # disturb a login that already succeeded, and the CLI has no logging sink. A logic
+        # bug raises something else (AttributeError/TypeError/...) and is deliberately NOT
+        # caught here; it should surface.
+        return
