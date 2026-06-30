@@ -148,8 +148,11 @@ local-lint-fix: ## Auto-fix lint issues
 	$(MAKE) local-exec SVC=core CMD="uv run ruff format ."
 	./scripts/check-whitespace.sh --fix
 
-local-types: ## Run ty static type checker (core + shared schema pkg)
-	$(MAKE) local-exec SVC=core CMD="uv run --package openmagpie-core ty check apps/core packages/openmagpie-schema"
+local-types: ## Run ty static type checker (core + shared schema pkg + schema_sync tool)
+	$(MAKE) local-exec SVC=core CMD="uv run --package openmagpie-core ty check apps/core packages/openmagpie-schema tools/schema_sync"
+
+local-schema: ## Regenerate the shared JSON Schema (packages/openmagpie-schema/schema.json) from the models
+	$(MAKE) local-exec SVC=core CMD="uv run --package openmagpie-core python -m tools.schema_sync.generate"
 
 local-check: ## Run lint + types + tests (pre-commit habit)
 	$(MAKE) local-lint

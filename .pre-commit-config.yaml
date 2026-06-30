@@ -57,13 +57,32 @@ repos:
         always_run: true
 
       - id: ty
-        name: ty type check (core + shared schema)
-        # ty is a WHOLE-PROGRAM checker: a change in one file can break
-        # types in another, so we run the same invocation as
-        # `make local-types` (pass_filenames: false) instead of only the
-        # staged files. Keeps local + hook + CI in agreement.
-        entry: uv run --no-sync ty check apps/core packages/openmagpie-schema
+        name: ty type check (core + shared schema + schema_sync)
+        # ty is a WHOLE-PROGRAM checker: a change in one file can break types in
+        # another, so we check the same targets as `make local-types` and CI
+        # (pass_filenames: false) instead of only staged files. Same SCOPE, not
+        # the same literal command: --no-sync reuses the dev's already-synced
+        # env, where local-types/CI use `--package openmagpie-core`; the set of
+        # files checked is identical, which is what keeps them in agreement.
+        entry: uv run --no-sync ty check apps/core packages/openmagpie-schema tools/schema_sync
         language: system
         types_or: [python]
+        pass_filenames: false
+        require_serial: true
+
+      - id: schema-sync
+        name: schema.json is fresh
+        # The committed JSON Schema is generated from the Pydantic models
+        # (the web client generates its validators from it). A model change
+        # that isn't regenerated would silently drift the schema, so fail like
+        # `uv lock --locked`: regenerate in memory and diff. Fix with
+        # `make local-schema` (or `uv run --no-sync python -m tools.schema_sync.generate`).
+        entry: uv run --no-sync python -m tools.schema_sync.generate --check
+        language: system
+        # Fire on a change to the generator, to a model, or a hand-edit of the
+        # artifact (so reverting/corrupting only schema.json still trips the
+        # guard, which types_or: [python] would miss). CI runs the same --check
+        # unconditionally as a backstop.
+        files: '^(tools/schema_sync/.*\.py|packages/openmagpie-schema/(.*\.py|schema\.json))$'
         pass_filenames: false
         require_serial: true

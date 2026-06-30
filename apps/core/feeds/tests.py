@@ -19,13 +19,12 @@ from auth_api.operations.signup import SignupOperation
 from feeds.models import Feed, FeedItem
 from feeds.services.sources import _hash_spec
 from openmagpie_schema.configs import RedditSubredditSourceSpec, RssSourceSpec
-from openmagpie_schema.feed import (
+from openmagpie_schema.feed import FeedItemWire, SourceWire
+from openmagpie_schema.feed_payloads import (
     FeedItemData,
     FeedItemPayload,
-    FeedItemWire,
     NewRedditPostPayload,
     RssEntryPayload,
-    SourceWire,
 )
 
 

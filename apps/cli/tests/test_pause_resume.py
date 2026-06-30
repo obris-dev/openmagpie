@@ -9,13 +9,13 @@ from __future__ import annotations
 import unittest
 from unittest import mock
 
-from openmagpie.api.feed import FeedEnvelope
+from openmagpie.api.feed import FeedInput
 
 
-class FeedEnvelopeActiveTests(unittest.TestCase):
+class FeedInputActiveTests(unittest.TestCase):
     def test_is_active_defaults_true_and_round_trips(self) -> None:
-        self.assertTrue(FeedEnvelope(name="t").is_active)  # create stays active unless told otherwise
-        self.assertFalse(FeedEnvelope(name="t", is_active=False).is_active)  # create paused
+        self.assertTrue(FeedInput(name="t").is_active)  # create stays active unless told otherwise
+        self.assertFalse(FeedInput(name="t", is_active=False).is_active)  # create paused
 
 
 class PauseResumeCommandTests(unittest.TestCase):

@@ -1,36 +1,33 @@
 """Feeds API resource client.
 
-Wraps the `/v1/feeds` endpoints. Response
-models live ONCE in the shared `openmagpie_schema.feed` package
-(populated by the server, imported verbatim here). Only `FeedEnvelope`
-(the request envelope the CLI *constructs*) is CLI-owned.
+Wraps the `/v1/feeds` endpoints. Both the response models and the `FeedInput`
+request envelope live ONCE in the shared `openmagpie_schema.feed` package
+(mirroring `WatchInput`); this module imports them verbatim and adds the
+resource client.
 """
 
 from __future__ import annotations
 
 from typing import Any
 
-from pydantic import BaseModel
-
 from openmagpie_schema.feed import (
+    FeedInput,
     FeedItemListResponse,
     FeedItemWire,
     FeedListResponse,
     FeedMutationResponse,
     FeedView,
     FeedWire,
-    SourceInput,
     SourceSetResult,
     SourceWire,
 )
-from openmagpie_schema.wire import ConfigBlob
 
 from .. import routes
 from ..http import MagpieClient
 
 __all__ = [
     "FeedApi",
-    "FeedEnvelope",
+    "FeedInput",
     "FeedItemListResponse",
     "FeedItemWire",
     "FeedListResponse",
@@ -40,25 +37,6 @@ __all__ = [
     "SourceSetResult",
     "SourceWire",
 ]
-
-
-class FeedEnvelope(BaseModel):
-    """The envelope the CLI constructs for a feed write (request side).
-    CLI-owned, distinct from the server-emitted models. `data` carries
-    the kind-specific config (retention + default_field_map), opaque
-    here; the server validates it. `sources` is the optional starter
-    source list for curated feeds (server creates Source rows
-    atomically with the Feed). Extra keys ignored (so the edit seed's
-    read-only fields drop on round-trip)."""
-
-    name: str
-    kind: str = "curated"
-    poll_interval_seconds: int = 300
-    is_active: bool = True  # False pauses the feed (the server stops polling its sources)
-    data: ConfigBlob = {}
-    sources: list[SourceInput] = []
-
-    model_config = {"extra": "ignore"}
 
 
 class FeedApi:

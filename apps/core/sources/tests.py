@@ -7,7 +7,7 @@ from django.test import SimpleTestCase
 from pydantic import BaseModel, ValidationError
 
 from openmagpie_schema.configs import RedditSubredditSourceSpec, RssSourceSpec
-from openmagpie_schema.feed import FeedItemData
+from openmagpie_schema.feed_payloads import FeedItemData
 from sources import (
     payload_registry,
     registry,  # noqa: F401  pulls in the connectors, which self-register their payloads

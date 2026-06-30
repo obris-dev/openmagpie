@@ -17,7 +17,7 @@ import yaml
 from openmagpie_schema.configs import SourceFields, SourceIdentity, source_identity
 
 from ... import console
-from ...api.feed import FeedEnvelope, FeedMutationResponse, FeedView
+from ...api.feed import FeedInput, FeedMutationResponse, FeedView
 from ...context import AppContext, app_ctx
 from .._shared import (
     _abort_unexpected,
@@ -77,7 +77,7 @@ def create(
     else:
         body_text = _read_file_or_abort(file)
     _reject_if_unmodified_template(body_text)
-    body = _parse_yaml_or_abort(body_text, FeedEnvelope)
+    body = _parse_yaml_or_abort(body_text, FeedInput)
     _run_mutation(app_ctx(), body, feed_id=None, dry_run=dry_run, yes=yes)
 
 
@@ -115,14 +115,14 @@ _FILE_PLACEHOLDER = "<file>"
 
 
 def _sources_ignored_note(
-    body: FeedEnvelope, current_sources: list[SourceFields], file: str | None, feed_id: str
+    body: FeedInput, current_sources: list[SourceFields], file: str | None, feed_id: str
 ) -> str | None:
     """`feed edit` discards `sources` server-side, so warn ONLY when the file's
     sources would actually change something `feed source set` applies - a source
     added or removed, OR a persisted source's `meta` / `field_map` edited (not
     just the spec; set_sources reconciles those too). A full feed.yaml already in
     sync doesn't nag on a metadata-only edit. Both sides are normalized (file via
-    FeedEnvelope parsing, feed by the server), so the comparison is
+    FeedInput parsing, feed by the server), so the comparison is
     apples-to-apples. Pure, so it's unit-testable without a CliRunner.
 
     Blind spot: an empty `body.sources` returns None - YAML can't tell an omitted
@@ -159,7 +159,7 @@ def edit(
     ac = app_ctx()
     detail = ac.api.feed.get(feed_id)
     # `sources` is excluded from the dump even though it lives on
-    # FeedEnvelope (the create path uses it); the PUT server route
+    # FeedInput (the create path uses it); the PUT server route
     # silently discards it on edits, so the editor must not show
     # an editable block for it.
     seed = yaml.safe_dump(
@@ -172,7 +172,7 @@ def edit(
         body_text = sys.stdin.read()
     else:
         body_text = _read_file_or_abort(file)
-    body = _parse_yaml_or_abort(body_text, FeedEnvelope)
+    body = _parse_yaml_or_abort(body_text, FeedInput)
     # Both guards below no-op on the $EDITOR path (its seed matches the live record);
     # they fire only for an `-f` file that diverges. The PUT discards a changed sources
     # block, and an omitted is_active defaults true (silently un-pausing).
@@ -251,14 +251,14 @@ def _reject_if_unmodified_template(body_text: str) -> None:
         raise typer.Exit(code=1)
 
 
-def _mutate(ac: AppContext, envelope: FeedEnvelope, *, dry_run: bool, feed_id: str | None) -> FeedMutationResponse:
+def _mutate(ac: AppContext, envelope: FeedInput, *, dry_run: bool, feed_id: str | None) -> FeedMutationResponse:
     body = envelope.model_dump(mode="json")
     if feed_id is None:
         return ac.api.feed.create(body, dry_run=dry_run)
     return ac.api.feed.update(feed_id, body, dry_run=dry_run)
 
 
-def _run_mutation(ac: AppContext, body: FeedEnvelope, *, feed_id: str | None, dry_run: bool, yes: bool) -> None:
+def _run_mutation(ac: AppContext, body: FeedInput, *, feed_id: str | None, dry_run: bool, yes: bool) -> None:
     is_edit = feed_id is not None
     noun = "update" if is_edit else "create"
 
@@ -289,10 +289,10 @@ def _run_mutation(ac: AppContext, body: FeedEnvelope, *, feed_id: str | None, dr
     console.success(f"{done} feed {result.name} ({result.id})")
 
 
-def _edit_seed(detail: FeedView) -> FeedEnvelope:
+def _edit_seed(detail: FeedView) -> FeedInput:
     """The editable envelope for `edit`, projected from the current feed.
 
-    `sources` is a declared field on `FeedEnvelope` (the create-time
+    `sources` is a declared field on `FeedInput` (the create-time
     write path uses it), so `extra=ignore` does NOT drop it on a
     naive `model_validate(detail.model_dump())`. The seed YAML
     rendered to $EDITOR would then carry a `sources:` block that the
@@ -307,4 +307,4 @@ def _edit_seed(detail: FeedView) -> FeedEnvelope:
     # server-computed projections source_count / summary.
     for key in ("sources", "source_count", "summary"):
         body.pop(key, None)
-    return FeedEnvelope.model_validate(body)
+    return FeedInput.model_validate(body)

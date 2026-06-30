@@ -99,15 +99,16 @@ def _dedupe_headers(cols: list[_Col]) -> list[_Col]:
 
 
 def _ts(value: Any) -> str:
-    """A column `fmt` collapsing an ISO-8601 datetime string to seconds in the
-    caller's LOCAL zone, else `-`. The explicit per-column opt-in for datetimes (a
-    JSON datetime is just a string). This is the ONE deliberate table/`--jsonl`
+    """Collapse a datetime to seconds in the caller's LOCAL zone, else `-`. Accepts
+    either a `datetime` (a typed model attribute read on a detail view) or an
+    ISO-8601 string (a column projected from `model_dump(mode="json")`), so the
+    same formatter serves both surfaces. This is the ONE deliberate table/`--jsonl`
     divergence: the table shows human-local time, `--jsonl` keeps the record's
     canonical UTC ISO so machine output stays unambiguous."""
     if not value:
         return console.EMPTY
     try:
-        return console.timestamp(datetime.fromisoformat(value))
+        return console.timestamp(value if isinstance(value, datetime) else datetime.fromisoformat(value))
     except (TypeError, ValueError):
         return str(value)
 

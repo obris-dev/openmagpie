@@ -30,6 +30,7 @@ packages/openmagpie-schema/ pure Pydantic models shared by core + cli
 web/                        pnpm workspace, Next.js (see web/AGENTS.md)
 make/                       Per-concern Makefile targets
 scripts/                    quickstart installer (quickstart/{bootstrap,preflight,run,seed,tick}.sh) + dev tooling (check-docker, hooks, lint/whitespace/branch checks, make-help)
+tools/                      Python dev tooling (schema_sync/: generate + guard packages/openmagpie-schema/schema.json)
 pyproject.toml + uv.lock    uv workspace root (one lock for all members)
 ```
 
@@ -72,7 +73,7 @@ Prefer OSS-aligned / community-governed tools over commercial-OSS hybrids with a
 - **Blob storage** (when needed): Garage, not MinIO
 - **Type checker**: ty (not mypy unless ty proves insufficient)
 
-## Dev loop
+## Local loop
 
 ```
 make build              build images and start
@@ -84,6 +85,7 @@ make local-test
 make local-lint           ruff + whitespace/trailing-newline
 make local-lint-fix       auto-fix
 make local-types          ty
+make local-schema         regenerate packages/openmagpie-schema/schema.json
 make local-check          lint + types + test
 make help               full list
 ```
