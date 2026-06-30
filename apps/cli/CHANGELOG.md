@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.4.1](https://github.com/obris-dev/openmagpie/compare/cli-v0.4.0...cli-v0.4.1) (2026-06-30)
+
+
+### Bug Fixes
+
+* **telemetry:** make anonymous telemetry opt-out (Next.js-style) ([#144](https://github.com/obris-dev/openmagpie/issues/144)) ([e8c1f68](https://github.com/obris-dev/openmagpie/commit/e8c1f6858a6f359fbe0f26e5c84332eb478518db))
+  * Telemetry is now on by default (opt-out). The post-login opt-in prompt is replaced by a one-time disclosure notice (no `y/N`), and `magpie telemetry status` now reports whether it's actually emitting, not just the mode.
+  * Turn it off any time: `magpie telemetry disable` (or `DO_NOT_TRACK=1`).
+
 ## [0.4.0](https://github.com/obris-dev/openmagpie/compare/cli-v0.3.3...cli-v0.4.0) (2026-06-29)
 
 
