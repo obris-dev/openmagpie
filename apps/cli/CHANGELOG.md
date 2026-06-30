@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.0](https://github.com/obris-dev/openmagpie/compare/cli-v0.4.1...cli-v0.5.0) (2026-06-30)
+
+
+### Features
+
+* pause and resume feeds and watches ([#147](https://github.com/obris-dev/openmagpie/issues/147)) ([39f8f85](https://github.com/obris-dev/openmagpie/commit/39f8f85af8a612f84f3c137c66fa0bbcff123144))
+
 ## [0.4.1](https://github.com/obris-dev/openmagpie/compare/cli-v0.4.0...cli-v0.4.1) (2026-06-30)
 
 
