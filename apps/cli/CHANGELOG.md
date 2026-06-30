@@ -6,6 +6,8 @@
 ### Features
 
 * pause and resume feeds and watches ([#147](https://github.com/obris-dev/openmagpie/issues/147)) ([39f8f85](https://github.com/obris-dev/openmagpie/commit/39f8f85af8a612f84f3c137c66fa0bbcff123144))
+  * **`magpie feed pause | resume <id>`** and **`magpie watch pause | resume <id>`**: pause a feed or watch to stop it without tearing it down (a paused feed stops pulling new items; a paused watch stops acting on them), then resume when you want it running again. The `ACTIVE` column in `feed list` / `watch list` and the title in `feed get` / `watch get` show the current state.
+  * `feed edit` and `watch edit` now warn when a full-replace edit from a file would silently un-pause a paused resource (an `-f` file that omits `is_active` defaults it back to active), and point you at the dedicated `resume` command instead.
 
 ## [0.4.1](https://github.com/obris-dev/openmagpie/compare/cli-v0.4.0...cli-v0.4.1) (2026-06-30)
 
