@@ -5,6 +5,13 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0](https://github.com/obris-dev/openmagpie/compare/v0.4.1...v0.5.0) (2026-06-30)
+
+
+### Features
+
+* pause and resume feeds and watches ([#147](https://github.com/obris-dev/openmagpie/issues/147)) ([39f8f85](https://github.com/obris-dev/openmagpie/commit/39f8f85af8a612f84f3c137c66fa0bbcff123144))
+
 ## [0.4.1](https://github.com/obris-dev/openmagpie/compare/v0.4.0...v0.4.1) (2026-06-30)
 
 
