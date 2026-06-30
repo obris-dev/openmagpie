@@ -11,6 +11,7 @@ and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2
 ### Features
 
 * pause and resume feeds and watches ([#147](https://github.com/obris-dev/openmagpie/issues/147)) ([39f8f85](https://github.com/obris-dev/openmagpie/commit/39f8f85af8a612f84f3c137c66fa0bbcff123144))
+  * **Pause and resume feeds and watches**: a feed or watch can now be paused and later resumed, rather than deleted and rebuilt, when you want to stop it for a while. A paused feed stops polling its sources for new items; a paused watch stops running its action chain on incoming items. Resuming picks the work back up. The toggle is a lightweight `PATCH /v1/feeds/<id>` or `PATCH /v1/watches/<id>` with `{"is_active": false}` to pause and `true` to resume, and it flips only the active flag, so a watch's action chain and a feed's source list are left untouched (unlike a full edit, which replaces them). A feed can also be created already paused.
 
 ## [0.4.1](https://github.com/obris-dev/openmagpie/compare/v0.4.0...v0.4.1) (2026-06-30)
 
