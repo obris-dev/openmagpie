@@ -1,3 +1,4 @@
+import { AuthUserSchema } from "@magpie/schema";
 import { z } from "zod";
 
 /**
@@ -5,17 +6,10 @@ import { z } from "zod";
  * malformed server response throws (with a useful `ZodError`) instead
  * of silently flowing into the auth store as a bad cast.
  *
- * TS types are inferred from the same schemas, single source of truth,
- * so the type and the validator can't drift.
+ * `AuthUser` is the generated contract schema from `@magpie/schema` (one
+ * source of truth shared with the server + CLI). The browser-specific auth
+ * shapes below are defined here; TS types are inferred from the schemas.
  */
-
-export const AuthUserSchema = z.object({
-  id: z.string(),
-  email: z.string(),
-  account_id: z.string(),
-  created_at: z.string(),
-});
-export type AuthUser = z.infer<typeof AuthUserSchema>;
 
 export interface AuthSignupBody {
   email: string;

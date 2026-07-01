@@ -1,10 +1,8 @@
+import { AuthUserSchema } from "@magpie/schema";
+
 import { apiFetch, apiFetchParsed } from "../fetch-wrapper";
 import { apiRoutes } from "../routes";
-import {
-  AuthUserSchema,
-  BrowserAuthResponseSchema,
-  DeviceSessionInfoSchema,
-} from "../types";
+import { BrowserAuthResponseSchema, DeviceSessionInfoSchema } from "../types";
 import type { AuthLoginBody, AuthSignupBody } from "../types";
 
 /**
