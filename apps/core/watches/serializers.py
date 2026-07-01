@@ -17,17 +17,10 @@ from pydantic import ValidationError as PydanticValidationError
 from rest_framework import serializers
 
 from common.pydantic_errors import pydantic_errors_to_drf
-from feeds.models import Feed, FeedItem
 from feeds.services import FeedService
 from openmagpie_schema.watch import (
-    RunFeed,
-    RunFeedItem,
-    WatchActionDeliveryView,
-    WatchActionDeliveryWire,
     WatchActionInput,
     WatchActionMutationResponse,
-    WatchActionRunView,
-    WatchActionRunWire,
     WatchActionWire,
     WatchMutationResponse,
     WatchView,
@@ -36,8 +29,7 @@ from openmagpie_schema.watch import (
     build_watch_action_wire,
 )
 from openmagpie_schema.watch_actions import WatchActionConfigSummary
-from openmagpie_schema.watch_enums import WatchActionRunState
-from watches.models import Watch, WatchAction, WatchActionDelivery, WatchActionRun
+from watches.models import Watch, WatchAction
 from watches.policy import PolicyError
 from watches.registry import KNOWN_KINDS, load_config, validate_config
 
@@ -196,101 +188,6 @@ def watch_action_mutation(action: WatchAction, *, dry_run: bool) -> WatchActionM
     unsaved row, so `action.id` is "" ; a dry-run EDIT targets the existing row,
     whose id is unchanged, so it's shown."""
     return WatchActionMutationResponse(action=watch_action_wire(action), dry_run=dry_run)
-
-
-def run_feed_item_wire(item: FeedItem) -> RunFeedItem:
-    """Narrow a FeedItem to the audit log's display fields, for the runs
-    response's `feed_items` map (keyed by item id). `feed_id` keys into that
-    response's `feeds` map. The view only builds this for items that still
-    exist, so a pruned item is simply absent from the map (the run row carries
-    `feed_item_id` and renders by it)."""
-    data = item.data or {}
-    return RunFeedItem(
-        title=str(data.get("title", "")),
-        url=str(data.get("url", "")),
-        external_url=str(data.get("external_url", "")),
-        source_label=str(item.source_label),
-        feed_id=str(item.feed_id),
-        occurred_at=item.occurred_at,  # a FeedItem column (the occurred_* filter axis), not from data
-    )
-
-
-def run_feed_wire(feed: Feed) -> RunFeed:
-    """Narrow a Feed for the runs response's `feeds` map (keyed by feed id).
-    Few feeds back the many runs on a page, so this is returned once per feed
-    instead of repeated on every item."""
-    return RunFeed(id=str(feed.id), name=str(feed.name))
-
-
-def watch_action_run_wire(run: WatchActionRun) -> WatchActionRunWire:
-    """One run's wire shape (the audit-log row): pure ids + run state. The
-    judged item is in the response's `feed_items` map (key `feed_item_id`), its
-    feed in `feeds`. `state` coerces to the WatchActionRunState enum; `result`
-    is the opaque kind-specific blob."""
-    return WatchActionRunWire(
-        id=str(run.id),
-        watch_id=str(run.watch_id),
-        action_id=str(run.action_id),
-        feed_item_id=str(run.feed_item_id),
-        state=WatchActionRunState(run.state),
-        result=run.result or {},
-        error=run.error,
-        scheduled_at=run.scheduled_at,
-        started_at=run.started_at,
-        completed_at=run.completed_at,
-        created_at=run.created_at,
-    )
-
-
-def watch_action_run_view(
-    run: WatchActionRun,
-    *,
-    feed_item: FeedItem | None = None,
-    feed: Feed | None = None,
-    action: WatchAction | None = None,
-) -> WatchActionRunView:
-    """One run's DETAIL shape (`GET /v1/action-activity/<id>`): the run wire plus
-    the joined item / feed / action it was judged against. Each is null when
-    absent (a pruned item/feed, a removed action), so the row still renders by
-    `run.feed_item_id`."""
-    return WatchActionRunView(
-        run=watch_action_run_wire(run),
-        feed_item=run_feed_item_wire(feed_item) if feed_item is not None else None,
-        feed=run_feed_wire(feed) if feed is not None else None,
-        action=watch_action_wire(action) if action is not None else None,
-    )
-
-
-def _delivery_fields(delivery: WatchActionDelivery) -> dict[str, Any]:
-    """The shared list-row fields of a delivery (everything but the payload).
-    The string columns (delivery / method / state) coerce to their enums on
-    the wire models."""
-    return {
-        "id": str(delivery.id),
-        "watch_id": str(delivery.watch_id),
-        "action_id": str(delivery.action_id),
-        "delivery": delivery.delivery,
-        "method": delivery.method,
-        "state": delivery.state,
-        "http_status": delivery.http_status,
-        "target_host": delivery.target_host,
-        "item_count": delivery.item_count,
-        "attempt": delivery.attempt,
-        "error": delivery.error,
-        "started_at": delivery.started_at,
-        "completed_at": delivery.completed_at,
-        "created_at": delivery.created_at,
-    }
-
-
-def watch_action_delivery_wire(delivery: WatchActionDelivery) -> WatchActionDeliveryWire:
-    """One delivery's LIST-row shape (no request_payload ; see the detail view)."""
-    return WatchActionDeliveryWire(**_delivery_fields(delivery))
-
-
-def watch_action_delivery_view(delivery: WatchActionDelivery) -> WatchActionDeliveryView:
-    """One delivery's DETAIL shape: the list row plus the stored request_payload."""
-    return WatchActionDeliveryView(**_delivery_fields(delivery), request_payload=delivery.request_payload or {})
 
 
 def watch_wire(watch: Watch, *, feed_ids: list[str]) -> WatchWire:

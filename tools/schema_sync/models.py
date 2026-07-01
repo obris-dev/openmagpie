@@ -125,10 +125,11 @@ EXCLUDED_MODELS = frozenset(
         "DeliveryConfigBase",
         "SourceFields",
         "_HackerNewsSpec",
-        # Kind-independent field bases for the action-node unions; their fields
-        # inline into the per-kind members (which ARE in the contract).
+        # Kind-independent field bases for the action-node + run unions; their
+        # fields inline into the per-kind members (which ARE in the contract).
         "_WatchActionWireFields",
         "_WatchActionInputFields",
+        "_WatchActionRunFields",
         # Outbound webhook body: what magpie POSTs to a third-party webhook.
         # It reaches the API only as WatchActionDeliveryView.request_payload, an
         # opaque dict, so it crosses the wire untyped and needs no schema def.

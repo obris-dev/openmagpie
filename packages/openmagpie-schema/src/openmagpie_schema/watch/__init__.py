@@ -4,9 +4,9 @@ write-side input envelopes the CLI constructs.
 SHARED, zero-Django source of truth. The server builds every `/v1/watches`
 response THROUGH these (server is the authority) ; the magpie CLI imports
 the SAME classes and validates responses against them, so there's no
-hand-mirrored copy to drift. The per-kind action `config` / `result` blobs
-stay opaque here (`ConfigBlob` / `ResultBlob`) ; their strict shapes live
-in `watch_actions.py`, validated server-side by a kind-keyed registry.
+hand-mirrored copy to drift. The per-kind action `config` / `result` are typed
+discriminated unions keyed by `kind` (in `_nodes` / `_runs`) ; their per-kind
+shapes live in `watch_actions/`, validated server-side by a kind-keyed registry.
 
 Mirrors `feed.py` (envelope quartet: Wire / ListResponse / View /
 MutationResponse) deliberately, so the two primitives read the same.
@@ -36,9 +36,12 @@ from ._nodes import (
     watch_action_wire_adapter,
 )
 from ._runs import (
+    ExtractRunWire,
+    LogRunWire,
     ResultBlob,
     RunFeed,
     RunFeedItem,
+    SemanticFilterRunWire,
     WatchActionDeliveryListResponse,
     WatchActionDeliveryView,
     WatchActionDeliveryWire,
@@ -46,6 +49,9 @@ from ._runs import (
     WatchActionRunSummary,
     WatchActionRunView,
     WatchActionRunWire,
+    WebhookRunWire,
+    build_watch_action_run_wire,
+    watch_action_run_wire_adapter,
 )
 
 # Public API of the watch package (the envelopes defined here + the action-node
@@ -54,13 +60,16 @@ from ._runs import (
 __all__ = [
     "ExtractActionInput",
     "ExtractActionWire",
+    "ExtractRunWire",
     "LogActionInput",
     "LogActionWire",
+    "LogRunWire",
     "ResultBlob",
     "RunFeed",
     "RunFeedItem",
     "SemanticFilterActionInput",
     "SemanticFilterActionWire",
+    "SemanticFilterRunWire",
     "WatchActionDeliveryListResponse",
     "WatchActionDeliveryView",
     "WatchActionDeliveryWire",
@@ -78,9 +87,12 @@ __all__ = [
     "WatchWire",
     "WebhookActionInput",
     "WebhookActionWire",
+    "WebhookRunWire",
     "build_watch_action_input",
+    "build_watch_action_run_wire",
     "build_watch_action_wire",
     "watch_action_input_adapter",
+    "watch_action_run_wire_adapter",
     "watch_action_wire_adapter",
 ]
 

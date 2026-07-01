@@ -1,10 +1,12 @@
-"""Per-kind WatchAction config + result contracts (the tight shapes
-behind the opaque `config` / `result` blobs on WatchAction / WatchActionRun).
+"""Per-kind WatchAction config + result contracts (the tight shapes behind the
+`config` / `result` JSON columns on WatchAction / WatchActionRun).
 
-SHARED, zero-Django source of truth. The DB columns are opaque
-(`ConfigBlob` / `ResultBlob`) ; these are the strict models the server
+SHARED, zero-Django source of truth. The DB columns store the PURE kind-specific
+dict (no discriminator nested) ; these are the strict models the server
 validates a `config` against at the API write boundary, and the strict
-`result` the runner writes when it persists a run. Settings-coupled policy
+`result` the runner writes when it persists a run. On the wire they are carried
+as discriminated unions keyed by `kind` (`watch/_nodes.py` for the action config,
+`watch/_runs.py` for the run result). Settings-coupled policy
 (engine kind registered, threshold bounds beyond the structural gt/le,
 SSRF on webhook URLs) lives server-side (`watches.policy`), not here.
 

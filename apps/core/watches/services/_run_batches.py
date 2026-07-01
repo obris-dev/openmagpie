@@ -38,11 +38,14 @@ class DigestBatchMixin:
         self,
         *,
         action_id: str,
+        kind: str,
         scheduled_at: datetime,
         rows: Iterable[tuple[str, str, str]],
     ) -> None:
         """Batch-enqueue PENDING runs for ONE successor `action_id`, one row
-        per `(watch_id, feed_item_id, prior_run_id)`. The chain advance (drain +
+        per `(watch_id, feed_item_id, prior_run_id)`. `kind` is the successor
+        action's kind, denormalized onto each run so its typed result stays
+        renderable even if the action is later deleted. The chain advance (drain +
         digest flush) uses this to fan a SUCCEEDED batch into its successor in
         a single INSERT instead of an N+1 of `enqueue()` round trips.
 
@@ -61,6 +64,7 @@ class DigestBatchMixin:
                 account_id=self.account_id,
                 watch_id=watch_id,
                 action_id=action_id,
+                kind=kind,
                 feed_item_id=feed_item_id,
                 state=_PENDING,
                 scheduled_at=scheduled_at,
@@ -116,6 +120,7 @@ class DigestBatchMixin:
         result: dict | None = None,
         error: str = "",
         delivery_id: str = "",
+        kind: str | None = None,
         now: datetime | None = None,
     ) -> int:
         """Mark a digest batch terminal in one UPDATE. Guarded on state ==
@@ -127,9 +132,12 @@ class DigestBatchMixin:
         duplication for a v1 audit ; the batch is the unit of delivery, the
         per-run row is just its membership. `delivery_id` links every run to the
         WatchActionDelivery (HTTP call) that carried the batch (blank for the
-        local log, which makes no call). Chunked under the DB's per-statement
-        parameter ceiling (common.db.ID_IN_CHUNK) so a large batch can't crash
-        `id__in`."""
+        local log, which makes no call). `kind` re-stamps each run to the kind
+        that ACTUALLY ran (the flush dispatches by the action's current kind,
+        which may have been edited since enqueue), keeping run.kind in step with
+        the written `result` shape ; mirrors `complete()`. Chunked under the DB's
+        per-statement parameter ceiling (common.db.ID_IN_CHUNK) so a large batch
+        can't crash `id__in`."""
         ts = now or timezone.now()
         fields: dict = {
             "state": state.value,
@@ -140,6 +148,8 @@ class DigestBatchMixin:
         }
         if delivery_id:
             fields["delivery_id"] = delivery_id
+        if kind:
+            fields["kind"] = kind
         written = 0
         for chunk in itertools.batched(run_ids, ID_IN_CHUNK, strict=False):
             written += WatchActionRun.objects.filter(id__in=chunk, account_id=self.account_id, state=_PENDING).update(

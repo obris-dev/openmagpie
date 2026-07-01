@@ -50,6 +50,7 @@ class ActionRunWindowFilterTests(TestCase):
             account_id=self.account_id,
             watch_id=ulid.ulid(),
             action_id=self.action_id,
+            kind="log",  # the run self-describes its kind so the wire can type its result
             feed_item_id=feed_item_id,
             state="succeeded",
             scheduled_at=timezone.now(),

@@ -77,7 +77,11 @@ class WebhookDeliveryRecordTests(TestCase):
         for i in range(n):
             fi = self._item(f"e{i}", now, title=f"t{i}")
             self.run_svc.enqueue(
-                watch_id=str(watch.id), action_id=str(a0.id), feed_item_id=str(fi.id), scheduled_at=now
+                watch_id=str(watch.id),
+                action_id=str(a0.id),
+                kind=str(a0.kind),
+                feed_item_id=str(fi.id),
+                scheduled_at=now,
             )
         self._drain(now)  # log head succeeds -> each advances into the digest window
         window = WatchActionDigestWindow.objects.get(account_id=self.account_id, action_id=str(a1.id))
@@ -94,7 +98,11 @@ class WebhookDeliveryRecordTests(TestCase):
         action = WatchAction.objects.get(path_id=watch.initial_path_id)
         fi = self._item("e1", now, title="T")
         self.run_svc.enqueue(
-            watch_id=str(watch.id), action_id=str(action.id), feed_item_id=str(fi.id), scheduled_at=now
+            watch_id=str(watch.id),
+            action_id=str(action.id),
+            kind=str(action.kind),
+            feed_item_id=str(fi.id),
+            scheduled_at=now,
         )
 
         block, request = _http(200)
@@ -188,7 +196,11 @@ class WebhookDeliveryRecordTests(TestCase):
         action = WatchAction.objects.get(path_id=watch.initial_path_id)
         fi = self._item("e1", now, title="T")
         self.run_svc.enqueue(
-            watch_id=str(watch.id), action_id=str(action.id), feed_item_id=str(fi.id), scheduled_at=now
+            watch_id=str(watch.id),
+            action_id=str(action.id),
+            kind=str(action.kind),
+            feed_item_id=str(fi.id),
+            scheduled_at=now,
         )
         self._drain(now)
         self.assertEqual(WatchActionRun.objects.get(action_id=str(action.id)).state, "succeeded")

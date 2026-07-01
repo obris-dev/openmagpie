@@ -18,13 +18,11 @@ from openmagpie_schema.watch import (
     WatchActionRunListResponse,
     WatchActionRunView,
     WatchActionRunWire,
-    WatchActionWire,
 )
 from openmagpie_schema.watch_actions import (
-    ENRICHMENT_STATUS_KEY,
-    EXTRACT_STATUS_KEY,
-    EXTRACTED_KEY,
     ExternalContentStatus,
+    ExtractResult,
+    SemanticFilterResult,
 )
 from openmagpie_schema.watch_enums import (
     BACKLOG_STATES,
@@ -83,9 +81,12 @@ def _fmt_score(value: object) -> str:
 
 
 def _score(run: WatchActionRunWire) -> str:
-    """The semantic-filter score from the result blob, 2dp ; '-' for kinds that
-    don't score or runs that never produced one."""
-    return _fmt_score(run.result.get("score"))
+    """The semantic-filter score from the typed result, 2dp ; '-' for kinds that
+    don't score (`run.result` is not a SemanticFilterResult) or runs that never
+    produced one (`run.result` is None)."""
+    result = run.result
+    score = result.score if isinstance(result, SemanticFilterResult) else None
+    return _fmt_score(score)
 
 
 # ── Per-kind run rendering ──────────────────────────────────────────────────
@@ -110,16 +111,20 @@ class FilterRunFormatter(RunFormatter):
     """`semantic_filter`: relevance score + reason + enrichment on the `get` detail."""
 
     def detail_fields(self, run: WatchActionRunWire) -> list[tuple[str, str]]:
+        result = run.result
+        # Score is emitted unconditionally ('-' when absent, via _score) so the
+        # detail agrees with the list SCORE column even for a pending / errored run;
+        # reason + enrichment need the typed result and are gated on it.
         fields = [("score", _score(run))]
-        reason = run.result.get("reason")
-        if reason:
-            fields.append(("reason", str(reason)))
+        if not isinstance(result, SemanticFilterResult):
+            return fields
+        if result.reason:
+            fields.append(("reason", result.reason))
         # Linked-article enrichment provenance, shown only when there's something
-        # to say: NOT_APPLICABLE (no off-site link) and absent are omitted, so a
-        # title-only score is explained (included / unavailable / missing / disabled).
-        status = run.result.get(ENRICHMENT_STATUS_KEY)
-        if status is not None and status != ExternalContentStatus.NOT_APPLICABLE.value:
-            fields.append(("enrichment", str(status)))
+        # to say: NOT_APPLICABLE (no off-site link) is omitted, so a title-only
+        # score is explained (included / unavailable / missing / disabled).
+        if result.enrichment_status != ExternalContentStatus.NOT_APPLICABLE:
+            fields.append(("enrichment", str(result.enrichment_status)))
         return fields
 
 
@@ -129,16 +134,17 @@ class ExtractRunFormatter(RunFormatter):
     not a state-only row)."""
 
     def detail_fields(self, run: WatchActionRunWire) -> list[tuple[str, str]]:
-        extracted = run.result.get(EXTRACTED_KEY) or {}
-        fields = [(name, str(value)) for name, value in extracted.items()]
-        status = run.result.get(EXTRACT_STATUS_KEY)
-        if status:
-            fields.append(("status", str(status)))
-        # Enrichment provenance, shown only when meaningful (NOT_APPLICABLE / absent
+        result = run.result
+        # A pending / errored run (result is None) or a non-extract row: no fields.
+        if not isinstance(result, ExtractResult):
+            return []
+        fields = [(name, str(value)) for name, value in result.extracted.items()]
+        # ExtractStatus is a StrEnum (always set + truthy), so status always shows.
+        fields.append(("status", str(result.status)))
+        # Enrichment provenance, shown only when meaningful (NOT_APPLICABLE
         # omitted), mirroring FilterRunFormatter.
-        enrichment = run.result.get(ENRICHMENT_STATUS_KEY)
-        if enrichment is not None and enrichment != ExternalContentStatus.NOT_APPLICABLE.value:
-            fields.append(("enrichment", str(enrichment)))
+        if result.enrichment_status != ExternalContentStatus.NOT_APPLICABLE:
+            fields.append(("enrichment", str(result.enrichment_status)))
         return fields
 
 
@@ -149,12 +155,11 @@ _RUN_FORMATTERS: dict[WatchActionKind, RunFormatter] = {
 _BASE_RUN_FORMATTER = RunFormatter()
 
 
-def _run_formatter(action: WatchActionWire | None) -> RunFormatter:
-    """The formatter for this action's kind, or the base when the action is
-    absent (paged response) or its kind is unknown to this CLI build."""
-    if action is None:
-        return _BASE_RUN_FORMATTER
-    kind = _as_enum(action.kind, WatchActionKind)
+def _run_formatter(run_kind: WatchActionKind | str) -> RunFormatter:
+    """The formatter for the RUN's OWN kind (denormalized on the wire), so it's
+    right even for an orphan (deleted-action) run or one whose action's kind was
+    edited after it ran. Base formatter when the kind is unknown to this build."""
+    kind = _as_enum(run_kind, WatchActionKind)
     if kind is None:
         return _BASE_RUN_FORMATTER
     return _RUN_FORMATTERS.get(kind, _BASE_RUN_FORMATTER)
@@ -272,9 +277,13 @@ def _run_columns(resp: WatchActionRunListResponse) -> list[_Col]:
     COMPLETED render to seconds (the pair shows run latency); ERROR is the triage
     column for failed runs (`-` on healthy ones). FEED is not default; reach it
     with `--columns feed.name`, `--transpose`, or `activity get`."""
-    # `_as_enum` (not a raw `==`) so an unknown / future kind resolves to None and
-    # drops SCORE, matching `_run_formatter`'s idiom.
-    scoring = resp.action is not None and _as_enum(resp.action.kind, WatchActionKind) == WatchActionKind.SEMANTIC_FILTER
+    # SCORE shows when this is a semantic_filter action OR any row actually ran as
+    # one: run.kind is authoritative (an edited-kind action can leave older rows of
+    # a different kind than the action's current kind). `_as_enum` (not a raw `==`)
+    # so an unknown / future kind resolves to None and drops SCORE.
+    scoring = (
+        resp.action is not None and _as_enum(resp.action.kind, WatchActionKind) == WatchActionKind.SEMANTIC_FILTER
+    ) or any(_as_enum(run.kind, WatchActionKind) == WatchActionKind.SEMANTIC_FILTER for run in resp.items)
     return [
         col("ACTIVITY ID:run.id"),
         col("STATE:run.state"),
@@ -305,7 +314,7 @@ def _print_activity_detail(view: WatchActionRunView) -> None:
     run = view.run
     # state, then the kind-specific fields (e.g. filter score + reason), then the
     # common item / feed / action / timing skeleton.
-    fields: list[tuple[str, str]] = [("state", str(run.state)), *_run_formatter(view.action).detail_fields(run)]
+    fields: list[tuple[str, str]] = [("state", str(run.state)), *_run_formatter(run.kind).detail_fields(run)]
     # Honest item fields: each shown only when the connector populated it (no
     # substituting one for another). The item id always identifies the row, even
     # when the item itself was pruned by retention.

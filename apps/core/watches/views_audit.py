@@ -39,14 +39,14 @@ from .api import (
     WatchSvcMixin,
 )
 from .models import WatchAction, WatchActionDelivery, WatchActionRun
-from .serializers import (
+from .serializers import watch_action_wire
+from .serializers_audit import (
     run_feed_item_wire,
     run_feed_wire,
     watch_action_delivery_view,
     watch_action_delivery_wire,
     watch_action_run_view,
     watch_action_run_wire,
-    watch_action_wire,
 )
 
 
@@ -136,7 +136,9 @@ class ActionRunsView(ActionScopedAPIView):
         # drop a filter via a stale .get()).
         runs = self.run_svc.list_for_action(str(action.id), after=after, limit=limit, state=state, **windows)
         next_cursor = str(runs[-1].id) if len(runs) == limit else None
-        items = [watch_action_run_wire(r) for r in runs]
+        # A per-row fail-safe returns None for an unrenderable orphan row (logged
+        # in the serializer); drop those so one bad row never 500s the page.
+        items = [wire for r in runs if (wire := watch_action_run_wire(r)) is not None]
         # Side tables the rows key into (no embedding): the judged feed items for
         # this page by id, then the (few) feeds backing them by id. Two batched
         # fetches, no N+1; a pruned item / feed is simply absent from its map and
@@ -241,6 +243,9 @@ class ActionActivityDetailView(WatchSvcMixin, AccountScopedAPIView):
             action: WatchAction | None = self.action_svc.get(str(run.action_id))
         except WatchAction.DoesNotExist:
             action = None
-        return Response(
-            watch_action_run_view(run, feed_item=feed_item, feed=feed, action=action).model_dump(mode="json")
-        )
+        view = watch_action_run_view(run, feed_item=feed_item, feed=feed, action=action)
+        if view is None:
+            # An orphan whose kind can't be typed (the migration removes these);
+            # unrenderable, so treat it as absent rather than 500.
+            raise WatchActionRunNotFound(activity_id)
+        return Response(view.model_dump(mode="json"))
