@@ -1,6 +1,6 @@
 [project]
 name = "openmagpie"
-version = "0.5.0"
+version = "0.6.0"
 description = "The magpie CLI — talks to an OpenMagpie server."
 requires-python = ">=3.13"
 dependencies = [

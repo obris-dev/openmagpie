@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.6.0](https://github.com/obris-dev/openmagpie/compare/cli-v0.5.0...cli-v0.6.0) (2026-07-01)
+
+
+### Features
+
+* **auth:** AuthUser as a shared contract across server, CLI, and web ([#154](https://github.com/obris-dev/openmagpie/issues/154)) ([beeaa99](https://github.com/obris-dev/openmagpie/commit/beeaa993f6e97071931376719e012219d7525c23))
+* **schema:** generate + guard the cross-boundary JSON Schema ([#151](https://github.com/obris-dev/openmagpie/issues/151)) ([4b57414](https://github.com/obris-dev/openmagpie/commit/4b5741492b18aae2de0aa4ee3d9f1f7090da0c25))
+
 ## [0.5.0](https://github.com/obris-dev/openmagpie/compare/cli-v0.4.1...cli-v0.5.0) (2026-06-30)
 
 
