@@ -61,6 +61,14 @@ class LeafActionRouteTests(TestCase):
         self.assertEqual(self.client.get(f"/v1/actions/{ulid.ulid()}/activity").status_code, 404)
         self.assertEqual(self.client.get(f"/v1/actions/{ulid.ulid()}").status_code, 404)
 
+    def test_unrenderable_kind_action_get_is_404_not_500(self) -> None:
+        # A persisted action whose stored kind is no longer known (a removed kind /
+        # manual corruption) can't be rendered (no union member); the detail GET
+        # 404s like the run-detail view rather than 500-ing on the None wire.
+        _watch_id, action_id = self._make_watch_with_action()
+        WatchAction.objects.filter(id=action_id).update(kind="removed_kind")
+        self.assertEqual(self.client.get(f"/v1/actions/{action_id}").status_code, 404)
+
     def test_another_account_cannot_reach_the_action(self) -> None:
         _watch_id, action_id = self._make_watch_with_action()
         other = APIClient()

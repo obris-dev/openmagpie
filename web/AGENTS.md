@@ -13,6 +13,7 @@ The shared `@source` glob (see Tailwind v4 below) already covers every app, so a
 
 Packages:
 
+- `@magpie/schema`, the generated zod contract (from the Pydantic `schema.json`); server-shared shapes come from here (see the Schemas + types section)
 - `@magpie/ui`, shared UI primitives (Button, Input, PasswordInput, FormField, Logo, Emblem, ...)
 - `@magpie/api-utils`, route registry + fetch wrapper + zod schemas + one action per endpoint
 - `@magpie/auth`, Zustand store + auth hooks
@@ -43,19 +44,22 @@ When a route changes in Django, update `routes.ts` and `types.ts` together. Type
 
 ### Schemas + types: zod is the single source
 
-For any response shape that drives auth state or other trust-sensitive UI, define a zod schema in `src/types.ts` and infer the TS type from it:
+Split by origin:
+
+- **Server-shared shapes** (anything the Django API returns, e.g. `AuthUser`) come from `@magpie/schema`, which is GENERATED from the Pydantic contract (`packages/openmagpie-schema` → `schema.json` → zod; see that package's generator). Import the schema + inferred type from there; never hand-redeclare a server shape, or it drifts from the one contract the server and CLI also validate against:
 
 ```ts
-export const AuthUserSchema = z.object({
-  id: z.string(),
-  email: z.string(),
-  account_id: z.string(),
-  created_at: z.string(),
-});
-export type AuthUser = z.infer<typeof AuthUserSchema>;
+import { AuthUserSchema, type AuthUser } from "@magpie/schema";
 ```
 
-One declaration, two outputs: a TypeScript type AND a runtime `.parse(...)` validator. They can't drift.
+- **Browser-only shapes** (request bodies the client builds, UI-local state, anything with no server counterpart) live in `src/types.ts` as a zod schema with the TS type inferred from it:
+
+```ts
+export const SomeClientBodySchema = z.object({ ... });
+export type SomeClientBody = z.infer<typeof SomeClientBodySchema>;
+```
+
+Either way: one declaration, two outputs (a TypeScript type AND a runtime `.parse(...)` validator) that can't drift, and server shapes stay anchored to the shared contract.
 
 ### `apiFetchParsed` over `apiFetch<T>`
 

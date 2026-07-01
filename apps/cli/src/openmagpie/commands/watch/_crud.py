@@ -9,6 +9,7 @@ in `_actions.py` (`watch action ...`).
 from __future__ import annotations
 
 import sys
+from typing import Any
 
 import typer
 import yaml
@@ -115,7 +116,10 @@ def edit(
     surgical alternative."""
     ac = app_ctx()
     detail = ac.api.watch.get(watch_id)
-    seed = yaml.safe_dump(_edit_seed(detail).model_dump(mode="json"), sort_keys=False)
+    seed = yaml.safe_dump(_edit_seed(detail), sort_keys=False)
+    corrupt = _corrupt_config_note(detail.actions)
+    if corrupt:
+        console.warn(corrupt)
     if file is None:
         body_text = _open_editor_or_abort(seed)
     elif file == "-":
@@ -250,19 +254,51 @@ def _run_mutation(
     console.success(f"{done} watch {result.name} ({result.id})")
 
 
-def _edit_seed(detail: WatchView) -> WatchInput:
-    """The editable envelope for `edit`, projected from the current watch.
-    Keeps each action's `id` so the server matches by id (in-place update,
-    preserving run history) instead of recreating rows. Drops the
-    watch-level read-only fields (user_id, created_at)."""
-    return WatchInput(
-        name=detail.name,
-        is_active=detail.is_active,
-        feed_ids=detail.feed_ids,
-        actions=[
-            build_watch_action_input(id=a.id, kind=a.kind, config=a.config.model_dump(mode="json"))
-            for a in detail.actions
-        ],
+def _edit_seed(detail: WatchView) -> dict[str, Any]:
+    """The editable envelope for `edit` (as a JSON-able dict to YAML-dump),
+    projected from the current watch. Keeps each action's `id` so the server
+    matches by id (in-place update, preserving run history) instead of recreating
+    rows. Drops the watch-level read-only fields (user_id, created_at)."""
+    return {
+        "name": detail.name,
+        "is_active": detail.is_active,
+        "feed_ids": detail.feed_ids,
+        "actions": [_action_edit_seed(a) for a in detail.actions],
+    }
+
+
+def _action_edit_seed(a: WatchActionWire) -> dict[str, Any]:
+    """One action's `{id, kind, config, ...}` seed for the edit envelope. A
+    corrupt-at-rest config degrades to null on the wire (config=None); seed it as
+    an empty `{}` placeholder for the operator to fill rather than crash on the
+    None (and rather than feed a None to `build_watch_action_input`, which needs a
+    dict). A readable config still round-trips through the typed input envelope."""
+    if a.config is None:
+        # Match the readable branch's dump so the two seed shapes don't drift:
+        # `str(kind)` (a plain string, not the enum) and `rank: None`
+        # (build_watch_action_input leaves rank unset -> null).
+        return {"id": a.id, "kind": str(a.kind), "rank": None, "config": {}}
+    return build_watch_action_input(id=a.id, kind=a.kind, config=a.config.model_dump(mode="json")).model_dump(
+        mode="json"
+    )
+
+
+def _corrupt_config_note(actions: list[WatchActionWire]) -> str | None:
+    """Warn when a current action's config is unreadable (null on the wire, a
+    corrupt-at-rest blob). The edit seed shows it as an empty `{}` placeholder, so
+    without this an operator could save an unrelated change and silently overwrite
+    the degraded config with defaults (an all-defaults kind like `log` wouldn't
+    even raise a validation error, unlike the single-action edit path which flags
+    it inline). Lists each by id + kind, mirroring `_action_recreate_note`. None
+    when every config is readable."""
+    corrupt = [a for a in actions if a.config is None]
+    if not corrupt:
+        return None
+    rows = "\n".join(f"  {a.id}  {a.kind}" for a in corrupt)
+    return (
+        f"{len(corrupt)} action(s) have an unreadable config, seeded as an empty `{{}}` placeholder:\n"
+        f"{rows}\n"
+        "Fill each in before saving, or an unrelated edit overwrites the stored config with defaults."
     )
 
 

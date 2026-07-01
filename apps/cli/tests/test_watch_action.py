@@ -13,8 +13,12 @@ from unittest import mock
 
 import typer
 
-from openmagpie.commands.watch._actions import _run_action_mutation
-from openmagpie.commands.watch._crud import _action_recreate_note
+from openmagpie.commands.watch._actions import (
+    _parse_action_or_abort,
+    _print_action_detail,
+    _run_action_mutation,
+)
+from openmagpie.commands.watch._crud import _action_edit_seed, _action_recreate_note
 from openmagpie_schema.watch import (
     WatchActionInput,
     WatchActionMutationResponse,
@@ -108,6 +112,71 @@ class RunActionMutationTests(unittest.TestCase):
         with self.assertRaises(typer.Exit):
             _run_action_mutation(mutate, is_edit=False, dry_run=False, yes=True)
         self.assertEqual(mutate.call_count, 2)  # reached apply, then aborted
+
+
+def _error_text(console_mock: mock.Mock) -> str:
+    return " ".join(str(call.args[0]) for call in console_mock.error.call_args_list)
+
+
+class ParseActionConfigTests(unittest.TestCase):
+    """`_parse_action_or_abort` validates the config against the kind's typed shape
+    at PARSE time, so a config typo renders per-field errors (like main did) instead
+    of surfacing later as a ValidationError the command boundary mislabels as a
+    server/CLI version mismatch."""
+
+    def test_valid_config_returns_kind_and_config(self) -> None:
+        kind, config = _parse_action_or_abort("kind: log\nconfig: {}\n")
+        self.assertEqual(kind, "log")
+        self.assertEqual(config, {})
+
+    def test_bad_config_renders_field_errors_not_version_mismatch(self) -> None:
+        # semantic_filter needs `instructions` and threshold in (0, 1]; both wrong here.
+        text = "kind: semantic_filter\nconfig: {threshold: 5}\n"
+        with (
+            mock.patch("openmagpie.commands.watch._actions.console") as console_mock,
+            self.assertRaises(typer.Exit),
+        ):
+            _parse_action_or_abort(text)
+        messages = _error_text(console_mock)
+        self.assertIn("Action config error", messages)  # the parse-time header, not the version line
+        self.assertIn("instructions", messages)  # the missing field, named
+        self.assertIn("threshold", messages)  # the out-of-range field, named
+        self.assertNotIn("incompatible versions", messages)  # never the CONTRACT_MISMATCH message
+
+    def test_unknown_kind_renders_error(self) -> None:
+        with (
+            mock.patch("openmagpie.commands.watch._actions.console") as console_mock,
+            self.assertRaises(typer.Exit),
+        ):
+            _parse_action_or_abort("kind: nope\nconfig: {}\n")
+        self.assertIn("Action config error", _error_text(console_mock))
+
+
+class NullConfigDegradeTests(unittest.TestCase):
+    """A corrupt-at-rest config degrades to `config: null` on the wire; the display
+    + edit-seed sites handle the None instead of crashing on it."""
+
+    def test_get_display_renders_null_for_none_config(self) -> None:
+        wire = build_watch_action_wire(id="01X", kind="log", rank=0, config=None)
+        # Patch only `console.log` (the config-blob sink); the field table uses the
+        # real console, and a full-module mock would break `console.EMPTY`.
+        with mock.patch("openmagpie.commands.watch._actions.console.log") as log_mock:
+            _print_action_detail(wire)  # must not raise AttributeError on the None
+        logged = " ".join(str(call.args[0]) for call in log_mock.call_args_list)
+        self.assertIn("null", logged)  # the config blob rendered as JSON null
+
+    def test_edit_seed_uses_empty_placeholder_for_none_config(self) -> None:
+        wire = build_watch_action_wire(id="01X", kind="log", rank=0, config=None)
+        seed = _action_edit_seed(wire)
+        # placeholder, not a crash; shape matches the readable branch (kind str, rank key present)
+        self.assertEqual(seed, {"id": "01X", "kind": "log", "rank": None, "config": {}})
+
+    def test_edit_seed_round_trips_a_readable_config(self) -> None:
+        wire = build_watch_action_wire(id="01Y", kind="log", rank=0, config={"prefix": "[x]"})
+        seed = _action_edit_seed(wire)
+        self.assertEqual(seed["kind"], "log")
+        self.assertEqual(seed["id"], "01Y")
+        self.assertEqual(seed["config"]["prefix"], "[x]")
 
 
 if __name__ == "__main__":

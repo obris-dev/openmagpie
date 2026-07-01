@@ -134,6 +134,20 @@ class ReplaceChainUpsertTests(TestCase):
                 ],
             )
 
+    def test_full_replace_refuses_to_delete_an_unrenderable_row(self) -> None:
+        # A corrupt stored kind is omitted from watch_view (the client never sees
+        # it), so a full-replace edit can't resubmit its id. Without this guard
+        # replace_chain would silently delete the invisible row + its run history;
+        # refuse instead (the server holds the true, uncensored set).
+        watch, chain = self._logs(["[A]"])
+        WatchAction.objects.filter(id=chain[0].id).update(kind="removed_kind")
+        with self.assertRaises(PolicyError):
+            self.asvc.replace_chain(
+                path_id=watch.initial_path_id,
+                actions=[build_watch_action_input(kind="log", config={"prefix": "[B]"})],
+            )
+        self.assertTrue(WatchAction.objects.filter(id=chain[0].id).exists())  # not deleted
+
 
 class SetActiveTests(TestCase):
     """set_active is the lightweight pause/resume: it flips is_active and leaves the

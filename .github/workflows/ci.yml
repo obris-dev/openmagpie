@@ -114,3 +114,40 @@ jobs:
       - name: Tests
         working-directory: apps/core
         run: uv run --package openmagpie-core python manage.py test --noinput
+
+  # Backstop for hop 2 of the schema contract (schema.json -> web zod). The `lint`
+  # job's "schema.json is fresh" step guards hop 1 (Pydantic -> schema.json); this
+  # guards that the committed web validators (packages/schema/src/generated.ts)
+  # aren't stale relative to schema.json + the generator. Mirrors the local
+  # `web-schema` pre-commit hook, unconditionally, for anyone without pnpm.
+  web-schema:
+    name: web-schema
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+      - name: Install web deps
+        working-directory: web
+        run: pnpm install --frozen-lockfile
+      - name: generated.ts is fresh
+        working-directory: web
+        run: pnpm --filter @magpie/schema check
+      # Freshness is a string diff; typecheck the WHOLE workspace (not just
+      # @magpie/schema) so a contract change that type-breaks a CONSUMER
+      # (@magpie/api-utils, the apps) or a zod-4 usage issue fails on the PR here,
+      # not later on push-to-main (images.yml). Deps are already installed above.
+      - name: web packages typecheck
+        working-directory: web
+        run: pnpm -r typecheck
+      # typecheck never EXECUTES the module, so also run the generated schemas: a
+      # fresh but throw-on-import generated.ts (a zod runtime bump) fails here too.
+      - name: generated.ts runtime smoke
+        working-directory: web
+        run: pnpm --filter @magpie/schema smoke

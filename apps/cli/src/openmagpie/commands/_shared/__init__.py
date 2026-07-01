@@ -36,7 +36,14 @@ from .columns import (
     _ts,
     col,
 )
-from .errors import _flatten_errors, _handle_api_errors, _print_api_error, _unreachable_message
+from .errors import (
+    CONTRACT_MISMATCH_MESSAGE,
+    _abort_contract_mismatch,
+    _flatten_errors,
+    _handle_api_errors,
+    _print_api_error,
+    _unreachable_message,
+)
 from .files import _maybe_to_file, _open_editor_or_abort, _read_file_or_abort
 from .output import (
     _emit_detail,
@@ -48,10 +55,12 @@ from .output import (
 from .timeflags import _DEFAULT_WINDOW, _build_windows
 
 __all__ = [
+    "CONTRACT_MISMATCH_MESSAGE",
     "FORMAT_CHOICES",
     "_DEFAULT_WINDOW",
     "_Col",
     "_Page",
+    "_abort_contract_mismatch",
     "_abort_unexpected",
     "_active_flip_note",
     "_as_enum",

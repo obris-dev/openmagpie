@@ -152,3 +152,31 @@ class WatchChainDryRunTests(TestCase):
         self.assertEqual(action["id"], "")  # a preview chain action carries no id
         self.assertNotIn("s3cr3t", str(action))  # secret redacted on the preview chain too
         self.assertEqual(action["config"]["headers"]["Authorization"], "***")
+
+
+class CorruptConfigWireTests(TestCase):
+    """A stored action config that no longer validates against its kind degrades
+    to `config: null` on the wire, never raising (which would 500 a watch read or
+    the activity header). Regression for the typed-config union: the old
+    `{"error": ...}` sentinel can't validate as 3 of the 4 kinds (required
+    fields), so the degrade is None, not a sentinel dict."""
+
+    def test_unloadable_config_degrades_to_null(self) -> None:
+        from watches.serializers import watch_action_wire
+
+        # semantic_filter requires `instructions`; this garbage blob can't type (a
+        # manual DB edit, or a config written before a schema tightening).
+        action = WatchAction(kind="semantic_filter", config={"garbage": True}, rank=0)
+        wire = watch_action_wire(action)
+        assert wire is not None  # a known kind still renders (config degraded)
+        self.assertEqual(str(wire.kind), "semantic_filter")  # kind (the column) still renders
+        self.assertIsNone(wire.config)  # unreadable config -> null, not a 500, not a sentinel
+
+    def test_unknown_kind_skips_the_row(self) -> None:
+        from watches.serializers import watch_action_wire
+
+        # A corrupt kind column (not a known action kind) selects no union member,
+        # so the row is skipped (None) rather than 500-ing the read. Callers over a
+        # list drop it; the KNOWN_KINDS invariant test rules this out for live data.
+        action = WatchAction(kind="not_a_kind", config={}, rank=0)
+        self.assertIsNone(watch_action_wire(action))

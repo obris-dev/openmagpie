@@ -18,7 +18,7 @@ It carries `user_id` but deliberately NO `account_id` (the one documented
 exception to the "every domain model carries account_id + user_id" rule
 in AGENTS.md). This mirrors the OAuth session token, which is bound to a
 user, not an account: the active account is resolved per request from the
-user's primary account (see `UserSerializer.get_account_id`), so pinning
+user's primary account (see `auth_user_wire`), so pinning
 an account into the credential would diverge from how sessions behave.
 
 `user_id` is a char pointer, not a `ForeignKey` (per AGENTS.md): no

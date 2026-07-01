@@ -11,13 +11,14 @@ from urllib.parse import urlparse
 
 import httpx
 import typer
+from pydantic import ValidationError
 
 from .. import console
 from ..api.auth import DeviceSessionCompleted, DeviceSessionExpired
 from ..constants import TOKEN_ENV_VAR, is_personal_access_token
 from ..context import app_config, app_ctx
 from ..http import ApiError, AuthError
-from ._shared import _unreachable_message
+from ._shared import _abort_contract_mismatch, _unreachable_message
 from .auth_token import token_app
 from .telemetry import notice_after_login
 
@@ -126,6 +127,8 @@ def _login_with_token() -> None:
     except ApiError as e:
         console.error(f"Couldn't reach server at {ac.config.server_url} (HTTP {e.status}).")
         raise typer.Exit(code=1) from None
+    except ValidationError:
+        _abort_contract_mismatch()
     except httpx.HTTPError as e:
         console.error(_unreachable_message(e))
         raise typer.Exit(code=1) from None
@@ -172,6 +175,8 @@ def login(
     except ApiError as e:
         console.error(f"Server returned an error (HTTP {e.status}).")
         raise typer.Exit(code=1) from None
+    except ValidationError:
+        _abort_contract_mismatch()
     except httpx.HTTPError as e:
         console.error(_unreachable_message(e))
         raise typer.Exit(code=1) from None
@@ -225,6 +230,9 @@ def login(
                 # tokens; if the user needs detail, server logs have it.
                 console.error(f"Server returned an error while polling (HTTP {e.status}).")
                 raise typer.Exit(code=1) from None
+            except ValidationError:
+                # Contract mismatch (not transient like a transport error): stop + exit.
+                _abort_contract_mismatch()
             except httpx.HTTPError as e:
                 # Transport-level error (connect refused, timeout, DNS,
                 # protocol). Treat as transient and keep polling. Warn
@@ -276,6 +284,8 @@ def status() -> None:
     except ApiError as e:
         console.error(f"Couldn't reach the server cleanly (HTTP {e.status}). Try again or check the server status.")
         raise typer.Exit(code=1) from None
+    except ValidationError:
+        _abort_contract_mismatch()
     except httpx.HTTPError as e:
         console.error(_unreachable_message(e))
         raise typer.Exit(code=1) from None

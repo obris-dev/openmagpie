@@ -196,7 +196,15 @@
     "ExtractActionWire": {
       "properties": {
         "config": {
-          "$ref": "#/$defs/ExtractConfig"
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ExtractConfig"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         },
         "created_at": {
           "anyOf": [
@@ -231,8 +239,7 @@
         }
       },
       "required": [
-        "rank",
-        "config"
+        "rank"
       ],
       "title": "ExtractActionWire",
       "type": "object"
@@ -1202,7 +1209,15 @@
     "LogActionWire": {
       "properties": {
         "config": {
-          "$ref": "#/$defs/LogConfig"
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LogConfig"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         },
         "created_at": {
           "anyOf": [
@@ -1237,8 +1252,7 @@
         }
       },
       "required": [
-        "rank",
-        "config"
+        "rank"
       ],
       "title": "LogActionWire",
       "type": "object"
@@ -1699,7 +1713,15 @@
     "SemanticFilterActionWire": {
       "properties": {
         "config": {
-          "$ref": "#/$defs/SemanticFilterConfig"
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SemanticFilterConfig"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         },
         "created_at": {
           "anyOf": [
@@ -1734,8 +1756,7 @@
         }
       },
       "required": [
-        "rank",
-        "config"
+        "rank"
       ],
       "title": "SemanticFilterActionWire",
       "type": "object"
@@ -2567,7 +2588,7 @@
       "type": "string"
     },
     "WatchActionRunSummary": {
-      "description": "Activity over an action's runs, so an operator sees \"what is this\naction doing?\" without scrolling the log.\n\n`evaluated` is the per-terminal-state breakdown of runs JUDGED within\n[since, until) -- windowed on completion (evaluation) time, not enqueue\ntime. `pending` / `running` / `retrying` are the CURRENT live backlog,\nNOT time-bound (those runs have no completion time yet), surfaced so the\nqueue stays visible. `window` is the requested preset ; `since` / `until`\nare the concrete bounds the server resolved it to.\n\nDISJOINT by `completed_at`: a FAILED run is counted in `evaluated[failed]`\niff it's terminal (attempts exhausted -> has a completion time) and in\n`retrying` iff it's not (still under the cap -> no completion time). So a\nconsumer can sum across buckets without double-counting.",
+      "description": "Activity over an action's runs, so an operator sees \"what is this\naction doing?\" without scrolling the log.\n\n`evaluated` is the per-terminal-state breakdown of runs JUDGED within\n[since, until), windowed on completion (evaluation) time, not enqueue\ntime. `pending` / `running` / `retrying` are the CURRENT live backlog,\nNOT time-bound (those runs have no completion time yet), surfaced so the\nqueue stays visible. `window` is the requested preset ; `since` / `until`\nare the concrete bounds the server resolved it to.\n\nDISJOINT by `completed_at`: a FAILED run is counted in `evaluated[failed]`\niff it's terminal (attempts exhausted -> has a completion time) and in\n`retrying` iff it's not (still under the cap -> no completion time). So a\nconsumer can sum across buckets without double-counting.",
       "properties": {
         "evaluated": {
           "additionalProperties": {
@@ -3062,7 +3083,15 @@
     "WebhookActionWire": {
       "properties": {
         "config": {
-          "$ref": "#/$defs/WebhookConfig"
+          "anyOf": [
+            {
+              "$ref": "#/$defs/WebhookConfig"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         },
         "created_at": {
           "anyOf": [
@@ -3097,8 +3126,7 @@
         }
       },
       "required": [
-        "rank",
-        "config"
+        "rank"
       ],
       "title": "WebhookActionWire",
       "type": "object"

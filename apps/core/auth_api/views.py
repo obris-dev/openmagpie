@@ -40,7 +40,7 @@ from .serializers import (
     RefreshSerializer,
     SignupSerializer,
     TokenPairSerializer,
-    UserSerializer,
+    auth_user_wire,
 )
 from .services.cli_tokens import CliTokenService
 from .services.tokens import TokenService
@@ -58,7 +58,7 @@ def _browser_auth_response(user: User, *, status_code: int = status.HTTP_200_OK)
     rotation material.
     """
     access, _refresh, ttl = TokenService.Global.mint_pair(user)
-    response = Response({"user": UserSerializer(user).data}, status=status_code)
+    response = Response({"user": auth_user_wire(user).model_dump(mode="json")}, status=status_code)
     set_auth_cookie(response, access.token, max_age=ttl)
     return response
 
@@ -159,7 +159,7 @@ class MeView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request):
-        return Response(UserSerializer(request.user).data)
+        return Response(auth_user_wire(request.user).model_dump(mode="json"))
 
 
 class TokensRefreshView(APIView):
@@ -299,6 +299,6 @@ class WhoamiView(APIView):
             {
                 "cookies_seen": sorted(request._request.COOKIES.keys()),
                 "has_auth_header": AUTHORIZATION_META_KEY in request._request.META,
-                "user": UserSerializer(request.user).data if request.user is not None else None,
+                "user": auth_user_wire(request.user).model_dump(mode="json") if request.user is not None else None,
             }
         )

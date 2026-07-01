@@ -21,8 +21,9 @@ from typing import Any
 
 import typer
 import yaml
+from pydantic import ValidationError
 
-from openmagpie_schema.watch import WatchActionMutationResponse, WatchActionWire
+from openmagpie_schema.watch import WatchActionMutationResponse, WatchActionWire, build_watch_action_input
 
 from ... import console
 from ...context import app_ctx
@@ -96,8 +97,15 @@ def _print_action_detail(a: WatchActionWire, *, title: str | None = None) -> Non
     _print_detail(title or f"action {a.id}", fields)
     console.log("\nconfig:")  # the server-redacted config blob, in full
     # `config` is the typed union member's config model; dump to its plain dict
-    # for display (the on-wire shape is JSON, secrets already redacted).
-    console.log(json.dumps(a.config.model_dump(mode="json"), indent=2, sort_keys=True))
+    # for display (the on-wire shape is JSON, secrets already redacted). A
+    # corrupt-at-rest config degrades to null on the wire (config=None), so render
+    # it as `null` rather than crashing on the missing model.
+    config_json = a.config.model_dump(mode="json") if a.config is not None else None
+    console.log(json.dumps(config_json, indent=2, sort_keys=True))
+    if a.config is None:
+        # Consistent with the edit paths, which flag a corrupt config rather than
+        # show a bare null: say why it's null so a reader doesn't read it as "unset".
+        console.warn("This action's stored config is unreadable (corrupt at rest); shown as null above.")
 
 
 @action_app.command("template")
@@ -167,7 +175,17 @@ def action_edit(
     api = app_ctx().api.watch
     if file is None:
         current = api.get_action(action_id)
-        seed = yaml.safe_dump({"kind": current.kind, "config": current.config.model_dump(mode="json")}, sort_keys=False)
+        # A corrupt-at-rest config degrades to null on the wire (config=None); seed
+        # an empty placeholder for the operator to fill instead of crashing on the
+        # None, flagging in the seed why the config came back blank.
+        if current.config is None:
+            config: dict[str, Any] = {}
+            seed = "# NOTE: the stored config was unreadable (corrupt) and replaced with an\n"
+            seed += "# empty placeholder; fill it in before applying.\n"
+        else:
+            config = current.config.model_dump(mode="json")
+            seed = ""
+        seed += yaml.safe_dump({"kind": current.kind, "config": config}, sort_keys=False)
         text = _open_editor_or_abort(seed)
     elif file == "-":
         text = sys.stdin.read()
@@ -228,6 +246,18 @@ def _parse_action_or_abort(text: str) -> tuple[str, dict[str, Any]]:
     if not isinstance(config, dict):
         console.error("Action `config` must be a mapping.")
         raise typer.Exit(code=1)
+    # Validate the config against the kind's typed shape HERE, at parse time, so a
+    # config typo (a missing/out-of-range field) or an unknown kind renders per-field
+    # errors like it did on main. Left unvalidated it would surface later as a
+    # ValidationError the command-boundary handler mislabels as a version mismatch.
+    try:
+        build_watch_action_input(kind=kind, config=config)
+    except ValidationError as e:
+        console.error("Action config error:")
+        for err in e.errors():
+            path = ".".join(str(p) for p in err["loc"]) or "_"
+            console.error(f"  {path}: {err['msg']}")
+        raise typer.Exit(code=1) from None
     return kind, config
 
 

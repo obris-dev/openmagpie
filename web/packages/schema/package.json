@@ -14,10 +14,13 @@
   "devDependencies": {
     "@types/node": "^22.10.0",
     "json-schema-to-zod": "^2.6.1",
+    "tsx": "^4.19.2",
     "typescript": "^5.6.3"
   },
   "scripts": {
     "generate": "node scripts/generate.mjs",
-    "typecheck": "tsc --noEmit"
+    "check": "node scripts/generate.mjs --check",
+    "typecheck": "tsc --noEmit",
+    "smoke": "tsx scripts/smoke.ts"
   }
 }

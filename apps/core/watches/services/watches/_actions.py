@@ -25,7 +25,7 @@ from openmagpie_schema.watch import WatchActionInput
 from openmagpie_schema.watch_actions import DeliveryConfigBase
 from watches.models import WatchAction, WatchActionDigestWindow
 from watches.policy import PolicyError
-from watches.registry import load_config, merge_config, parse_config, validate_config
+from watches.registry import KNOWN_KINDS, load_config, merge_config, parse_config, validate_config
 
 
 class ConcurrentChainError(RuntimeError):
@@ -162,6 +162,18 @@ class WatchActionService:
                     created.append(row)
                     ordered.append(row)
             removed_ids = [sid for sid in existing if sid not in kept_ids]
+            # Refuse a full-replace that would delete an action the client was never
+            # shown. watch_view omits a row whose stored kind isn't a known kind
+            # (unrenderable: a removed kind / manual corruption), so an edit seeded
+            # from that censored detail lacks its id, and this delete would silently
+            # drop it AND its run history. The client can't intend to remove what it
+            # can't see, so reject rather than lose it (the server has the true set).
+            hidden = [sid for sid in removed_ids if str(existing[sid].kind) not in KNOWN_KINDS]
+            if hidden:
+                raise PolicyError(
+                    f"actions {hidden} have an unreadable kind and aren't shown to the client; "
+                    "resolve them (migrate or remove) before replacing this watch's action chain"
+                )
             with transaction.atomic():
                 if removed_ids:
                     WatchAction.objects.filter(account_id=self.account_id, id__in=removed_ids).delete()

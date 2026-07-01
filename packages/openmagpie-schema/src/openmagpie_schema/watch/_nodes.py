@@ -41,24 +41,29 @@ class _WatchActionWireFields(BaseModel):
     created_at: datetime | None = None
 
 
+# The WIRE config is Optional ONLY as a corrupt-at-rest degrade: the server
+# validates config on write, so a real read always has one, but a config that no
+# longer types (a manual DB edit, a tightened schema) degrades to None rather than
+# 500 the list, mirroring the run wire's `result: <Typed> | None`. The INPUT
+# members below keep config REQUIRED (you can't author an action without one).
 class SemanticFilterActionWire(_WatchActionWireFields):
     kind: Literal[WatchActionKind.SEMANTIC_FILTER] = WatchActionKind.SEMANTIC_FILTER
-    config: SemanticFilterConfig
+    config: SemanticFilterConfig | None = None
 
 
 class ExtractActionWire(_WatchActionWireFields):
     kind: Literal[WatchActionKind.EXTRACT] = WatchActionKind.EXTRACT
-    config: ExtractConfig
+    config: ExtractConfig | None = None
 
 
 class LogActionWire(_WatchActionWireFields):
     kind: Literal[WatchActionKind.LOG] = WatchActionKind.LOG
-    config: LogConfig
+    config: LogConfig | None = None
 
 
 class WebhookActionWire(_WatchActionWireFields):
     kind: Literal[WatchActionKind.WEBHOOK] = WatchActionKind.WEBHOOK
-    config: WebhookConfig
+    config: WebhookConfig | None = None
 
 
 # One action node on the wire: a discriminated union keyed by `kind` (a plain
@@ -79,7 +84,7 @@ def build_watch_action_wire(
     *,
     kind: WatchActionKind | str,
     rank: int,
-    config: dict[str, Any],
+    config: dict[str, Any] | None,
     id: str = "",
     summary: WatchActionConfigSummary | None = None,
     created_at: datetime | None = None,
@@ -87,7 +92,9 @@ def build_watch_action_wire(
     """Build a WatchActionWire union member from its parts. `config` is the PURE
     kind-specific config dict (NO `kind` nested inside); `kind` is the sibling
     discriminator the union keys on. Validates through the adapter so the right
-    member is selected and `config` typed to it."""
+    member is selected and `config` typed to it. `config=None` is the
+    corrupt-at-rest degrade (the server passes None when the stored config no
+    longer types), which the wire member's Optional config accepts."""
     payload: dict[str, Any] = {"id": id, "kind": kind, "rank": rank, "config": config}
     if summary is not None:
         payload["summary"] = summary

@@ -156,7 +156,7 @@ def build_watch_action_run_wire(
     into that member's typed result.
 
     An empty result ({}) becomes None (a run with no terminal result yet). That
-    coalesce relies on a REAL result dump never being {} -- true because every
+    coalesce relies on a REAL result dump never being {}, true because every
     result model has at least one field, so its dump always has at least one key.
 
     A result whose shape doesn't match `kind` raises ONLY for members with a
@@ -194,7 +194,7 @@ class WatchActionRunSummary(BaseModel):
     action doing?" without scrolling the log.
 
     `evaluated` is the per-terminal-state breakdown of runs JUDGED within
-    [since, until) -- windowed on completion (evaluation) time, not enqueue
+    [since, until), windowed on completion (evaluation) time, not enqueue
     time. `pending` / `running` / `retrying` are the CURRENT live backlog,
     NOT time-bound (those runs have no completion time yet), surfaced so the
     queue stays visible. `window` is the requested preset ; `since` / `until`
@@ -208,8 +208,8 @@ class WatchActionRunSummary(BaseModel):
     window: WatchActivityWindow
     since: datetime
     until: datetime | None = None
-    # Keyed by the run-state enum (identical on the wire -- StrEnum serializes
-    # to its value -- but typed for the CLI, closing the "state magic strings"
+    # Keyed by the run-state enum (identical on the wire, StrEnum serializes to
+    # its value, but typed for the CLI, closing the "state magic strings"
     # door). Backlog states never appear here (they have no completion time).
     # An `evaluated[failed]` count is the EXHAUSTED (terminal) failures only.
     evaluated: dict[WatchActionRunState, int] = Field(default_factory=dict)
@@ -240,7 +240,7 @@ class WatchActionRunListResponse(BaseModel):
     # many runs -> few feeds; a missing key renders by id.
     feed_items: dict[str, RunFeedItem] = Field(default_factory=dict)
     feeds: dict[str, RunFeed] = Field(default_factory=dict)
-    # None means "this is a paged response" (no summary computed) -- NOT "no
+    # None means "this is a paged response" (no summary computed), NOT "no
     # activity". The first page always carries a summary, all-zero if idle.
     summary: WatchActionRunSummary | None = None
 

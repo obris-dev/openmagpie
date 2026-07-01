@@ -86,3 +86,17 @@ repos:
         files: '^(tools/schema_sync/.*\.py|packages/openmagpie-schema/(.*\.py|schema\.json))$'
         pass_filenames: false
         require_serial: true
+
+      - id: web-schema
+        name: web generated.ts is fresh
+        # Hop 2 of the contract: schema.json -> web zod (packages/schema/src/generated.ts).
+        # Hop 1 (Pydantic -> schema.json) is guarded by `schema-sync` above; without
+        # this, a schema.json change (or a hand-edit of the generator / output) could
+        # silently leave the web validators stale. Regenerate in memory and diff, same
+        # as schema-sync. Fix with `pnpm --filter @magpie/schema generate` (in web/).
+        # Needs pnpm/node; CI runs the same --check as a backstop for anyone without them.
+        entry: bash -c 'cd web && pnpm --filter @magpie/schema check'
+        language: system
+        files: '^(packages/openmagpie-schema/schema\.json|web/packages/schema/(scripts/generate\.mjs|src/generated\.ts))$'
+        pass_filenames: false
+        require_serial: true

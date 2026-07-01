@@ -1,10 +1,10 @@
 """DRF serializers for the auth API.
 
-Input serializers validate request payloads (DRF turns ValidationError
-into 400). Output serializers shape responses, both the web frontend
-(`web/packages/api-utils/src/types.ts`) and the CLI
-(`cli/src/openmagpie/api/auth.py`) read these shapes verbatim, so
-changes here ripple to both clients.
+Input serializers validate request payloads (DRF turns ValidationError into
+400). The user identity that responses carry is built through the shared
+`AuthUser` contract (see `auth_user_wire`), NOT a hand-mirrored serializer, so
+the web frontend and the CLI parse one shape that can't drift from the server.
+The remaining output serializers here shape the other response fields.
 """
 
 from __future__ import annotations
@@ -13,6 +13,7 @@ from django.contrib.auth.password_validation import validate_password
 from rest_framework import serializers
 
 from accounts.services import AccountService
+from openmagpie_schema.auth import AuthUser
 
 from .constants import BEARER_TOKEN_TYPE
 from .services.cli_tokens import MAX_EXPIRY_DAYS, MIN_EXPIRY_DAYS
@@ -74,25 +75,21 @@ class CliTokenSerializer(serializers.Serializer):
     expires_at = serializers.DateTimeField(allow_null=True)
 
 
-class UserSerializer(serializers.Serializer):
-    """Wire shape for the current user (`/v1/auth/me`, signup / login
-    `{user}` responses). Fed an `accounts.User` instance.
+def auth_user_wire(user) -> AuthUser:
+    """Build the shared `AuthUser` contract for a `User` (the `/v1/auth` me /
+    signup / login `{user}` payload, and the device-session completed bag), so
+    the server + CLI + web share ONE identity shape instead of a hand-mirrored
+    DRF serializer. Response sites emit `auth_user_wire(user).model_dump(mode="json")`.
+
+    `account_id` is REQUIRED by the contract: a user belongs to an account (signup
+    creates one and binds the user), so a missing account is a data-integrity
+    violation, not a valid response, surface it rather than emit a contract-breaking
+    null (mirrors the account-scoped services' None->raise guard).
     """
-
-    id = serializers.CharField()
-    email = serializers.EmailField()
-    account_id = serializers.SerializerMethodField()
-    created_at = serializers.DateTimeField(source="date_joined")
-
-    def get_account_id(self, user) -> str:
-        # A user belongs to an account (signup creates one and binds the user),
-        # so this is always present; the contract (AuthUser.account_id) is
-        # non-null. If it's ever missing that's a data-integrity violation, not
-        # a valid response, so surface it rather than emit a contract-breaking null.
-        account_id = AccountService.Global.primary_account_id_for(user_id=str(user.id))
-        if account_id is None:
-            raise ValueError(f"user {user.id} has no account (invariant: users belong to an account)")
-        return account_id
+    account_id = AccountService.Global.primary_account_id_for(user_id=str(user.id))
+    if account_id is None:
+        raise ValueError(f"user {user.id} has no account (invariant: users belong to an account)")
+    return AuthUser(id=str(user.id), email=user.email, account_id=account_id, created_at=user.date_joined)
 
 
 class TokenPairSerializer(serializers.Serializer):
@@ -108,7 +105,9 @@ class TokenPairSerializer(serializers.Serializer):
     refresh_token = serializers.CharField()
     expires_in = serializers.IntegerField()
     token_type = serializers.CharField()
-    user = UserSerializer()
+    # Already the shared `AuthUser` contract dict (built by `auth_user_wire`), so
+    # this passes it through verbatim rather than re-mirroring the identity shape.
+    user = serializers.JSONField()
 
     @classmethod
     def build(cls, user, access, refresh, ttl: int) -> TokenPairSerializer:
@@ -118,6 +117,6 @@ class TokenPairSerializer(serializers.Serializer):
                 "refresh_token": refresh.token,
                 "expires_in": ttl,
                 "token_type": BEARER_TOKEN_TYPE,
-                "user": user,
+                "user": auth_user_wire(user).model_dump(mode="json"),
             }
         )

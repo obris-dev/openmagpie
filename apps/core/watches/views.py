@@ -32,6 +32,7 @@ from telemetry.constants import Surface
 
 from .api import (
     ActionScopedAPIView,
+    WatchActionNotFound,
     WatchScopedAPIView,
     WatchSvcMixin,
 )
@@ -200,7 +201,9 @@ class WatchActionsView(WatchScopedAPIView):
         return Response(
             {
                 "items": [
-                    watch_action_wire(a).model_dump(mode="json") for a in self.watch_svc.initial_actions(self.watch)
+                    w.model_dump(mode="json")
+                    for a in self.watch_svc.initial_actions(self.watch)
+                    if (w := watch_action_wire(a)) is not None
                 ]
             },
             status=status.HTTP_200_OK,
@@ -258,7 +261,13 @@ class ActionDetailView(ActionScopedAPIView):
         # `self.action` is the account-scoped row (404 via WatchActionNotFound).
         # Review path for `magpie watch action get`: the definition only, not
         # its runs/deliveries (those are the audit routes that hang off it).
-        return Response(watch_action_wire(self.action).model_dump(mode="json"))
+        # A persisted action CAN carry an unrenderable kind (a removed kind / manual
+        # corruption), the case watch_view's list guard skips. 404 like the sibling
+        # run-detail view (WatchActionRunNotFound) rather than 500 on the None.
+        wire = watch_action_wire(self.action)
+        if wire is None:
+            raise WatchActionNotFound(action_id)
+        return Response(wire.model_dump(mode="json"))
 
     def put(self, request, action_id: str):
         body = request.data

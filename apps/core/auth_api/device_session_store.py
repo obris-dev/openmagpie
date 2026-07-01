@@ -40,15 +40,17 @@ class DeviceSessionClient(BaseModel):
 
 
 class StoredUser(BaseModel):
-    """Subset of UserSerializer().data that the completed bag carries
-    forward for the CLI to consume."""
+    """The shared `AuthUser` contract (built by `auth_user_wire`, in JSON form so
+    `created_at` is an ISO string) that the completed bag carries forward for the
+    CLI. Strict like the contract: `account_id` / `created_at` are non-null (a
+    user always belongs to an account), so they aren't Optional here either."""
 
     model_config = ConfigDict(extra="ignore")
 
     id: str
     email: str
-    account_id: str | None = None
-    created_at: str | None = None
+    account_id: str
+    created_at: str
 
 
 class DeviceSessionState(BaseModel):

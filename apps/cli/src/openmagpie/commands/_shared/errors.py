@@ -4,14 +4,28 @@ from __future__ import annotations
 
 import functools
 from collections.abc import Callable
-from typing import Any
+from typing import Any, NoReturn
 from urllib.parse import urlparse
 
 import httpx
 import typer
+from pydantic import ValidationError
 
 from ... import console
 from ...http import ApiError, AuthError
+
+CONTRACT_MISMATCH_MESSAGE = (
+    "The server's response didn't match what this CLI expects, so the server and CLI "
+    "are on incompatible versions. Update magpie (or point at a matching server)."
+)
+
+
+def _abort_contract_mismatch() -> NoReturn:
+    """Print the contract-mismatch message and exit(1). One place for the
+    auth identity-parse sites (status / login / device flow) that each catch a
+    ValidationError from a response the CLI can't parse against its schema."""
+    console.error(CONTRACT_MISMATCH_MESSAGE)
+    raise typer.Exit(code=1) from None
 
 
 def _handle_api_errors[T](fn: Callable[..., T]) -> Callable[..., T]:
@@ -32,6 +46,10 @@ def _handle_api_errors[T](fn: Callable[..., T]) -> Callable[..., T]:
         except ApiError as e:
             _print_api_error(e)
             raise typer.Exit(code=1) from None
+        except ValidationError:
+            # A transport-OK response the CLI can't parse against its own schema:
+            # the server + CLI are on incompatible contract versions.
+            _abort_contract_mismatch()
         except httpx.HTTPError as e:
             console.error(_unreachable_message(e))
             raise typer.Exit(code=1) from None

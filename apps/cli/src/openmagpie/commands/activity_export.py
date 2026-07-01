@@ -20,9 +20,8 @@ import typer
 
 from openmagpie_schema.watch import WatchActionWire
 from openmagpie_schema.watch_actions import (
-    EXTRACT_FIELD_NAME_KEY,
-    EXTRACT_FIELDS_KEY,
     EXTRACTED_KEY,
+    ExtractConfig,
     ExtractResult,
     LogResult,
     SemanticFilterResult,
@@ -126,8 +125,12 @@ def _user_declared_columns(action: WatchActionWire) -> list[_Col]:
     """Columns the USER declared in the action's config: extract's `config.fields`,
     each becoming its own `result.extracted.<name>`. Only extract declares its output
     columns today (see _USER_DECLARED_COLUMN_KINDS)."""
-    declared = action.config.model_dump(mode="json").get(EXTRACT_FIELDS_KEY) or []
-    names = [str(f[EXTRACT_FIELD_NAME_KEY]) for f in declared if f.get(EXTRACT_FIELD_NAME_KEY)]
+    # Typed access off the narrowed union member (not a dict dump): only extract
+    # declares fields, and a corrupt config that degraded to None both fail the
+    # isinstance and yield no declared columns.
+    if not isinstance(action.config, ExtractConfig):
+        return []
+    names = [field.name for field in action.config.fields if field.name]
     # Header uppercased (COMPANY), matching the fixed + page-union columns (STATE,
     # SCORE); the dot-path keeps the field's literal key.
     return [col(f"{name.upper()}:run.result.{EXTRACTED_KEY}.{name}") for name in names]
@@ -155,8 +158,8 @@ def _default_columns_for_action(action: WatchActionWire) -> Callable[[list[dict]
     if kind in _USER_DECLARED_COLUMN_KINDS:
         declared = _user_declared_columns(action)
         if not declared:
-            # A corrupt at-rest config redacts to {"error": ...} (no `fields`), so we'd
-            # silently export only the fixed columns; flag it rather than mislead.
+            # A corrupt at-rest config degrades to null (config=None), so it has no
+            # readable `fields`; we'd silently export only the fixed columns, so flag it.
             console.warn(
                 "This extract action declares no readable fields (its config may be unreadable); exporting fixed columns only."
             )
