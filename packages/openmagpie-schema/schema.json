@@ -1,5 +1,35 @@
 {
   "$defs": {
+    "AuthUser": {
+      "description": "The authenticated user returned by `/v1/auth` (me / signup / login, and\nthe CLI device-session completed bag).\n\n`account_id` is REQUIRED: a user belongs to an account (signup creates one\nand binds the user), so a user response without an account is an invariant\nviolation, not a valid state. `created_at` is the user's join time.",
+      "properties": {
+        "account_id": {
+          "title": "Account Id",
+          "type": "string"
+        },
+        "created_at": {
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        },
+        "email": {
+          "title": "Email",
+          "type": "string"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "email",
+        "account_id",
+        "created_at"
+      ],
+      "title": "AuthUser",
+      "type": "object"
+    },
     "CuratedFeedConfig": {
       "description": "Schema for Feed.data when Feed.kind == 'curated'.\n\nSources are user-maintained ; one Source row per place data comes\nfrom, regardless of whether they were typed in by hand or generated\nby an external script. Watermarks + per-source metadata live on the\nSource rows; this config only carries feed-level knobs.\n\n`default_field_map` is a connector-readable hint dictionary that\napplies to every source in the feed; per-source overrides on a\nSource row's `field_map` take precedence. Keys a connector doesn't\nrecognise are ignored.",
       "properties": {
@@ -2659,6 +2689,9 @@
     },
     {
       "$ref": "#/$defs/TelemetryState"
+    },
+    {
+      "$ref": "#/$defs/AuthUser"
     }
   ]
 }

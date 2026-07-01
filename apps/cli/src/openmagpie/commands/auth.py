@@ -281,8 +281,7 @@ def status() -> None:
         raise typer.Exit(code=1) from None
 
     console.log(f"Signed in as {me.email}")
-    if me.account_id:
-        console.log(f"Account:     {me.account_id}")
+    console.log(f"Account:     {me.account_id}")  # always present: a user belongs to an account
     console.log(f"Server:      {ac.config.server_url}")
     if ambient:
         console.log(f"Auth:        {TOKEN_ENV_VAR} (environment)")

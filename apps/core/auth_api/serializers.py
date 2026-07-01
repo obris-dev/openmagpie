@@ -82,10 +82,17 @@ class UserSerializer(serializers.Serializer):
     id = serializers.CharField()
     email = serializers.EmailField()
     account_id = serializers.SerializerMethodField()
-    created_at = serializers.DateTimeField(source="date_joined", allow_null=True)
+    created_at = serializers.DateTimeField(source="date_joined")
 
-    def get_account_id(self, user) -> str | None:
-        return AccountService.Global.primary_account_id_for(user_id=str(user.id))
+    def get_account_id(self, user) -> str:
+        # A user belongs to an account (signup creates one and binds the user),
+        # so this is always present; the contract (AuthUser.account_id) is
+        # non-null. If it's ever missing that's a data-integrity violation, not
+        # a valid response, so surface it rather than emit a contract-breaking null.
+        account_id = AccountService.Global.primary_account_id_for(user_id=str(user.id))
+        if account_id is None:
+            raise ValueError(f"user {user.id} has no account (invariant: users belong to an account)")
+        return account_id
 
 
 class TokenPairSerializer(serializers.Serializer):

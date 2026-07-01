@@ -12,6 +12,7 @@ Three lists, kept separate from the build/guard logic in generate.py so the
   server validates.
 """
 
+from openmagpie_schema.auth import AuthUser
 from openmagpie_schema.configs import (
     HackerNewsCommentSourceSpec,
     HackerNewsFeedSourceSpec,
@@ -102,6 +103,8 @@ CONTRACT_MODELS = [
     EngineStatus,
     EngineListResponse,
     TelemetryState,
+    # Auth identity (the shared user shape; token/device shapes stay client-specific)
+    AuthUser,
 ]
 
 # Models DELIBERATELY left out of the schema. The completeness guard fails on

@@ -5,8 +5,10 @@
 so call sites read `ac.api.auth.me()` rather than threading the raw
 http client through each handler.
 
-Models match the Django response shapes (see `core/auth_api/`); update
-both sides together when the contract changes.
+The user identity (`AuthUser`) is the shared contract model from
+`openmagpie_schema`; the token / device-session / cli-token shapes stay
+CLI-owned (the browser never sees raw tokens or the device `user_code`).
+Update both sides together when the contract changes.
 """
 
 from __future__ import annotations
@@ -16,16 +18,11 @@ from typing import Literal
 
 from pydantic import BaseModel
 
+from openmagpie_schema.auth import AuthUser
+
 from .. import routes
 from ..constants import DeviceSessionStatus
 from ..http import MagpieClient, client_info
-
-
-class AuthUser(BaseModel):
-    id: str
-    email: str
-    account_id: str | None = None
-    created_at: str
 
 
 class TokenPair(BaseModel):
