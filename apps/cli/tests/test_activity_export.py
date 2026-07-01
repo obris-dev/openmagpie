@@ -28,7 +28,7 @@ from openmagpie.commands.activity_export import (
     _iter_records,
     _result_columns,
 )
-from openmagpie_schema.watch import RunFeedItem, WatchActionRunWire
+from openmagpie_schema.watch import RunFeedItem, WatchActionRunWire, build_watch_action_wire
 from openmagpie_schema.watch_actions import LogResult, SemanticFilterResult, WebhookResult
 from openmagpie_schema.watch_enums import WatchActionKind
 
@@ -45,9 +45,11 @@ def _record(extracted: dict[str, str], *, title: str = "T") -> dict:
 
 class ColumnsForActionTests(unittest.TestCase):
     def test_extract_action_columns_from_declared_fields(self) -> None:
-        # Deterministic from config.fields - NOT dependent on page-1 rows.
-        action = SimpleNamespace(
+        # Deterministic from config.fields - NOT dependent on page-1 rows. A real
+        # extract wire (config is the typed ExtractConfig union member, not a dict).
+        action = build_watch_action_wire(
             kind="extract",
+            rank=0,
             config={"fields": [{"name": "company", "description": "x"}, {"name": "event", "description": "y"}]},
         )
         cols = _default_columns_for_action(action)([])  # deterministic resolver ignores the page

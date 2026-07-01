@@ -136,7 +136,11 @@ class WatchActionService:
                         f"{spec.kind!r} action has a masked secret (***) but no matching prior to restore it "
                         f"from (a new action, or a changed kind); provide the real value"
                     )
-                merged = merge_config(spec.kind, spec.config, load_config(same_kind_prior) if same_kind_prior else None)
+                merged = merge_config(
+                    spec.kind,
+                    spec.config.model_dump(mode="json"),
+                    load_config(same_kind_prior) if same_kind_prior else None,
+                )
                 blob = merged.model_dump(mode="json")
                 is_digest = isinstance(merged, DeliveryConfigBase) and merged.is_digest()
                 if prior_row is not None:
@@ -202,7 +206,7 @@ class WatchActionService:
         `merge_config` right after, not as a confusing guard failure ; any
         other exception is a genuine bug and propagates."""
         try:
-            return parse_config(spec.kind, spec.config).has_masked_secret()
+            return parse_config(spec.kind, spec.config.model_dump(mode="json")).has_masked_secret()
         except (KeyError, ValidationError):
             return False
 
@@ -216,7 +220,7 @@ class WatchActionService:
         When `dry_run`, validate + build the would-be row in memory (at its
         would-be rank) and return it WITHOUT a lock, save, or renumber -
         nothing is persisted."""
-        config = validate_config(action.kind, action.config)
+        config = validate_config(action.kind, action.config.model_dump(mode="json"))
         if dry_run:
             # Build the would-be row in the service (no lock/save) so a
             # single-action preview reuses the watch_action_mutation serializer
@@ -277,7 +281,7 @@ class WatchActionService:
         if str(action.account_id) != self.account_id:
             raise ValueError(f"action account_id mismatch: {action.account_id!r} not in scope {self.account_id!r}")
         prior = load_config(action) if str(action.kind) == spec.kind else None
-        merged = merge_config(spec.kind, spec.config, prior)
+        merged = merge_config(spec.kind, spec.config.model_dump(mode="json"), prior)
         action.kind = spec.kind
         action.config = merged.model_dump(mode="json")
         if dry_run:  # validated + merged in memory; persist nothing, touch no window

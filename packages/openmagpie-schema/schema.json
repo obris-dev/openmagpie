@@ -158,6 +158,85 @@
       "title": "ExternalContentStatus",
       "type": "string"
     },
+    "ExtractActionInput": {
+      "properties": {
+        "config": {
+          "$ref": "#/$defs/ExtractConfig"
+        },
+        "id": {
+          "default": "",
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "const": "extract",
+          "default": "extract",
+          "title": "Kind",
+          "type": "string"
+        },
+        "rank": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rank"
+        }
+      },
+      "required": [
+        "config"
+      ],
+      "title": "ExtractActionInput",
+      "type": "object"
+    },
+    "ExtractActionWire": {
+      "properties": {
+        "config": {
+          "$ref": "#/$defs/ExtractConfig"
+        },
+        "created_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Created At"
+        },
+        "id": {
+          "default": "",
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "const": "extract",
+          "default": "extract",
+          "title": "Kind",
+          "type": "string"
+        },
+        "rank": {
+          "title": "Rank",
+          "type": "integer"
+        },
+        "summary": {
+          "$ref": "#/$defs/WatchActionConfigSummary"
+        }
+      },
+      "required": [
+        "rank",
+        "config"
+      ],
+      "title": "ExtractActionWire",
+      "type": "object"
+    },
     "ExtractConfig": {
       "description": "Config for a WatchAction with kind == 'extract'.\n\nHydration only: the engine reads each item (optionally with its fetched\nlinked-article text) and returns a value for every declared `field`,\npersisted under `result.extracted`. No threshold, no gate ; the run\nalways SUCCEEDS so the chain advances. Domain-agnostic ; the field set\nand `instructions` are entirely operator-supplied.",
       "properties": {
@@ -987,6 +1066,85 @@
       "title": "HackerNewsFeedSourceSpec",
       "type": "object"
     },
+    "LogActionInput": {
+      "properties": {
+        "config": {
+          "$ref": "#/$defs/LogConfig"
+        },
+        "id": {
+          "default": "",
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "const": "log",
+          "default": "log",
+          "title": "Kind",
+          "type": "string"
+        },
+        "rank": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rank"
+        }
+      },
+      "required": [
+        "config"
+      ],
+      "title": "LogActionInput",
+      "type": "object"
+    },
+    "LogActionWire": {
+      "properties": {
+        "config": {
+          "$ref": "#/$defs/LogConfig"
+        },
+        "created_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Created At"
+        },
+        "id": {
+          "default": "",
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "const": "log",
+          "default": "log",
+          "title": "Kind",
+          "type": "string"
+        },
+        "rank": {
+          "title": "Rank",
+          "type": "integer"
+        },
+        "summary": {
+          "$ref": "#/$defs/WatchActionConfigSummary"
+        }
+      },
+      "required": [
+        "rank",
+        "config"
+      ],
+      "title": "LogActionWire",
+      "type": "object"
+    },
     "LogConfig": {
       "description": "Config for a WatchAction with kind == 'log'.\n\nWrites the item to the server log under `prefix`. `include_fields`\nwhitelists item fields (empty = all). `delivery` /\n`digest_interval_seconds` (from the base) pick instant vs batched. No\nsecrets, so the dump is plain and an edit replaces wholesale.\n\nDigest log delivery is best-effort AT-LEAST-ONCE: a crash after the batch\nis logged but before it's marked done re-logs the line on the next flush\n(a log line carries no idempotency key to dedup on, unlike webhook). A\nduplicate log line is harmless ; don't treat the log as an exactly-once\nrecord.",
       "properties": {
@@ -1297,6 +1455,85 @@
         "feed_id"
       ],
       "title": "RunFeedItem",
+      "type": "object"
+    },
+    "SemanticFilterActionInput": {
+      "properties": {
+        "config": {
+          "$ref": "#/$defs/SemanticFilterConfig"
+        },
+        "id": {
+          "default": "",
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "const": "semantic_filter",
+          "default": "semantic_filter",
+          "title": "Kind",
+          "type": "string"
+        },
+        "rank": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rank"
+        }
+      },
+      "required": [
+        "config"
+      ],
+      "title": "SemanticFilterActionInput",
+      "type": "object"
+    },
+    "SemanticFilterActionWire": {
+      "properties": {
+        "config": {
+          "$ref": "#/$defs/SemanticFilterConfig"
+        },
+        "created_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Created At"
+        },
+        "id": {
+          "default": "",
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "const": "semantic_filter",
+          "default": "semantic_filter",
+          "title": "Kind",
+          "type": "string"
+        },
+        "rank": {
+          "title": "Rank",
+          "type": "integer"
+        },
+        "summary": {
+          "$ref": "#/$defs/WatchActionConfigSummary"
+        }
+      },
+      "required": [
+        "rank",
+        "config"
+      ],
+      "title": "SemanticFilterActionWire",
       "type": "object"
     },
     "SemanticFilterConfig": {
@@ -1857,95 +2094,43 @@
       "title": "WatchActionDeliveryWire",
       "type": "object"
     },
-    "WatchActionInput": {
-      "description": "One action on a create / edit / add-action request: `{id?, kind,\nconfig}` with `kind` adjacent to its blob (k8s-style). `kind` selects\nthe action type ; the server validates `config` against it via the\nregistry, so the persisted blob is the pure kind-specific shape (no\n`kind` nested inside). `rank` is optional on input (append when\nomitted); the server owns the dense renumber. Extra keys ignored so an\nedit seed's read-only fields drop on round-trip.\n\n`id` is the STABLE identity of an existing action, carried back on a\nwhole-chain edit so the server matches by id (NOT list position):\nmatched actions are updated in place ; their id + run history survive,\nand a masked secret restores from that same row. Omit `id` (or leave it\nempty) for a brand-new action ; the server mints its id. A non-empty id\nthat isn't on the watch is rejected.",
-      "properties": {
-        "config": {
-          "additionalProperties": true,
-          "title": "Config",
-          "type": "object"
-        },
-        "id": {
-          "default": "",
-          "title": "Id",
-          "type": "string"
-        },
-        "kind": {
-          "title": "Kind",
-          "type": "string"
-        },
-        "rank": {
-          "anyOf": [
-            {
-              "type": "integer"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Rank"
-        }
-      },
-      "required": [
-        "kind"
-      ],
-      "title": "WatchActionInput",
-      "type": "object"
-    },
     "WatchActionMutationResponse": {
-      "description": "Single-action add/edit response (POST `/actions` + PUT `/actions/<id>`,\nreal and `?dry_run=true`). Mirrors WatchMutationResponse: `id` is absent on a\ndry-run preview (the row isn't persisted) and `dry_run` is True for a\nvalidation-only preview, so the CLI's confirm-preview can show the would-be\naction without applying it.",
+      "description": "Single-action add/edit response (POST `/actions` + PUT `/actions/<id>`,\nreal and `?dry_run=true`). `dry_run` is True for a validation-only preview;\n`action` is the typed action node (a discriminated union). On a dry-run the\naction isn't persisted, so `action.id` is \"\" (WatchActionWire can't be\nsubclassed to null the id, so the response nests the action rather than\nflattening it as the pre-union shape did).",
       "properties": {
-        "config": {
-          "additionalProperties": true,
-          "title": "Config",
-          "type": "object"
-        },
-        "created_at": {
-          "anyOf": [
+        "action": {
+          "discriminator": {
+            "mapping": {
+              "extract": "#/$defs/ExtractActionWire",
+              "log": "#/$defs/LogActionWire",
+              "semantic_filter": "#/$defs/SemanticFilterActionWire",
+              "webhook": "#/$defs/WebhookActionWire"
+            },
+            "propertyName": "kind"
+          },
+          "oneOf": [
             {
-              "format": "date-time",
-              "type": "string"
+              "$ref": "#/$defs/SemanticFilterActionWire"
             },
             {
-              "type": "null"
+              "$ref": "#/$defs/ExtractActionWire"
+            },
+            {
+              "$ref": "#/$defs/LogActionWire"
+            },
+            {
+              "$ref": "#/$defs/WebhookActionWire"
             }
           ],
-          "default": null,
-          "title": "Created At"
+          "title": "Action"
         },
         "dry_run": {
           "title": "Dry Run",
           "type": "boolean"
-        },
-        "id": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Id"
-        },
-        "kind": {
-          "title": "Kind",
-          "type": "string"
-        },
-        "rank": {
-          "title": "Rank",
-          "type": "integer"
-        },
-        "summary": {
-          "$ref": "#/$defs/WatchActionConfigSummary"
         }
       },
       "required": [
-        "kind",
-        "rank",
-        "dry_run"
+        "dry_run",
+        "action"
       ],
       "title": "WatchActionMutationResponse",
       "type": "object"
@@ -1956,13 +2141,36 @@
         "action": {
           "anyOf": [
             {
-              "$ref": "#/$defs/WatchActionWire"
+              "discriminator": {
+                "mapping": {
+                  "extract": "#/$defs/ExtractActionWire",
+                  "log": "#/$defs/LogActionWire",
+                  "semantic_filter": "#/$defs/SemanticFilterActionWire",
+                  "webhook": "#/$defs/WebhookActionWire"
+                },
+                "propertyName": "kind"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/SemanticFilterActionWire"
+                },
+                {
+                  "$ref": "#/$defs/ExtractActionWire"
+                },
+                {
+                  "$ref": "#/$defs/LogActionWire"
+                },
+                {
+                  "$ref": "#/$defs/WebhookActionWire"
+                }
+              ]
             },
             {
               "type": "null"
             }
           ],
-          "default": null
+          "default": null,
+          "title": "Action"
         },
         "feed_items": {
           "additionalProperties": {
@@ -2089,13 +2297,36 @@
         "action": {
           "anyOf": [
             {
-              "$ref": "#/$defs/WatchActionWire"
+              "discriminator": {
+                "mapping": {
+                  "extract": "#/$defs/ExtractActionWire",
+                  "log": "#/$defs/LogActionWire",
+                  "semantic_filter": "#/$defs/SemanticFilterActionWire",
+                  "webhook": "#/$defs/WebhookActionWire"
+                },
+                "propertyName": "kind"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/SemanticFilterActionWire"
+                },
+                {
+                  "$ref": "#/$defs/ExtractActionWire"
+                },
+                {
+                  "$ref": "#/$defs/LogActionWire"
+                },
+                {
+                  "$ref": "#/$defs/WebhookActionWire"
+                }
+              ]
             },
             {
               "type": "null"
             }
           ],
-          "default": null
+          "default": null,
+          "title": "Action"
         },
         "feed": {
           "anyOf": [
@@ -2224,51 +2455,6 @@
       "title": "WatchActionRunWire",
       "type": "object"
     },
-    "WatchActionWire": {
-      "description": "One action node on the wire. `config` is the kind-specific blob\n(opaque here; the server validated it via the registry on write).\n`summary` is the server-built display projection so the CLI never\nparses `config`.",
-      "properties": {
-        "config": {
-          "additionalProperties": true,
-          "title": "Config",
-          "type": "object"
-        },
-        "created_at": {
-          "anyOf": [
-            {
-              "format": "date-time",
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Created At"
-        },
-        "id": {
-          "title": "Id",
-          "type": "string"
-        },
-        "kind": {
-          "title": "Kind",
-          "type": "string"
-        },
-        "rank": {
-          "title": "Rank",
-          "type": "integer"
-        },
-        "summary": {
-          "$ref": "#/$defs/WatchActionConfigSummary"
-        }
-      },
-      "required": [
-        "id",
-        "kind",
-        "rank"
-      ],
-      "title": "WatchActionWire",
-      "type": "object"
-    },
     "WatchActivityWindow": {
       "description": "Bounded time windows for the action-activity summary, selected by a\nclient and resolved to concrete `(since, until)` bounds SERVER-side (one\nsource of truth, server clock). Applied by run EVALUATION time\n(`completed_at`). No unbounded 'all' value: a count is always over a\nfinite range. Default is `WEEK`.",
       "enum": [
@@ -2285,7 +2471,29 @@
       "properties": {
         "actions": {
           "items": {
-            "$ref": "#/$defs/WatchActionInput"
+            "discriminator": {
+              "mapping": {
+                "extract": "#/$defs/ExtractActionInput",
+                "log": "#/$defs/LogActionInput",
+                "semantic_filter": "#/$defs/SemanticFilterActionInput",
+                "webhook": "#/$defs/WebhookActionInput"
+              },
+              "propertyName": "kind"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/SemanticFilterActionInput"
+              },
+              {
+                "$ref": "#/$defs/ExtractActionInput"
+              },
+              {
+                "$ref": "#/$defs/LogActionInput"
+              },
+              {
+                "$ref": "#/$defs/WebhookActionInput"
+              }
+            ]
           },
           "title": "Actions",
           "type": "array"
@@ -2344,7 +2552,29 @@
       "properties": {
         "actions": {
           "items": {
-            "$ref": "#/$defs/WatchActionWire"
+            "discriminator": {
+              "mapping": {
+                "extract": "#/$defs/ExtractActionWire",
+                "log": "#/$defs/LogActionWire",
+                "semantic_filter": "#/$defs/SemanticFilterActionWire",
+                "webhook": "#/$defs/WebhookActionWire"
+              },
+              "propertyName": "kind"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/SemanticFilterActionWire"
+              },
+              {
+                "$ref": "#/$defs/ExtractActionWire"
+              },
+              {
+                "$ref": "#/$defs/LogActionWire"
+              },
+              {
+                "$ref": "#/$defs/WebhookActionWire"
+              }
+            ]
           },
           "title": "Actions",
           "type": "array"
@@ -2412,7 +2642,29 @@
       "properties": {
         "actions": {
           "items": {
-            "$ref": "#/$defs/WatchActionWire"
+            "discriminator": {
+              "mapping": {
+                "extract": "#/$defs/ExtractActionWire",
+                "log": "#/$defs/LogActionWire",
+                "semantic_filter": "#/$defs/SemanticFilterActionWire",
+                "webhook": "#/$defs/WebhookActionWire"
+              },
+              "propertyName": "kind"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/SemanticFilterActionWire"
+              },
+              {
+                "$ref": "#/$defs/ExtractActionWire"
+              },
+              {
+                "$ref": "#/$defs/LogActionWire"
+              },
+              {
+                "$ref": "#/$defs/WebhookActionWire"
+              }
+            ]
           },
           "title": "Actions",
           "type": "array"
@@ -2510,6 +2762,85 @@
         "user_id"
       ],
       "title": "WatchWire",
+      "type": "object"
+    },
+    "WebhookActionInput": {
+      "properties": {
+        "config": {
+          "$ref": "#/$defs/WebhookConfig"
+        },
+        "id": {
+          "default": "",
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "const": "webhook",
+          "default": "webhook",
+          "title": "Kind",
+          "type": "string"
+        },
+        "rank": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rank"
+        }
+      },
+      "required": [
+        "config"
+      ],
+      "title": "WebhookActionInput",
+      "type": "object"
+    },
+    "WebhookActionWire": {
+      "properties": {
+        "config": {
+          "$ref": "#/$defs/WebhookConfig"
+        },
+        "created_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Created At"
+        },
+        "id": {
+          "default": "",
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "const": "webhook",
+          "default": "webhook",
+          "title": "Kind",
+          "type": "string"
+        },
+        "rank": {
+          "title": "Rank",
+          "type": "integer"
+        },
+        "summary": {
+          "$ref": "#/$defs/WatchActionConfigSummary"
+        }
+      },
+      "required": [
+        "rank",
+        "config"
+      ],
+      "title": "WebhookActionWire",
       "type": "object"
     },
     "WebhookConfig": {
@@ -2626,9 +2957,6 @@
     },
     {
       "$ref": "#/$defs/WatchInput"
-    },
-    {
-      "$ref": "#/$defs/WatchActionInput"
     },
     {
       "$ref": "#/$defs/WatchActionMutationResponse"

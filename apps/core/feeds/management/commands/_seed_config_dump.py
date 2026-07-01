@@ -18,7 +18,7 @@ from django.core.management.base import CommandError
 from pydantic import ValidationError
 
 from openmagpie_schema.configs import RedditSubredditSourceSpec
-from openmagpie_schema.watch import WatchActionInput
+from openmagpie_schema.watch import WatchActionInput, build_watch_action_input
 from openmagpie_schema.watch_enums import WatchActionKind
 from watches.policy import PolicyError
 from watches.registry import validate_config
@@ -133,7 +133,7 @@ def parse_actions(raw_actions: list[dict[str, Any]]) -> list[WatchActionInput]:
             raise CommandError(f"action {i} has unknown kind {exc}") from exc
         except (ValidationError, PolicyError) as exc:
             raise CommandError(f"action {i} ({kind!r}) is invalid: {exc}") from exc
-        actions.append(WatchActionInput(id="", kind=kind, config=typed.model_dump(mode="json")))
+        actions.append(build_watch_action_input(id="", kind=kind, config=typed.model_dump(mode="json")))
     return actions
 
 

@@ -8,7 +8,7 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 
 from auth_api.operations.signup import SignupOperation
-from openmagpie_schema.watch import WatchActionInput
+from openmagpie_schema.watch import build_watch_action_input
 from openmagpie_schema.watch_actions import WebhookConfig
 from openmagpie_schema.watch_enums import WatchActionRunState
 from watches.management.commands.process_due_runs import _breakdown, _fmt_duration, _progress
@@ -33,7 +33,7 @@ class ReplaceChainUpsertTests(TestCase):
             user_id=ulid.ulid(),
             name="t",
             feed_ids=[],
-            actions=[WatchActionInput(kind="log", config={"prefix": p}) for p in prefixes],
+            actions=[build_watch_action_input(kind="log", config={"prefix": p}) for p in prefixes],
         )
         return watch, self.asvc.list_for_path(watch.initial_path_id)
 
@@ -45,9 +45,9 @@ class ReplaceChainUpsertTests(TestCase):
         rows = self.asvc.replace_chain(
             path_id=watch.initial_path_id,
             actions=[
-                WatchActionInput(id=str(by["[C]"].id), kind="log", config={"prefix": "[C]"}),
-                WatchActionInput(id=str(by["[A]"].id), kind="log", config={"prefix": "[A]"}),
-                WatchActionInput(kind="log", config={"prefix": "[D]"}),
+                build_watch_action_input(id=str(by["[C]"].id), kind="log", config={"prefix": "[C]"}),
+                build_watch_action_input(id=str(by["[A]"].id), kind="log", config={"prefix": "[A]"}),
+                build_watch_action_input(kind="log", config={"prefix": "[D]"}),
             ],
         )
         self.assertEqual([(r.config["prefix"], r.rank) for r in rows], [("[C]", 0), ("[A]", 1), ("[D]", 2)])
@@ -59,8 +59,8 @@ class ReplaceChainUpsertTests(TestCase):
         rows = self.asvc.replace_chain(
             path_id=watch.initial_path_id,
             actions=[
-                WatchActionInput(id=str(b.id), kind="log", config={"prefix": "[B]"}),
-                WatchActionInput(id=str(a.id), kind="log", config={"prefix": "[A]"}),
+                build_watch_action_input(id=str(b.id), kind="log", config={"prefix": "[B]"}),
+                build_watch_action_input(id=str(a.id), kind="log", config={"prefix": "[A]"}),
             ],
         )
         self.assertEqual([str(r.id) for r in rows], [str(b.id), str(a.id)])
@@ -79,8 +79,8 @@ class ReplaceChainUpsertTests(TestCase):
         self.asvc.replace_chain(
             path_id=watch.initial_path_id,
             actions=[
-                WatchActionInput(id=str(a.id), kind="log", config={"prefix": "[A2]"}),
-                WatchActionInput(id=str(b.id), kind="log", config={"prefix": "[B]"}),
+                build_watch_action_input(id=str(a.id), kind="log", config={"prefix": "[A2]"}),
+                build_watch_action_input(id=str(b.id), kind="log", config={"prefix": "[B]"}),
             ],
         )
         self.assertTrue(WatchActionRun.objects.filter(id=run.id, action_id=str(a.id)).exists())
@@ -90,7 +90,7 @@ class ReplaceChainUpsertTests(TestCase):
         with self.assertRaises(PolicyError):
             self.asvc.replace_chain(
                 path_id=watch.initial_path_id,
-                actions=[WatchActionInput(id=ulid.ulid(), kind="log", config={"prefix": "[X]"})],
+                actions=[build_watch_action_input(id=ulid.ulid(), kind="log", config={"prefix": "[X]"})],
             )
 
     def test_reorder_two_webhooks_keeps_each_secret_with_its_endpoint(self) -> None:
@@ -100,10 +100,10 @@ class ReplaceChainUpsertTests(TestCase):
             name="t",
             feed_ids=[],
             actions=[
-                WatchActionInput(
+                build_watch_action_input(
                     kind="webhook", config={"url": "https://a.example.com/h", "headers": {"Authorization": "tokA"}}
                 ),
-                WatchActionInput(
+                build_watch_action_input(
                     kind="webhook", config={"url": "https://b.example.com/h", "headers": {"Authorization": "tokB"}}
                 ),
             ],
@@ -111,7 +111,9 @@ class ReplaceChainUpsertTests(TestCase):
         a, b = self.asvc.list_for_path(watch.initial_path_id)
 
         def masked(action):
-            return WatchActionInput(id=str(action.id), kind="webhook", config=load_config(action).redacted_dump())
+            return build_watch_action_input(
+                id=str(action.id), kind="webhook", config=load_config(action).redacted_dump()
+            )
 
         rows = self.asvc.replace_chain(path_id=watch.initial_path_id, actions=[masked(b), masked(a)])
         cfg = {str(r.id): load_config(r) for r in rows}
@@ -126,7 +128,7 @@ class ReplaceChainUpsertTests(TestCase):
             self.asvc.replace_chain(
                 path_id=watch.initial_path_id,
                 actions=[
-                    WatchActionInput(
+                    build_watch_action_input(
                         kind="webhook", config={"url": "https://h.example.com/x", "headers": {"Authorization": "***"}}
                     ),
                 ],
@@ -146,7 +148,7 @@ class SetActiveTests(TestCase):
             user_id=ulid.ulid(),
             name="t",
             feed_ids=[],
-            actions=[WatchActionInput(kind="log", config={"prefix": "[A]"})],
+            actions=[build_watch_action_input(kind="log", config={"prefix": "[A]"})],
         )
         ids = [str(r.id) for r in self.wsvc.action_svc.list_for_path(watch.initial_path_id)]
         self.wsvc.set_active(watch, is_active=False)

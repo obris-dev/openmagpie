@@ -12,7 +12,6 @@ import builtins
 from typing import Any
 
 from openmagpie_schema.watch import (
-    WatchActionInput,
     WatchActionMutationResponse,
     WatchActionWire,
     WatchInput,
@@ -20,6 +19,8 @@ from openmagpie_schema.watch import (
     WatchMutationResponse,
     WatchView,
     WatchWire,
+    build_watch_action_input,
+    watch_action_wire_adapter,
 )
 
 from .. import routes
@@ -43,7 +44,7 @@ def _action_body(kind: str, config: dict[str, Any]) -> dict[str, Any]:
     layered on by the caller."""
     # Exclude id (server-minted, never sent) + rank (add re-layers it from the
     # caller below; edit never positions) - so the dump is exactly {kind, config}.
-    return WatchActionInput(kind=kind, config=config).model_dump(mode="json", exclude={"id", "rank"})
+    return build_watch_action_input(kind=kind, config=config).model_dump(mode="json", exclude={"id", "rank"})
 
 
 class WatchApi:
@@ -94,13 +95,13 @@ class WatchApi:
     def list_actions(self, watch_id: str) -> builtins.list[WatchActionWire]:
         raw = self._http.get(routes.watches.actions(watch_id))
         items = (raw or {}).get("items") or []
-        return [WatchActionWire.model_validate(it) for it in items]
+        return [watch_action_wire_adapter.validate_python(it) for it in items]
 
     def get_action(self, action_id: str) -> WatchActionWire:
         """GET one action's definition (kind + redacted config + summary) by its
         own id; the watch/chain is resolved server-side, not in the path."""
         raw = self._http.get(routes.actions.detail(action_id))
-        return WatchActionWire.model_validate(raw)
+        return watch_action_wire_adapter.validate_python(raw)
 
     def add_action(
         self, watch_id: str, kind: str, config: dict[str, Any], *, rank: int | None = None, dry_run: bool = False

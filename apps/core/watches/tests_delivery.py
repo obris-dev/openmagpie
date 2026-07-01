@@ -7,7 +7,7 @@ from django.test import TestCase
 from django.utils import timezone
 
 from feeds.models import FeedItem
-from openmagpie_schema.watch import WatchActionInput
+from openmagpie_schema.watch import build_watch_action_input
 from openmagpie_schema.watch_enums import WatchActionDeliveryState
 from watches.models import WatchAction, WatchActionDelivery, WatchActionDigestWindow, WatchActionRun
 from watches.operations.digest_flush import WatchDigestFlushOperation
@@ -66,8 +66,8 @@ class WebhookDeliveryRecordTests(TestCase):
             name="ai-webhook",
             feed_ids=[],
             actions=[
-                WatchActionInput(kind="log", config={"prefix": "[f]"}),
-                WatchActionInput(
+                build_watch_action_input(kind="log", config={"prefix": "[f]"}),
+                build_watch_action_input(
                     kind="webhook",
                     config={"url": _URL, "delivery": "digest", "digest_interval_seconds": 3600},
                 ),
@@ -89,7 +89,7 @@ class WebhookDeliveryRecordTests(TestCase):
             user_id=ulid.ulid(),
             name="ai-webhook",
             feed_ids=[],
-            actions=[WatchActionInput(kind="webhook", config={"url": _URL})],
+            actions=[build_watch_action_input(kind="webhook", config={"url": _URL})],
         )
         action = WatchAction.objects.get(path_id=watch.initial_path_id)
         fi = self._item("e1", now, title="T")
@@ -183,7 +183,7 @@ class WebhookDeliveryRecordTests(TestCase):
             user_id=ulid.ulid(),
             name="logger",
             feed_ids=[],
-            actions=[WatchActionInput(kind="log", config={"prefix": "[f]"})],
+            actions=[build_watch_action_input(kind="log", config={"prefix": "[f]"})],
         )
         action = WatchAction.objects.get(path_id=watch.initial_path_id)
         fi = self._item("e1", now, title="T")

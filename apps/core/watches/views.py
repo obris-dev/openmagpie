@@ -25,6 +25,7 @@ from common.pydantic_errors import pydantic_errors_to_drf
 from openmagpie_schema.watch import (
     WatchActionInput,
     WatchListResponse,
+    build_watch_action_input,
 )
 from telemetry import events as telemetry_events
 from telemetry.constants import Surface
@@ -229,7 +230,7 @@ class WatchActionsView(WatchScopedAPIView):
         try:
             created = self.action_svc.add(
                 path_id=self.watch.initial_path_id,
-                action=WatchActionInput(kind=str(body["kind"]), config=config),
+                action=build_watch_action_input(kind=str(body["kind"]), config=config),
                 rank=rank,
                 dry_run=dry_run,
             )
@@ -277,7 +278,7 @@ class ActionDetailView(ActionScopedAPIView):
         dry_run = wants_dry_run(request)
         try:
             updated = self.action_svc.set_config(
-                self.action, spec=WatchActionInput(kind=str(body["kind"]), config=config), dry_run=dry_run
+                self.action, spec=build_watch_action_input(kind=str(body["kind"]), config=config), dry_run=dry_run
             )
         except PydanticValidationError as exc:
             return Response({"config": pydantic_errors_to_drf(exc)}, status=status.HTTP_400_BAD_REQUEST)

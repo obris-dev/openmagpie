@@ -5,7 +5,7 @@ from django.test import TestCase
 from django.utils import timezone
 
 from feeds.models import Feed, FeedItem
-from openmagpie_schema.watch import WatchActionInput
+from openmagpie_schema.watch import build_watch_action_input
 from openmagpie_schema.watch_enums import DeliveryCadence
 from watches.models import WatchActionDigestWindow, WatchActionRun
 from watches.operations.digest_flush import WatchDigestFlushOperation
@@ -53,7 +53,7 @@ class DigestHeadTests(TestCase):
             user_id=ulid.ulid(),
             name="t",
             feed_ids=[str(feed.id)],
-            actions=[WatchActionInput(kind="log", config={**self._DIGEST, "prefix": "[d]"})],
+            actions=[build_watch_action_input(kind="log", config={**self._DIGEST, "prefix": "[d]"})],
         )
         head_id = self._head_id(watch)
 
@@ -81,7 +81,7 @@ class DigestHeadTests(TestCase):
             user_id=ulid.ulid(),
             name="t",
             feed_ids=[],
-            actions=[WatchActionInput(kind="log", config=self._DIGEST)],
+            actions=[build_watch_action_input(kind="log", config=self._DIGEST)],
         )
         head = self.wsvc.action_svc.list_for_path(watch.initial_path_id)[0]
         self.assertEqual(head.rank, 0)
@@ -92,7 +92,7 @@ class DigestHeadTests(TestCase):
         # digest is allowed there now.
         watch = self.wsvc.create(user_id=ulid.ulid(), name="t", feed_ids=[], actions=[])
         added = self.wsvc.action_svc.add(
-            path_id=watch.initial_path_id, action=WatchActionInput(kind="log", config=self._DIGEST)
+            path_id=watch.initial_path_id, action=build_watch_action_input(kind="log", config=self._DIGEST)
         )
         self.assertEqual(added.rank, 0)
         self.assertEqual(added.config.get("delivery"), DeliveryCadence.DIGEST.value)
@@ -104,10 +104,10 @@ class DigestHeadTests(TestCase):
             user_id=ulid.ulid(),
             name="t",
             feed_ids=[],
-            actions=[WatchActionInput(kind="log", config={"prefix": "[f]"})],
+            actions=[build_watch_action_input(kind="log", config={"prefix": "[f]"})],
         )
         head = self.wsvc.action_svc.list_for_path(watch.initial_path_id)[0]
-        self.wsvc.action_svc.set_config(head, spec=WatchActionInput(kind="log", config=self._DIGEST))
+        self.wsvc.action_svc.set_config(head, spec=build_watch_action_input(kind="log", config=self._DIGEST))
         head.refresh_from_db()
         self.assertEqual(head.config.get("delivery"), DeliveryCadence.DIGEST.value)
 
@@ -119,8 +119,8 @@ class DigestHeadTests(TestCase):
             name="t",
             feed_ids=[],
             actions=[
-                WatchActionInput(kind="log", config={"prefix": "[f]"}),
-                WatchActionInput(kind="log", config={**self._DIGEST, "prefix": "[d]"}),
+                build_watch_action_input(kind="log", config={"prefix": "[f]"}),
+                build_watch_action_input(kind="log", config={**self._DIGEST, "prefix": "[d]"}),
             ],
         )
         asvc = self.wsvc.action_svc

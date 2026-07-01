@@ -41,7 +41,7 @@ class LeafActionRouteTests(TestCase):
         # set: replace the config in place.
         put = self.client.put(f"/v1/actions/{action_id}", {"kind": "log", "config": {"prefix": "[B]"}}, format="json")
         self.assertEqual(put.status_code, 200, put.content)
-        self.assertEqual(put.json()["id"], action_id)
+        self.assertEqual(put.json()["action"]["id"], action_id)
 
         # remove: 204, and it's gone.
         self.assertEqual(self.client.delete(f"/v1/actions/{action_id}").status_code, 204)

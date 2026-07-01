@@ -8,7 +8,7 @@ from django.utils import timezone
 from pydantic import ValidationError
 
 from feeds.models import FeedItem
-from openmagpie_schema.watch import WatchActionInput
+from openmagpie_schema.watch import build_watch_action_input
 from openmagpie_schema.watch_actions import LogConfig
 from openmagpie_schema.watch_enums import DeliveryCadence, WatchActionRunState
 from watches.actions.log import LogAction
@@ -52,8 +52,8 @@ class DigestDeliveryTests(TestCase):
             name="t",
             feed_ids=[],
             actions=[
-                WatchActionInput(kind="log", config={"prefix": "[f]"}),
-                WatchActionInput(
+                build_watch_action_input(kind="log", config={"prefix": "[f]"}),
+                build_watch_action_input(
                     kind="log", config={"prefix": "[d]", "delivery": "digest", "digest_interval_seconds": 3600}
                 ),
             ],
@@ -154,7 +154,7 @@ class DigestDeliveryTests(TestCase):
         # strand the now-instant runs PENDING forever.
         now = timezone.now()
         _, a1, window = self._digest_window_with_items(2, now=now)
-        self.wsvc.action_svc.set_config(a1, spec=WatchActionInput(kind="log", config={"prefix": "[d]"}))
+        self.wsvc.action_svc.set_config(a1, spec=build_watch_action_input(kind="log", config={"prefix": "[d]"}))
         self.assertFalse(WatchActionDigestWindow.objects.filter(action_id=str(a1.id)).exists())
         # The previously-excluded runs now drain normally once due.
         later = window.close_at + timedelta(seconds=1)
@@ -258,8 +258,8 @@ class DigestDeliveryTests(TestCase):
                 name="t",
                 feed_ids=[],
                 actions=[
-                    WatchActionInput(kind="log", config={"prefix": "[f]"}),
-                    WatchActionInput(kind="log", config={"delivery": "digest", "digest_interval_seconds": 1}),
+                    build_watch_action_input(kind="log", config={"prefix": "[f]"}),
+                    build_watch_action_input(kind="log", config={"delivery": "digest", "digest_interval_seconds": 1}),
                 ],
             )
 
@@ -271,10 +271,12 @@ class DigestDeliveryTests(TestCase):
             user_id=ulid.ulid(),
             name="t",
             feed_ids=[],
-            actions=[WatchActionInput(kind="log", config={"prefix": "[f]"})],
+            actions=[build_watch_action_input(kind="log", config={"prefix": "[f]"})],
         )
         asvc = self.wsvc.action_svc
-        added = asvc.add(path_id=watch.initial_path_id, action=WatchActionInput(kind="log", config=self._DIGEST_CFG))
+        added = asvc.add(
+            path_id=watch.initial_path_id, action=build_watch_action_input(kind="log", config=self._DIGEST_CFG)
+        )
         self.assertEqual(added.rank, 1)
         # And editing that non-head row's config stays allowed.
-        asvc.set_config(added, spec=WatchActionInput(kind="log", config={**self._DIGEST_CFG, "prefix": "[d]"}))
+        asvc.set_config(added, spec=build_watch_action_input(kind="log", config={**self._DIGEST_CFG, "prefix": "[d]"}))

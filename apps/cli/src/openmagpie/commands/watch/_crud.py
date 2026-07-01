@@ -13,7 +13,7 @@ import sys
 import typer
 import yaml
 
-from openmagpie_schema.watch import WatchActionInput
+from openmagpie_schema.watch import WatchActionInput, build_watch_action_input
 
 from ... import console
 from ...api.watch import WatchActionWire, WatchInput, WatchMutationResponse, WatchView
@@ -259,7 +259,10 @@ def _edit_seed(detail: WatchView) -> WatchInput:
         name=detail.name,
         is_active=detail.is_active,
         feed_ids=detail.feed_ids,
-        actions=[WatchActionInput(id=a.id, kind=a.kind, config=a.config) for a in detail.actions],
+        actions=[
+            build_watch_action_input(id=a.id, kind=a.kind, config=a.config.model_dump(mode="json"))
+            for a in detail.actions
+        ],
     )
 
 

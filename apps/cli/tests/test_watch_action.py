@@ -15,15 +15,27 @@ import typer
 
 from openmagpie.commands.watch._actions import _run_action_mutation
 from openmagpie.commands.watch._crud import _action_recreate_note
-from openmagpie_schema.watch import WatchActionInput, WatchActionMutationResponse, WatchActionWire
+from openmagpie_schema.watch import (
+    WatchActionInput,
+    WatchActionMutationResponse,
+    WatchActionWire,
+    build_watch_action_input,
+    build_watch_action_wire,
+)
 
 
 def _wire(action_id: str) -> WatchActionWire:
-    return WatchActionWire(id=action_id, kind="log", rank=0)
+    return build_watch_action_wire(id=action_id, kind="log", rank=0, config={})
 
 
 def _inp(action_id: str = "") -> WatchActionInput:
-    return WatchActionInput(id=action_id, kind="log")
+    return build_watch_action_input(id=action_id, kind="log", config={})
+
+
+def _resp(action_id: str, *, dry_run: bool) -> WatchActionMutationResponse:
+    """The single-action mutation response now NESTS the action node under
+    `action`; an empty id models an unpersisted (add dry-run) preview."""
+    return WatchActionMutationResponse(dry_run=dry_run, action=_wire(action_id))
 
 
 class ActionRecreateNoteTests(unittest.TestCase):
@@ -60,7 +72,7 @@ class RunActionMutationTests(unittest.TestCase):
     real apply. `mutate(dry_run)` is called True (preview) then False (apply)."""
 
     def test_dry_run_stops_before_apply(self) -> None:
-        mutate = mock.Mock(return_value=WatchActionMutationResponse(id=None, kind="log", rank=0, dry_run=True))
+        mutate = mock.Mock(return_value=_resp("", dry_run=True))
         result = _run_action_mutation(mutate, is_edit=False, dry_run=True, yes=False)  # add preview -> no id
         self.assertIsNone(result)  # nothing applied
         mutate.assert_called_once_with(True)  # only the preview ran
@@ -68,8 +80,8 @@ class RunActionMutationTests(unittest.TestCase):
     def test_yes_applies_without_confirm(self) -> None:
         mutate = mock.Mock(
             side_effect=[
-                WatchActionMutationResponse(id="01ABC", kind="log", rank=0, dry_run=True),  # edit preview keeps id
-                WatchActionMutationResponse(id="01ABC", kind="log", rank=0, dry_run=False),
+                _resp("01ABC", dry_run=True),  # edit preview keeps id
+                _resp("01ABC", dry_run=False),
             ]
         )
         result = _run_action_mutation(mutate, is_edit=True, dry_run=False, yes=True)
@@ -80,7 +92,7 @@ class RunActionMutationTests(unittest.TestCase):
     def test_aborts_when_server_ignores_dry_run(self) -> None:
         # Preview came back NOT flagged dry_run -> the server persisted; abort
         # before the apply call (defense-in-depth, mirrors _run_mutation).
-        mutate = mock.Mock(return_value=WatchActionMutationResponse(id="01ABC", kind="log", rank=0, dry_run=False))
+        mutate = mock.Mock(return_value=_resp("01ABC", dry_run=False))
         with self.assertRaises(typer.Exit):
             _run_action_mutation(mutate, is_edit=True, dry_run=False, yes=True)
         mutate.assert_called_once_with(True)  # never reached the apply call
@@ -89,8 +101,8 @@ class RunActionMutationTests(unittest.TestCase):
         # Apply came back still dry_run / no id -> nothing persisted; abort.
         mutate = mock.Mock(
             side_effect=[
-                WatchActionMutationResponse(id=None, kind="log", rank=0, dry_run=True),  # valid add preview
-                WatchActionMutationResponse(id=None, kind="log", rank=0, dry_run=True),  # apply didn't persist
+                _resp("", dry_run=True),  # valid add preview
+                _resp("", dry_run=True),  # apply didn't persist
             ]
         )
         with self.assertRaises(typer.Exit):

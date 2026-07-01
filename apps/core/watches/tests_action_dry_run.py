@@ -39,8 +39,10 @@ class WatchActionDryRunTests(TestCase):
         self.assertEqual(resp.status_code, 200, resp.content)  # 200, not 201: nothing created
         data = resp.json()
         self.assertTrue(data["dry_run"])
-        self.assertIsNone(data["id"])  # add preview: the row isn't created, so no id yet
-        self.assertEqual(data["config"]["prefix"], "[NEW]")  # the validated would-be config
+        # The response nests the action node under `action`; an add preview isn't
+        # persisted, so its id is empty.
+        self.assertEqual(data["action"]["id"], "")
+        self.assertEqual(data["action"]["config"]["prefix"], "[NEW]")  # the validated would-be config
         self.assertEqual(WatchAction.objects.count(), before)  # nothing persisted
 
     def test_edit_dry_run_keeps_id_and_does_not_persist(self) -> None:
@@ -52,8 +54,8 @@ class WatchActionDryRunTests(TestCase):
         self.assertEqual(resp.status_code, 200, resp.content)
         data = resp.json()
         self.assertTrue(data["dry_run"])
-        self.assertEqual(data["id"], self.action_id)  # edit preview keeps the existing id (unchanged)
-        self.assertEqual(data["config"]["prefix"], "[CHANGED]")  # the would-be config
+        self.assertEqual(data["action"]["id"], self.action_id)  # edit preview keeps the existing id (unchanged)
+        self.assertEqual(data["action"]["config"]["prefix"], "[CHANGED]")  # the would-be config
         self.assertEqual(WatchAction.objects.get(id=self.action_id).config["prefix"], "[A]")  # DB unchanged
 
     def test_dry_run_still_validates(self) -> None:
@@ -97,7 +99,7 @@ class WatchActionDryRunTests(TestCase):
             format="json",
         )
         self.assertEqual(resp.status_code, 200, resp.content)
-        blob = resp.json()["config"]
+        blob = resp.json()["action"]["config"]
         self.assertNotIn("s3cr3t", str(blob))  # the plaintext secret is never echoed back
         self.assertEqual(blob["headers"]["Authorization"], "***")  # masked, like a real write
 
@@ -111,7 +113,7 @@ class WatchActionDryRunTests(TestCase):
             format="json",
         )
         self.assertEqual(resp.status_code, 200, resp.content)
-        blob = resp.json()["config"]
+        blob = resp.json()["action"]["config"]
         self.assertNotIn("s3cr3t", str(blob))
         self.assertEqual(blob["headers"]["Authorization"], "***")
 

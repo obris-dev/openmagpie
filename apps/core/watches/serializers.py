@@ -32,6 +32,8 @@ from openmagpie_schema.watch import (
     WatchMutationResponse,
     WatchView,
     WatchWire,
+    build_watch_action_input,
+    build_watch_action_wire,
 )
 from openmagpie_schema.watch_actions import WatchActionConfigSummary
 from openmagpie_schema.watch_enums import WatchActionRunState
@@ -85,7 +87,9 @@ class WatchCreateSerializer(serializers.Serializer):
                 errors[str(i)] = {"config": [str(exc)]}
                 continue
             action_id = raw.get("id") if isinstance(raw.get("id"), str) else ""
-            validated_actions.append(WatchActionInput(id=action_id, kind=kind, config=typed.model_dump(mode="json")))
+            validated_actions.append(
+                build_watch_action_input(id=action_id, kind=kind, config=typed.model_dump(mode="json"))
+            )
         if errors:
             raise serializers.ValidationError({"actions": errors})
         attrs["actions"] = validated_actions
@@ -154,7 +158,7 @@ def watch_action_wire(action: WatchAction) -> WatchActionWire:
     """One action's wire shape (opaque redacted config + display summary). `id` is
     empty for an UNSAVED row (a dry-run preview built in memory), real for a
     persisted one - so previews and reads share this one serializer."""
-    return WatchActionWire(
+    return build_watch_action_wire(
         id="" if _is_unsaved(action) else str(action.id),
         kind=str(action.kind),
         rank=action.rank,
@@ -177,22 +181,21 @@ def watch_action_input_wire(action: WatchActionInput, rank: int) -> WatchActionW
     merge_config. Display is identical (both redact to ***) and the persisted
     result is correct; only the preview's literal value is the placeholder. The
     single-action edit path (set_config) DOES merge, so it's exact there."""
-    config = validate_config(action.kind, action.config).model_dump(mode="json")
+    # `action.config` is the typed union member's config model; the registry
+    # re-runs shape + policy from its dict form (the persisted blob is kind-less).
+    config = validate_config(action.kind, action.config.model_dump(mode="json")).model_dump(mode="json")
     return watch_action_wire(WatchAction(kind=action.kind, config=config, rank=rank))
 
 
 def watch_action_mutation(action: WatchAction, *, dry_run: bool) -> WatchActionMutationResponse:
-    """One action's add/edit response (real or `?dry_run=true`). `id` reflects
-    PERSISTENCE, not the dry_run flag (mirrors `watch_mutation`, which keeps the
-    watch id on an update dry-run): a dry-run ADD builds an unsaved row, so there
-    is no id yet (None); a dry-run EDIT targets the existing row, whose id is
-    unchanged, so it's shown. Spreads `watch_action_wire` (so a new WatchActionWire
-    field can't drift out of this response), overriding only id + dry_run."""
-    return WatchActionMutationResponse(
-        **watch_action_wire(action).model_dump(exclude={"id"}),
-        id=None if _is_unsaved(action) else str(action.id),
-        dry_run=dry_run,
-    )
+    """One action's add/edit response (real or `?dry_run=true`). NESTS the typed
+    action node under `action` (the response is no longer a flat WatchActionWire,
+    since the union alias can't be subclassed to null the id). The nested node's
+    `id` reflects PERSISTENCE, not the dry_run flag (mirrors `watch_mutation`,
+    which keeps the watch id on an update dry-run): a dry-run ADD builds an
+    unsaved row, so `action.id` is "" ; a dry-run EDIT targets the existing row,
+    whose id is unchanged, so it's shown."""
+    return WatchActionMutationResponse(action=watch_action_wire(action), dry_run=dry_run)
 
 
 def run_feed_item_wire(item: FeedItem) -> RunFeedItem:

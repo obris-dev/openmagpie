@@ -126,7 +126,7 @@ def _user_declared_columns(action: WatchActionWire) -> list[_Col]:
     """Columns the USER declared in the action's config: extract's `config.fields`,
     each becoming its own `result.extracted.<name>`. Only extract declares its output
     columns today (see _USER_DECLARED_COLUMN_KINDS)."""
-    declared = action.config.get(EXTRACT_FIELDS_KEY) or []
+    declared = action.config.model_dump(mode="json").get(EXTRACT_FIELDS_KEY) or []
     names = [str(f[EXTRACT_FIELD_NAME_KEY]) for f in declared if f.get(EXTRACT_FIELD_NAME_KEY)]
     # Header uppercased (COMPANY), matching the fixed + page-union columns (STATE,
     # SCORE); the dot-path keeps the field's literal key.
