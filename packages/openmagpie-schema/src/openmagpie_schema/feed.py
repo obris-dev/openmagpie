@@ -16,7 +16,6 @@ from pydantic import BaseModel, Field, computed_field
 
 from .configs import SourceFields
 from .feed_payloads import FeedItemData, FeedItemPayload
-from .wire import ConfigBlob
 
 # ── Config (write-path `data` blob, keyed by kind) ────────────────────────
 
@@ -147,7 +146,7 @@ class FeedInput(BaseModel):
     kind: str = "curated"
     poll_interval_seconds: int = 300
     is_active: bool = True  # False creates/leaves the feed paused (server stops polling)
-    data: ConfigBlob = Field(default_factory=dict)
+    data: CuratedFeedConfig = Field(default_factory=CuratedFeedConfig)
     sources: list[SourceInput] = Field(default_factory=list)
 
     model_config = {"extra": "ignore"}
@@ -190,7 +189,7 @@ class FeedWire(BaseModel):
     next_poll_at: datetime | None = None
     # creator, audit/display only (account-scoped reads, not an ownership filter)
     user_id: str
-    data: ConfigBlob = Field(default_factory=dict)
+    data: CuratedFeedConfig = Field(default_factory=CuratedFeedConfig)
     created_at: datetime | None = None
 
 

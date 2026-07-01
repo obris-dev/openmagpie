@@ -333,9 +333,7 @@
       "description": "The envelope the CLI constructs for a feed write (request side). CLI-owned,\ndistinct from the server-emitted models (mirrors WatchInput). `data` carries\nthe kind-specific config (retention + default_field_map), opaque here; the\nserver validates it. `sources` is the optional starter source list for curated\nfeeds (the server creates Source rows atomically with the Feed). Extra keys\nignored so an edit seed's read-only fields drop on round-trip.",
       "properties": {
         "data": {
-          "additionalProperties": true,
-          "title": "Data",
-          "type": "object"
+          "$ref": "#/$defs/CuratedFeedConfig"
         },
         "is_active": {
           "default": true,
@@ -562,9 +560,7 @@
           "title": "Created At"
         },
         "data": {
-          "additionalProperties": true,
-          "title": "Data",
-          "type": "object"
+          "$ref": "#/$defs/CuratedFeedConfig"
         },
         "dry_run": {
           "title": "Dry Run",
@@ -672,9 +668,7 @@
           "title": "Created At"
         },
         "data": {
-          "additionalProperties": true,
-          "title": "Data",
-          "type": "object"
+          "$ref": "#/$defs/CuratedFeedConfig"
         },
         "id": {
           "title": "Id",
@@ -770,9 +764,7 @@
           "title": "Created At"
         },
         "data": {
-          "additionalProperties": true,
-          "title": "Data",
-          "type": "object"
+          "$ref": "#/$defs/CuratedFeedConfig"
         },
         "id": {
           "title": "Id",

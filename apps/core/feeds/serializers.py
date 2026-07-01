@@ -23,6 +23,7 @@ from feeds.policy import PolicyError
 from feeds.registry import get_config_class, load_config, validate_config
 from feeds.services.sources import SourceService
 from openmagpie_schema.feed import (
+    CuratedFeedConfig,
     FeedConfigSummary,
     FeedItemWire,
     FeedMutationResponse,
@@ -161,7 +162,11 @@ def feed_wire(feed: Feed) -> FeedWire:
         last_polled_at=feed.last_polled_at,
         next_poll_at=feed.next_poll_at,
         user_id=str(feed.user_id),
-        data=_redacted_data(feed),
+        # `_redacted_data` is a plain dict (redacted config, or a sentinel on a
+        # corrupt row); coerce it into the typed config. A corrupt-row sentinel
+        # has no config fields, so it lands as a default config (the corruption
+        # is already logged) rather than crashing the read.
+        data=CuratedFeedConfig.model_validate(_redacted_data(feed)),
         created_at=feed.created_at,
     )
 
