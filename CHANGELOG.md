@@ -5,6 +5,14 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0](https://github.com/obris-dev/openmagpie/compare/v0.5.0...v0.6.0) (2026-07-01)
+
+
+### Features
+
+* **auth:** AuthUser as a shared contract across server, CLI, and web ([#154](https://github.com/obris-dev/openmagpie/issues/154)) ([beeaa99](https://github.com/obris-dev/openmagpie/commit/beeaa993f6e97071931376719e012219d7525c23))
+* **schema:** generate + guard the cross-boundary JSON Schema ([#151](https://github.com/obris-dev/openmagpie/issues/151)) ([4b57414](https://github.com/obris-dev/openmagpie/commit/4b5741492b18aae2de0aa4ee3d9f1f7090da0c25))
+
 ## [0.5.0](https://github.com/obris-dev/openmagpie/compare/v0.4.1...v0.5.0) (2026-06-30)
 
 
