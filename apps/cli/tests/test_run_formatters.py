@@ -9,13 +9,15 @@ from __future__ import annotations
 import unittest
 
 from openmagpie.commands.activity import ExtractRunFormatter
-from openmagpie_schema.watch import WatchActionRunWire
+from openmagpie_schema.watch import WatchActionRunWire, build_watch_action_run_wire
 from openmagpie_schema.watch_actions import ExternalContentStatus
 
 
 def _run(result: dict) -> WatchActionRunWire:
-    return WatchActionRunWire(
-        id="01R", watch_id="01W", action_id="01A", feed_item_id="01F", state="succeeded", result=result
+    # `kind` selects the union member (ExtractRunWire), which validates the raw
+    # result dict into a typed ExtractResult, mirroring the server builder.
+    return build_watch_action_run_wire(
+        kind="extract", id="01R", watch_id="01W", action_id="01A", feed_item_id="01F", state="succeeded", result=result
     )
 
 

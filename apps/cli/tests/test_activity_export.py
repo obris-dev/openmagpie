@@ -28,7 +28,7 @@ from openmagpie.commands.activity_export import (
     _iter_records,
     _result_columns,
 )
-from openmagpie_schema.watch import RunFeedItem, WatchActionRunWire, build_watch_action_wire
+from openmagpie_schema.watch import RunFeedItem, build_watch_action_run_wire, build_watch_action_wire
 from openmagpie_schema.watch_actions import LogResult, SemanticFilterResult, WebhookResult
 from openmagpie_schema.watch_enums import WatchActionKind
 
@@ -250,7 +250,9 @@ class StreamRenderTests(unittest.TestCase):
 class IterRecordsTests(unittest.TestCase):
     def _resp(self, ids: list[str], next_cursor: str | None) -> SimpleNamespace:
         items = [
-            WatchActionRunWire(id=i, watch_id="w", action_id="a", feed_item_id=f"itm-{i}", state="succeeded")
+            build_watch_action_run_wire(
+                kind="log", id=i, watch_id="w", action_id="a", feed_item_id=f"itm-{i}", state="succeeded"
+            )
             for i in ids
         ]
         feed_items = {f"itm-{i}": RunFeedItem(feed_id="f", title=f"t{i}") for i in ids}

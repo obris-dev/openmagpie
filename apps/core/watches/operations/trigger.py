@@ -152,6 +152,7 @@ class WatchTriggerOperation:
             enqueued = self.run_svc.enqueue_many(
                 watch_id=str(self.watch.id),
                 action_id=first_action_id,
+                kind=str(head.kind),
                 feed_item_ids=self.feed_item_svc.iter_item_ids_in_window(
                     feed, after_id=after_id, through_id=through_id
                 ),

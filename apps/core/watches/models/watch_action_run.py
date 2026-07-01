@@ -23,6 +23,19 @@ class WatchActionRun(BaseModel):
     account_id = models.CharField(_("account id"), max_length=26)
     watch_id = models.CharField(_("watch id"), max_length=26)
     action_id = models.CharField(_("action id"), max_length=26)
+    # Denormalized from the action (a bare CharField over WatchActionKind, no
+    # `choices=`, mirroring WatchAction.kind) so the run's typed result stays
+    # renderable even if the action is later deleted. Stamped at enqueue time
+    # from the action the caller already holds (no per-run DB lookup).
+    kind = models.CharField(
+        _("kind"),
+        max_length=32,
+        default="",
+        help_text=_(
+            "WatchActionKind value; denormalized from the action so the run's typed result is renderable "
+            "even if the action is later deleted"
+        ),
+    )
     feed_item_id = models.CharField(_("feed item id"), max_length=26)
     state = models.CharField(
         _("state"),

@@ -313,6 +313,112 @@
       "title": "ExtractResult",
       "type": "object"
     },
+    "ExtractRunWire": {
+      "properties": {
+        "action_id": {
+          "title": "Action Id",
+          "type": "string"
+        },
+        "completed_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Completed At"
+        },
+        "created_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Created At"
+        },
+        "error": {
+          "default": "",
+          "title": "Error",
+          "type": "string"
+        },
+        "feed_item_id": {
+          "title": "Feed Item Id",
+          "type": "string"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "const": "extract",
+          "default": "extract",
+          "title": "Kind",
+          "type": "string"
+        },
+        "result": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ExtractResult"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "scheduled_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Scheduled At"
+        },
+        "started_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Started At"
+        },
+        "state": {
+          "$ref": "#/$defs/WatchActionRunState"
+        },
+        "watch_id": {
+          "title": "Watch Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "watch_id",
+        "action_id",
+        "feed_item_id",
+        "state"
+      ],
+      "title": "ExtractRunWire",
+      "type": "object"
+    },
     "ExtractStatus": {
       "description": "Outcome of one hydration, recorded on the result so a SUCCEEDED run\ncarries how complete its extraction was.",
       "enum": [
@@ -1178,6 +1284,112 @@
       "title": "LogResult",
       "type": "object"
     },
+    "LogRunWire": {
+      "properties": {
+        "action_id": {
+          "title": "Action Id",
+          "type": "string"
+        },
+        "completed_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Completed At"
+        },
+        "created_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Created At"
+        },
+        "error": {
+          "default": "",
+          "title": "Error",
+          "type": "string"
+        },
+        "feed_item_id": {
+          "title": "Feed Item Id",
+          "type": "string"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "const": "log",
+          "default": "log",
+          "title": "Kind",
+          "type": "string"
+        },
+        "result": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LogResult"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "scheduled_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Scheduled At"
+        },
+        "started_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Started At"
+        },
+        "state": {
+          "$ref": "#/$defs/WatchActionRunState"
+        },
+        "watch_id": {
+          "title": "Watch Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "watch_id",
+        "action_id",
+        "feed_item_id",
+        "state"
+      ],
+      "title": "LogRunWire",
+      "type": "object"
+    },
     "NewRedditPostPayload": {
       "additionalProperties": true,
       "description": "`new_post`: one post off a subreddit's /new (RedditSubredditConnector).",
@@ -1585,6 +1797,112 @@
         "score"
       ],
       "title": "SemanticFilterResult",
+      "type": "object"
+    },
+    "SemanticFilterRunWire": {
+      "properties": {
+        "action_id": {
+          "title": "Action Id",
+          "type": "string"
+        },
+        "completed_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Completed At"
+        },
+        "created_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Created At"
+        },
+        "error": {
+          "default": "",
+          "title": "Error",
+          "type": "string"
+        },
+        "feed_item_id": {
+          "title": "Feed Item Id",
+          "type": "string"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "const": "semantic_filter",
+          "default": "semantic_filter",
+          "title": "Kind",
+          "type": "string"
+        },
+        "result": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SemanticFilterResult"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "scheduled_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Scheduled At"
+        },
+        "started_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Started At"
+        },
+        "state": {
+          "$ref": "#/$defs/WatchActionRunState"
+        },
+        "watch_id": {
+          "title": "Watch Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "watch_id",
+        "action_id",
+        "feed_item_id",
+        "state"
+      ],
+      "title": "SemanticFilterRunWire",
       "type": "object"
     },
     "SourceInput": {
@@ -2180,7 +2498,29 @@
         },
         "items": {
           "items": {
-            "$ref": "#/$defs/WatchActionRunWire"
+            "discriminator": {
+              "mapping": {
+                "extract": "#/$defs/ExtractRunWire",
+                "log": "#/$defs/LogRunWire",
+                "semantic_filter": "#/$defs/SemanticFilterRunWire",
+                "webhook": "#/$defs/WebhookRunWire"
+              },
+              "propertyName": "kind"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/SemanticFilterRunWire"
+              },
+              {
+                "$ref": "#/$defs/ExtractRunWire"
+              },
+              {
+                "$ref": "#/$defs/LogRunWire"
+              },
+              {
+                "$ref": "#/$defs/WebhookRunWire"
+              }
+            ]
           },
           "title": "Items",
           "type": "array"
@@ -2343,108 +2683,36 @@
           "default": null
         },
         "run": {
-          "$ref": "#/$defs/WatchActionRunWire"
+          "discriminator": {
+            "mapping": {
+              "extract": "#/$defs/ExtractRunWire",
+              "log": "#/$defs/LogRunWire",
+              "semantic_filter": "#/$defs/SemanticFilterRunWire",
+              "webhook": "#/$defs/WebhookRunWire"
+            },
+            "propertyName": "kind"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/SemanticFilterRunWire"
+            },
+            {
+              "$ref": "#/$defs/ExtractRunWire"
+            },
+            {
+              "$ref": "#/$defs/LogRunWire"
+            },
+            {
+              "$ref": "#/$defs/WebhookRunWire"
+            }
+          ],
+          "title": "Run"
         }
       },
       "required": [
         "run"
       ],
       "title": "WatchActionRunView",
-      "type": "object"
-    },
-    "WatchActionRunWire": {
-      "description": "One WatchActionRun on the wire (`GET /v1/actions/<action_id>/activity`).\n\nThe stateful audit row of one action executing against one item. Pure ids +\nrun state: the judged item is in the response's `feed_items` map (key\n`feed_item_id`), the feed in `feeds` (key `feed_items[feed_item_id].feed_id`).\n`result` is the kind-specific output blob (opaque; render common keys\nbest-effort). `state` is the `WatchActionRunState` value. Datetimes real;\nrenderer encodes.",
-      "properties": {
-        "action_id": {
-          "title": "Action Id",
-          "type": "string"
-        },
-        "completed_at": {
-          "anyOf": [
-            {
-              "format": "date-time",
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Completed At"
-        },
-        "created_at": {
-          "anyOf": [
-            {
-              "format": "date-time",
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Created At"
-        },
-        "error": {
-          "default": "",
-          "title": "Error",
-          "type": "string"
-        },
-        "feed_item_id": {
-          "title": "Feed Item Id",
-          "type": "string"
-        },
-        "id": {
-          "title": "Id",
-          "type": "string"
-        },
-        "result": {
-          "additionalProperties": true,
-          "title": "Result",
-          "type": "object"
-        },
-        "scheduled_at": {
-          "anyOf": [
-            {
-              "format": "date-time",
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Scheduled At"
-        },
-        "started_at": {
-          "anyOf": [
-            {
-              "format": "date-time",
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Started At"
-        },
-        "state": {
-          "$ref": "#/$defs/WatchActionRunState"
-        },
-        "watch_id": {
-          "title": "Watch Id",
-          "type": "string"
-        }
-      },
-      "required": [
-        "id",
-        "watch_id",
-        "action_id",
-        "feed_item_id",
-        "state"
-      ],
-      "title": "WatchActionRunWire",
       "type": "object"
     },
     "WatchActivityWindow": {
@@ -2899,6 +3167,112 @@
         "http_status"
       ],
       "title": "WebhookResult",
+      "type": "object"
+    },
+    "WebhookRunWire": {
+      "properties": {
+        "action_id": {
+          "title": "Action Id",
+          "type": "string"
+        },
+        "completed_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Completed At"
+        },
+        "created_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Created At"
+        },
+        "error": {
+          "default": "",
+          "title": "Error",
+          "type": "string"
+        },
+        "feed_item_id": {
+          "title": "Feed Item Id",
+          "type": "string"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "const": "webhook",
+          "default": "webhook",
+          "title": "Kind",
+          "type": "string"
+        },
+        "result": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/WebhookResult"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "scheduled_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Scheduled At"
+        },
+        "started_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Started At"
+        },
+        "state": {
+          "$ref": "#/$defs/WatchActionRunState"
+        },
+        "watch_id": {
+          "title": "Watch Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "watch_id",
+        "action_id",
+        "feed_item_id",
+        "state"
+      ],
+      "title": "WebhookRunWire",
       "type": "object"
     }
   },

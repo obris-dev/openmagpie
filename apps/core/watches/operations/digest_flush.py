@@ -267,6 +267,10 @@ class WatchDigestFlushOperation:
                 result=result.result,
                 error=result.error,
                 delivery_id=delivery_id,
+                # Re-stamp the kind that ACTUALLY ran (the flush dispatches by the
+                # action's current kind, which may have changed since enqueue), so
+                # run.kind agrees with the written result shape; mirrors drain.py.
+                kind=str(action.kind),
                 now=self.now,
             )
             if result.state == WatchActionRunState.SUCCEEDED:

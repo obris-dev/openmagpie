@@ -66,11 +66,14 @@ class WatchActionRunService(DigestBatchMixin):
         *,
         watch_id: str,
         action_id: str,
+        kind: str,
         feed_item_id: str,
         scheduled_at: datetime,
         prior_run_id: str = "",
     ) -> WatchActionRun | None:
-        """Create a PENDING run for (watch, action, feed_item). Idempotent
+        """Create a PENDING run for (watch, action, feed_item). `kind` is the
+        action's kind, denormalized onto the run so its typed result stays
+        renderable even if the action is later deleted. Idempotent
         on that triple (unique constraint) ; returns the new run, or None if
         one already exists (so the trigger can re-scan a window safely and a
         completed run is never re-queued). `scheduled_at` is when it's
@@ -89,7 +92,7 @@ class WatchActionRunService(DigestBatchMixin):
             watch_id=watch_id,
             action_id=action_id,
             feed_item_id=feed_item_id,
-            defaults={"state": _PENDING, "scheduled_at": scheduled_at, "prior_run_id": prior_run_id},
+            defaults={"kind": kind, "state": _PENDING, "scheduled_at": scheduled_at, "prior_run_id": prior_run_id},
         )
         return run if created else None
 
@@ -98,11 +101,14 @@ class WatchActionRunService(DigestBatchMixin):
         *,
         watch_id: str,
         action_id: str,
+        kind: str,
         feed_item_ids: Iterable[str],
         scheduled_at: datetime,
     ) -> int:
         """Batch-enqueue PENDING runs of one action over a STREAM of feed
-        item ids (the trigger window). Returns the count of NEW runs.
+        item ids (the trigger window). Returns the count of NEW runs. `kind` is
+        the action's kind, denormalized onto each run so its typed result stays
+        renderable even if the action is later deleted.
 
         Consumes the iterable in `_ENQUEUE_CHUNK`-sized chunks so memory
         stays O(chunk) regardless of window size (the caller passes an
@@ -122,7 +128,7 @@ class WatchActionRunService(DigestBatchMixin):
         # raise on the remainder.
         for chunk in itertools.batched(feed_item_ids, _ENQUEUE_CHUNK, strict=False):
             created += self._enqueue_chunk(
-                watch_id=watch_id, action_id=action_id, feed_item_ids=chunk, scheduled_at=scheduled_at
+                watch_id=watch_id, action_id=action_id, kind=kind, feed_item_ids=chunk, scheduled_at=scheduled_at
             )
         return created
 
@@ -131,6 +137,7 @@ class WatchActionRunService(DigestBatchMixin):
         *,
         watch_id: str,
         action_id: str,
+        kind: str,
         feed_item_ids: tuple[str, ...],
         scheduled_at: datetime,
     ) -> int:
@@ -159,6 +166,7 @@ class WatchActionRunService(DigestBatchMixin):
                 account_id=self.account_id,
                 watch_id=watch_id,
                 action_id=action_id,
+                kind=kind,
                 feed_item_id=fid,
                 state=_PENDING,
                 scheduled_at=scheduled_at,
@@ -180,11 +188,19 @@ class WatchActionRunService(DigestBatchMixin):
         result: dict | None = None,
         error: str = "",
         delivery_id: str = "",
+        kind: str | None = None,
         now: datetime | None = None,
     ) -> WatchActionRun | None:
         """Write a terminal state + result onto a claimed (RUNNING) run.
         The drain calls this after the action returns ; `state` is the
         outcome (succeeded / gated / errored / skipped) or failed.
+
+        `kind` re-stamps `run.kind` to the kind that ACTUALLY executed. The drain
+        dispatches by the action's CURRENT kind (which may have been edited since
+        the run was enqueued) and persists a result of that shape, so re-stamping
+        keeps the denormalized kind agreeing with the stored `result`. None when
+        the action was unresolvable (deleted / unregistered -> ERRORED, no
+        result), which leaves the (valid) enqueue-time kind untouched.
 
         `state` is the enum, not a bare str: the column has no `choices=`,
         so a typo'd / non-terminal value would persist silently and match no
@@ -221,6 +237,8 @@ class WatchActionRunService(DigestBatchMixin):
         }
         if delivery_id:
             fields["delivery_id"] = delivery_id
+        if kind:
+            fields["kind"] = kind
         won = WatchActionRun.objects.filter(id=run.id, state=_RUNNING, attempts=run.attempts).update(**fields)
         if not won:
             return None
@@ -230,6 +248,8 @@ class WatchActionRunService(DigestBatchMixin):
         run.completed_at = ct
         if delivery_id:
             run.delivery_id = delivery_id
+        if kind:
+            run.kind = kind
         return run
 
     def get(self, run_id: str, /) -> WatchActionRun:

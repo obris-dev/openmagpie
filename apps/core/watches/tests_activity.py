@@ -99,6 +99,7 @@ class ActionActivitySummaryTests(TestCase):
             account_id=self.account_id,
             watch_id=ulid.ulid(),
             action_id=self.action_id,
+            kind="log",  # the run self-describes its kind so the wire can type its result
             feed_item_id=ulid.ulid(),
             state=state,
             scheduled_at=timezone.now(),
@@ -181,6 +182,7 @@ class ActionRunFeedItemTests(TestCase):
             account_id=self.account_id,
             watch_id=ulid.ulid(),
             action_id=self.action_id,
+            kind="log",  # the run self-describes its kind so the wire can type its result
             feed_item_id=feed_item_id,
             state="succeeded",
             scheduled_at=timezone.now(),
@@ -268,7 +270,11 @@ class ActionActivityDetailTests(TestCase):
         self.client.force_authenticate(user=self.user)
         resp = self.client.post(
             "/v1/watches",
-            {"name": "w", "feed_ids": [], "actions": [{"kind": "log", "config": {"prefix": "[A]"}}]},
+            {
+                "name": "w",
+                "feed_ids": [],
+                "actions": [{"kind": "semantic_filter", "config": {"instructions": "coach hires", "threshold": 0.8}}],
+            },
             format="json",
         )
         self.action_id = resp.json()["actions"][0]["id"]
@@ -279,11 +285,12 @@ class ActionActivityDetailTests(TestCase):
             account_id=self.account_id,
             watch_id=ulid.ulid(),
             action_id=self.action_id,
+            kind="semantic_filter",  # the run self-describes its kind so the wire types its result
             feed_item_id=feed_item_id,
             state="succeeded",
             scheduled_at=timezone.now(),
             completed_at=timezone.now(),
-            result={"score": 0.9, "reason": "matched"},
+            result={"passed": True, "score": 0.9, "reason": "matched"},
         )
 
     def test_detail_joins_run_item_feed_action(self) -> None:
@@ -305,7 +312,7 @@ class ActionActivityDetailTests(TestCase):
         self.assertEqual(body["feed_item"]["title"], "Coach hired")
         self.assertEqual(body["feed_item"]["feed_id"], str(feed.id))
         self.assertEqual(body["feed"]["name"], "Athletics")
-        self.assertEqual(body["action"]["kind"], "log")
+        self.assertEqual(body["action"]["kind"], "semantic_filter")
 
     def test_pruned_item_leaves_joins_null(self) -> None:
         pruned_id = ulid.ulid()

@@ -71,7 +71,11 @@ class DigestDeliveryTests(TestCase):
                 data={"title": f"t{i}"},
             )
             self.run_svc.enqueue(
-                watch_id=str(watch.id), action_id=str(a0.id), feed_item_id=str(fi.id), scheduled_at=now
+                watch_id=str(watch.id),
+                action_id=str(a0.id),
+                kind=str(a0.kind),
+                feed_item_id=str(fi.id),
+                scheduled_at=now,
             )
         self._drain(now)
         window = WatchActionDigestWindow.objects.get(account_id=self.account_id, action_id=str(a1.id))

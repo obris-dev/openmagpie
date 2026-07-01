@@ -46,6 +46,7 @@ def enqueue_next_batch(runs: builtins.list[WatchActionRun], action: WatchAction,
         scheduled_at = now
     WatchActionRunService(account_id=account_id).enqueue_advance_batch(
         action_id=str(nxt.id),
+        kind=str(nxt.kind),
         scheduled_at=scheduled_at,
         rows=[(str(run.watch_id), str(run.feed_item_id), str(run.id)) for run in runs],
     )

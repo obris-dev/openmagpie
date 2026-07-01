@@ -102,6 +102,11 @@ class WatchDrainOperation:
                 result=result.result,
                 error=result.error,
                 delivery_id=delivery_id,
+                # Re-stamp the kind that ACTUALLY ran (dispatched by the action's
+                # current kind), so run.kind agrees with the persisted result
+                # shape; None when the action was unresolvable (kind unknown), so
+                # the (valid) enqueue-time kind stands.
+                kind=str(action.kind) if action is not None else None,
                 now=self.now,
             )
             if committed is None:

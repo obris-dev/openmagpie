@@ -6,13 +6,20 @@ deliveries endpoints return; the judged item / feed live in the response's side
 tables (see the per-model docstrings)."""
 
 from datetime import datetime
-from typing import Any
+from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, TypeAdapter
 
+from ..watch_actions import (
+    ExtractResult,
+    LogResult,
+    SemanticFilterResult,
+    WebhookResult,
+)
 from ..watch_enums import (
     DeliveryCadence,
     WatchActionDeliveryState,
+    WatchActionKind,
     WatchActionRunState,
     WatchActivityWindow,
     WebhookMethod,
@@ -20,10 +27,11 @@ from ..watch_enums import (
 from ._nodes import WatchActionWire
 
 ResultBlob = dict[str, Any]
-"""A WatchActionRun's kind-specific `result`, opaque on the wire.
+"""The raw kind-specific `result` dict as persisted on WatchActionRun.result.
 
-The runner writes a kind-strict result (see `watch_actions`); readers
-carry it verbatim and render common keys best-effort."""
+The typed per-kind projection is `SemanticFilterResult` / `ExtractResult` /
+`LogResult` / `WebhookResult`, carried on the wire by the run union below; this
+alias is the pre-validation input the server hands the builder."""
 
 
 # ── ActionRun (audit log read path) ───────────────────────────────────────
@@ -66,27 +74,119 @@ class RunFeed(BaseModel):
     name: str = ""
 
 
-class WatchActionRunWire(BaseModel):
-    """One WatchActionRun on the wire (`GET /v1/actions/<action_id>/activity`).
+# A run row is a discriminated union keyed by `kind` (the run's action kind,
+# denormalized onto the row so a reader knows WHAT ran and the union narrows
+# `result` to its exact type). `result` is the PURE typed per-kind output,
+# optional for two distinct reasons: a pending / running / errored run has
+# produced no result yet, AND the result shapes can't fall back on an empty
+# default instance (some carry required fields, e.g. score / http_status). Hence
+# `| None`, not a default instance.
+class _WatchActionRunFields(BaseModel):
+    """Kind-independent fields on a WatchActionRun audit row.
 
     The stateful audit row of one action executing against one item. Pure ids +
     run state: the judged item is in the response's `feed_items` map (key
     `feed_item_id`), the feed in `feeds` (key `feed_items[feed_item_id].feed_id`).
-    `result` is the kind-specific output blob (opaque; render common keys
-    best-effort). `state` is the `WatchActionRunState` value. Datetimes real;
-    renderer encodes."""
+    `state` is the `WatchActionRunState` value. Datetimes real; renderer
+    encodes."""
 
     id: str
     watch_id: str
     action_id: str
     feed_item_id: str
     state: WatchActionRunState
-    result: ResultBlob = Field(default_factory=dict)
     error: str = ""
     scheduled_at: datetime | None = None
     started_at: datetime | None = None
     completed_at: datetime | None = None
     created_at: datetime | None = None
+
+
+class SemanticFilterRunWire(_WatchActionRunFields):
+    kind: Literal[WatchActionKind.SEMANTIC_FILTER] = WatchActionKind.SEMANTIC_FILTER
+    result: SemanticFilterResult | None = None
+
+
+class ExtractRunWire(_WatchActionRunFields):
+    kind: Literal[WatchActionKind.EXTRACT] = WatchActionKind.EXTRACT
+    result: ExtractResult | None = None
+
+
+class LogRunWire(_WatchActionRunFields):
+    kind: Literal[WatchActionKind.LOG] = WatchActionKind.LOG
+    result: LogResult | None = None
+
+
+class WebhookRunWire(_WatchActionRunFields):
+    kind: Literal[WatchActionKind.WEBHOOK] = WatchActionKind.WEBHOOK
+    result: WebhookResult | None = None
+
+
+# One WatchActionRun on the wire (`GET /v1/actions/<action_id>/activity`), keyed
+# by `kind`. A plain type alias (like WatchActionWire) so field access needs no
+# wrapper.
+WatchActionRunWire = Annotated[
+    SemanticFilterRunWire | ExtractRunWire | LogRunWire | WebhookRunWire,
+    Field(discriminator="kind"),
+]
+
+# The union is a type alias, not a class, so it has no `.model_validate`; this
+# adapter is the single validation entry (the server builder + the CLI response
+# parsing go through it). Keys on the sibling `kind`.
+watch_action_run_wire_adapter: TypeAdapter[WatchActionRunWire] = TypeAdapter(WatchActionRunWire)
+
+
+def build_watch_action_run_wire(
+    *,
+    kind: WatchActionKind | str,
+    id: str,
+    watch_id: str,
+    action_id: str,
+    feed_item_id: str,
+    state: WatchActionRunState | str,
+    result: ResultBlob | None = None,
+    error: str = "",
+    scheduled_at: datetime | None = None,
+    started_at: datetime | None = None,
+    completed_at: datetime | None = None,
+    created_at: datetime | None = None,
+) -> WatchActionRunWire:
+    """Build a WatchActionRunWire union member from its parts. `kind` selects the
+    member ; `result` is the raw persisted result dict (pure, no kind), validated
+    into that member's typed result.
+
+    An empty result ({}) becomes None (a run with no terminal result yet). That
+    coalesce relies on a REAL result dump never being {} -- true because every
+    result model has at least one field, so its dump always has at least one key.
+
+    A result whose shape doesn't match `kind` raises ONLY for members with a
+    required field (semantic_filter's score, webhook's http_status); the server's
+    per-row fail-safe then degrades to null. The all-defaulted members (extract,
+    log ; extra='ignore') instead ABSORB a mismatched blob into a defaulted
+    instance (silent, no raise), so `kind` MUST be the kind that actually produced
+    the result (stamped at enqueue, re-stamped at completion) or a cross-kind
+    mismatch would render as wrong data rather than degrade."""
+    payload: dict[str, Any] = {
+        "kind": kind,
+        "id": id,
+        "watch_id": watch_id,
+        "action_id": action_id,
+        "feed_item_id": feed_item_id,
+        "state": state,
+        "result": result or None,
+        "error": error,
+    }
+    # Omit unset timestamps so each member's own default applies (mirrors
+    # build_watch_action_wire's conditional handling of its optional fields).
+    for name, value in (
+        ("scheduled_at", scheduled_at),
+        ("started_at", started_at),
+        ("completed_at", completed_at),
+        ("created_at", created_at),
+    ):
+        if value is not None:
+            payload[name] = value
+    return watch_action_run_wire_adapter.validate_python(payload)
 
 
 class WatchActionRunSummary(BaseModel):
