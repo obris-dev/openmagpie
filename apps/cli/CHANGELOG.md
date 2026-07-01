@@ -6,7 +6,10 @@
 ### Features
 
 * **auth:** AuthUser as a shared contract across server, CLI, and web ([#154](https://github.com/obris-dev/openmagpie/issues/154)) ([beeaa99](https://github.com/obris-dev/openmagpie/commit/beeaa993f6e97071931376719e012219d7525c23))
+  * **Clearer errors when the server and CLI disagree**: a response this CLI can't parse (the two are on incompatible versions) now prints "the server and CLI are on incompatible versions, update magpie" instead of a raw Python traceback, on `auth login`, `auth status`, and the token / device-flow sign-in paths.
+  * **Readable config errors + corrupt-config handling**: a bad action config on `watch action add` / `watch action edit` now lists the offending fields (for example a missing `instructions`) instead of a generic failure, and `watch action get` / `watch edit` render an unreadable (corrupt) stored config as `null` and flag it rather than crashing.
 * **schema:** generate + guard the cross-boundary JSON Schema ([#151](https://github.com/obris-dev/openmagpie/issues/151)) ([4b57414](https://github.com/obris-dev/openmagpie/commit/4b5741492b18aae2de0aa4ee3d9f1f7090da0c25))
+  * The CLI validates API responses against the same contract the server generates from its models (no hand-maintained copy), so a shape mismatch surfaces explicitly instead of silently mis-parsing.
 
 ## [0.5.0](https://github.com/obris-dev/openmagpie/compare/cli-v0.4.1...cli-v0.5.0) (2026-06-30)
 
