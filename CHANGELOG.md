@@ -5,6 +5,17 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0](https://github.com/obris-dev/openmagpie/compare/v0.5.0...v0.6.0) (2026-07-01)
+
+
+### Features
+
+* **auth:** AuthUser as a shared contract across server, CLI, and web ([#154](https://github.com/obris-dev/openmagpie/issues/154)) ([beeaa99](https://github.com/obris-dev/openmagpie/commit/beeaa993f6e97071931376719e012219d7525c23))
+  * **Typed API contract across every surface**: the user identity (`AuthUser`) and the per-kind blobs on the wire (a `WatchAction`'s `config`, a `Feed`'s `data`, a `WatchActionRun`'s `result`) are now typed discriminated unions keyed by `kind`, so a client narrows a payload to its exact shape (a `semantic_filter` action's config vs a `webhook`'s) rather than reading an opaque object. The web client migrated to zod 4 and generates its validators from this contract.
+  * **Every user belongs to an account**: `AuthUser.account_id` is non-null across the `/v1/auth` responses, and `createsuperuser` now requires an `account_id` (binding the admin to that account). A stored `config` or `result` that no longer validates degrades to `null` on the wire instead of failing the read.
+* **schema:** generate + guard the cross-boundary JSON Schema ([#151](https://github.com/obris-dev/openmagpie/issues/151)) ([4b57414](https://github.com/obris-dev/openmagpie/commit/4b5741492b18aae2de0aa4ee3d9f1f7090da0c25))
+  * **One contract, no drift**: the API's request / response / config shapes are generated from the Pydantic models into a single committed JSON Schema, and both hops (models to schema, schema to the web's zod validators) are guarded in CI, so the server, CLI, and web all validate against one source instead of hand-mirrored copies. Groundwork for the web client, with no user-facing behavior change on its own.
+
 ## [0.5.0](https://github.com/obris-dev/openmagpie/compare/v0.4.1...v0.5.0) (2026-06-30)
 
 

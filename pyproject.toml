@@ -14,7 +14,7 @@ name = "openmagpie-suite"
 # (see release-please-config.json extra-files) so the two never drift. The root
 # is never published, so this value is informational - the real source of truth
 # for a release is the v<x.y.z> git tag.
-version = "0.5.0" # x-release-please-version
+version = "0.6.0" # x-release-please-version
 description = "OpenMagpie monorepo (uv workspace root; no code of its own)."
 requires-python = ">=3.13"
 
