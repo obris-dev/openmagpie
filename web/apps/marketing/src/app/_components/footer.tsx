@@ -11,8 +11,9 @@ export function Footer() {
           <span>© {new Date().getFullYear()} OpenMagpie</span>
         </div>
         <div className="flex items-center gap-6">
-          <ExternalLink href={links.github}>GitHub</ExternalLink>
+          <ExternalLink href={links.blog}>Blog</ExternalLink>
           <ExternalLink href={links.docs}>Docs</ExternalLink>
+          <ExternalLink href={links.github}>GitHub</ExternalLink>
         </div>
       </div>
     </footer>

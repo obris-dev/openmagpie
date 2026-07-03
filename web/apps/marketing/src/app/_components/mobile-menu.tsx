@@ -4,6 +4,8 @@ import { useState } from "react";
 import { Bars3Icon, XMarkIcon } from "@heroicons/react/24/outline";
 import { links } from "./constants";
 
+// On-page section anchors. Off-page destinations (Blog) + the CTA sit below a
+// divider so they read as "leave / act", not "jump to a section here".
 const navLinks = [
   { href: "#how", label: "How it works" },
   { href: "#where", label: "Where it listens" },
@@ -12,8 +14,8 @@ const navLinks = [
 
 /**
  * Hamburger menu for < lg (mobile + tablet). Toggles a full-width drawer below
- * the header with the section links, GitHub, and the waitlist CTA. Mirrors the
- * obris marketing mobile menu.
+ * the header with the on-page section links, then the Blog link and waitlist
+ * CTA below a divider.
  */
 export function MobileMenu() {
   const [open, setOpen] = useState(false);
@@ -43,7 +45,14 @@ export function MobileMenu() {
                 {l.label}
               </a>
             ))}
-            <div className="mt-1 border-t border-ink/10 pt-2 dark:border-paper/10">
+            <div className="mt-1 flex flex-col gap-1 border-t border-ink/10 pt-2 dark:border-paper/10">
+              <a
+                href={links.blog}
+                onClick={() => setOpen(false)}
+                className="rounded-md px-3 py-2 text-sm font-medium text-ink-muted hover:bg-paper-soft hover:text-ink dark:text-ink-subtle dark:hover:bg-ink-soft dark:hover:text-paper"
+              >
+                Blog
+              </a>
               <a
                 href={links.waitlist}
                 onClick={() => setOpen(false)}

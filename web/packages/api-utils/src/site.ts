@@ -14,6 +14,29 @@ export const siteMeta = {
   tagline: "Join the conversations that matter, while they're happening",
 } as const;
 
+const stripTrailingSlash = (url: string) => url.replace(/\/$/, "");
+
+/**
+ * Origins of the sibling web apps, for cross-app links (e.g. marketing -> blog).
+ * Each app's build sets the relevant NEXT_PUBLIC_*_URL in production; the
+ * localhost fallbacks match the dev ports (marketing 3000, app 3001, blog 3002)
+ * so local dev needs no config. Cross-app links are the browser's destination,
+ * so localhost is correct in dev (host port mappings), the subdomain in prod.
+ */
+export const origins = {
+  marketing: stripTrailingSlash(
+    process.env.NEXT_PUBLIC_MARKETING_URL ?? "http://localhost:3000",
+  ),
+  app: stripTrailingSlash(
+    process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3001",
+  ),
+  // The blog runs under the /blog basePath (its own app; a Cloudflare route
+  // serves it at openmagpie.ai/blog in prod, localhost:3002/blog in dev).
+  blog: stripTrailingSlash(
+    process.env.NEXT_PUBLIC_BLOG_URL ?? "http://localhost:3002/blog",
+  ),
+} as const;
+
 /**
  * Compose a Next `Metadata` from the shared base, with per-app overrides.
  * Defaults: title = brand name, shared description, canonical "/", brand icons,
