@@ -1,0 +1,16 @@
+{
+  // Mirrors apps/app: a plain OpenNext worker (no request-interception wrapper).
+  // Served at openmagpie.ai/blog (NOT a subdomain): a Cloudflare Worker route
+  // `openmagpie.ai/blog*` -> this worker, set out-of-band like the other apps'
+  // domains. The app builds under basePath "/blog", so its routes and assets
+  // (/blog/_next/...) resolve to this worker while `/` stays on marketing.
+  "main": ".open-next/worker.js",
+  "name": "openmagpie-blog",
+  "workers_dev": false,
+  "compatibility_date": "2025-03-25",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
+  }
+}

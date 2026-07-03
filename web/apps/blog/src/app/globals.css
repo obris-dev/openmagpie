@@ -1,0 +1,70 @@
+@import "tailwindcss";
+
+/* Shared brand theme + monorepo source globs (single source of truth for color
+ * tokens AND which workspace dirs Tailwind scans). Resolved by package specifier
+ * (Node walks up to the workspace-root node_modules) rather than a brittle
+ * `../../../../` chain; the package declares a `style` export so Tailwind v4's
+ * CSS resolver finds theme.css. */
+@import "@magpie/tailwind-config";
+
+/* Long-form prose styling for MDX post bodies. */
+@plugin "@tailwindcss/typography";
+
+/* Force Tailwind v4's `dark:` variant to the `class="dark"` strategy
+ * (next-themes adds the class to <html>) instead of `prefers-color-scheme`. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+@layer base {
+  /* Restore the pointer cursor Tailwind v4 preflight strips from buttons. */
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]),
+  summary {
+    cursor: pointer;
+  }
+
+  /* Re-tint prose links to the brand accent; the zinc/invert theme handles the
+   * rest of the palette (see the Prose component's `prose-zinc dark:prose-invert`). */
+  .prose {
+    --tw-prose-links: var(--color-signal-600);
+  }
+  .dark .prose {
+    --tw-prose-invert-links: var(--color-signal-400);
+  }
+
+  /* Shiki `css-variables` theme -> brand-tinted tokens on the dark code block. */
+  :root {
+    --shiki-color-text: #f4f4f5; /* zinc-100 */
+    --shiki-token-constant: var(--color-signal-300);
+    --shiki-token-string: var(--color-signal-300);
+    --shiki-token-comment: #71717a; /* zinc-500 */
+    --shiki-token-keyword: #7dd3fc; /* sky-300 */
+    --shiki-token-parameter: #f9a8d4; /* pink-300 */
+    --shiki-token-function: var(--color-signal-400);
+    --shiki-token-string-expression: var(--color-signal-300);
+    --shiki-token-punctuation: #e4e4e7; /* zinc-200 */
+    --shiki-token-link: var(--color-signal-400);
+  }
+}
+
+html {
+  font-family: var(--font-sans);
+  background: var(--color-paper);
+  color: var(--color-ink);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  scroll-behavior: smooth;
+}
+
+html.dark {
+  background: var(--color-ink);
+  color: var(--color-paper);
+}
+
+body {
+  min-height: 100dvh;
+}
+
+::selection {
+  background: var(--color-signal);
+  color: var(--color-ink);
+}
