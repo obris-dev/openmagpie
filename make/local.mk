@@ -1,4 +1,4 @@
-.PHONY: install-local-cli up build down logs logs-core logs-web local-exec local-manage local-test local-makemigrations local-dbshell local-migrate local-tick up-jobs down-jobs _job-up local-lint local-lint-fix local-types local-check local-web local-web-reinstall local-web-shell local-cli-sync local-cli hooks
+.PHONY: install-local-cli up build down restart restart-web logs logs-core logs-web local-exec local-manage local-test local-makemigrations local-dbshell local-migrate local-tick up-jobs down-jobs _job-up local-lint local-lint-fix local-types local-check local-web local-web-reinstall local-web-shell local-cli-sync local-cli hooks
 
 # Getting started is the curl|sh installer (scripts/quickstart/bootstrap.sh) or,
 # in a clone, ./scripts/quickstart/run.sh. That orchestration lives in POSIX sh,
@@ -25,13 +25,19 @@ build: ## Rebuild Docker images and start
 down: ## Stop local Docker dev environment
 	docker compose down
 
+restart: ## Restart all services in place (bounces the dev servers; recompiles .next). Use `make down && make up` after docker-compose.yml changes.
+	docker compose restart
+
+restart-web: ## Restart just the web container (Next.js app + marketing + blog); the fix after host-side edits confuse its dev server
+	docker compose restart web
+
 logs: ## Tail all Docker container logs
 	docker compose logs -f
 
 logs-core: ## Tail Django logs
 	docker compose logs -f core
 
-logs-web: ## Tail Next.js web logs (app + marketing)
+logs-web: ## Tail Next.js web logs (app + marketing + blog)
 	docker compose logs -f web
 
 local-exec: ## Run a command in a container (e.g. make local-exec SVC=core CMD="uv run ruff check .")

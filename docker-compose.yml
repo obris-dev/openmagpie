@@ -114,8 +114,8 @@ services:
     # still run install at start because the node_modules volume mount
     # would hide anything baked in; `pnpm install` is a no-op when the
     # lockfile matches what's already in the volume. `pnpm dev` runs every
-    # app in parallel (the product app on 3001, the marketing site on 3000),
-    # one install for the whole workspace.
+    # app in parallel (the product app on 3001, the marketing site on 3000,
+    # the blog on 3002), one install for the whole workspace.
     command: sh -c "pnpm install --frozen-lockfile=false && pnpm dev"
     environment:
       NEXT_PUBLIC_API_URL: http://localhost:8000
@@ -127,6 +127,7 @@ services:
     ports:
       - "3000:3000"
       - "3001:3001"
+      - "3002:3002"
       # email-render sidecar (runs in this container via `pnpm dev`); core
       # reaches it at http://web:3010, also published for local curl/preview.
       - "3010:3010"
@@ -136,6 +137,7 @@ services:
       - magpie_app_node_modules:/web/apps/app/node_modules
       - magpie_marketing_node_modules:/web/apps/marketing/node_modules
       - magpie_email_render_node_modules:/web/apps/email-render/node_modules
+      - magpie_blog_node_modules:/web/apps/blog/node_modules
     depends_on:
       # service_healthy (not the default service_started) means web only
       # starts once core's /healthz is green. Without this, web boots
@@ -150,3 +152,4 @@ volumes:
   magpie_app_node_modules:
   magpie_marketing_node_modules:
   magpie_email_render_node_modules:
+  magpie_blog_node_modules:
