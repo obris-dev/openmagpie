@@ -3,6 +3,7 @@
 import clsx from "clsx";
 import { useEffect, useState } from "react";
 import { useTheme } from "next-themes";
+import { setThemeCookie } from "./theme-provider";
 
 export interface ThemeToggleProps {
   className?: string;
@@ -30,7 +31,11 @@ export function ThemeToggle({ className }: ThemeToggleProps) {
   return (
     <button
       type="button"
-      onClick={() => setTheme(isDark ? "light" : "dark")}
+      onClick={() => {
+        const next = isDark ? "light" : "dark";
+        setTheme(next);
+        setThemeCookie(next); // sync the choice across openmagpie origins
+      }}
       aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
       title={isDark ? "Switch to light mode" : "Switch to dark mode"}
       className={clsx(

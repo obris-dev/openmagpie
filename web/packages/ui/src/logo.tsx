@@ -1,5 +1,18 @@
+/// <reference types="next/image-types/global" />
+// Declares *.svg / *.png as next/image StaticImageData wherever this file is
+// compiled (this package standalone, or an app that re-typechecks it), without
+// depending on a build-generated next-env.d.ts. Same reference next-env.d.ts
+// uses, so TS dedupes it when both are present.
 import clsx from "clsx";
 import Image from "next/image";
+import emblemSrc from "./brand/emblem.svg";
+import wordmarkOnLight from "./brand/wordmark-on-light.svg";
+import wordmarkOnDark from "./brand/wordmark-on-dark.svg";
+import mascotSrc from "./brand/mascot.png";
+
+// Brand assets are bundled into this package and static-imported, so they're the
+// single source of truth (no per-app public/brand copies) and Next emits them
+// with the correct, basePath-aware /_next/static URL in every consuming app.
 
 export interface EmblemProps {
   /** Pixel size of the rendered square. */
@@ -15,7 +28,7 @@ export interface EmblemProps {
 export function Emblem({ size = 48, className }: EmblemProps) {
   return (
     <Image
-      src="/brand/emblem.svg"
+      src={emblemSrc}
       width={size}
       height={size}
       alt="OpenMagpie emblem"
@@ -37,8 +50,7 @@ export interface LogoProps {
  * The full "OpenMagpie" wordmark, emblem + Poppins 600 set text.
  */
 export function Logo({ height = 32, on = "light", className }: LogoProps) {
-  const src =
-    on === "light" ? "/brand/wordmark-on-light.svg" : "/brand/wordmark-on-dark.svg";
+  const src = on === "light" ? wordmarkOnLight : wordmarkOnDark;
   // Wordmark viewBox is 1029.53x195.48 (~5.27:1).
   const width = Math.round(height * (1029.53 / 195.48));
   return (
@@ -73,9 +85,7 @@ export interface MascotProps {
 export function Mascot({ alt = "", className, priority, sizes }: MascotProps) {
   return (
     <Image
-      src="/brand/mascot.png"
-      width={1224}
-      height={1014}
+      src={mascotSrc}
       alt={alt}
       priority={priority}
       sizes={sizes}

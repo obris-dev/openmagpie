@@ -16,5 +16,8 @@ export { Logo, Emblem, Mascot } from "./logo";
 export type { LogoProps, EmblemProps, MascotProps } from "./logo";
 export { ThemeToggle } from "./theme-toggle";
 export type { ThemeToggleProps } from "./theme-toggle";
+export { MagpieThemeProvider, setThemeCookie } from "./theme-provider";
+export type { MagpieThemeProviderProps } from "./theme-provider";
+export { ThemeHeadScript } from "./theme-head-script";
 export { NotificationProvider, useNotification } from "./notification";
 export type { NotifyOptions } from "./notification";

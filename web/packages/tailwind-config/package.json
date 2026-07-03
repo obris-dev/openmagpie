@@ -3,8 +3,13 @@
   "version": "0.1.0",
   "private": true,
   "main": "./theme.css",
+  "style": "./theme.css",
   "exports": {
-    ".": "./theme.css"
+    ".": {
+      "style": "./theme.css",
+      "default": "./theme.css"
+    },
+    "./theme.css": "./theme.css"
   },
   "files": ["theme.css"]
 }
