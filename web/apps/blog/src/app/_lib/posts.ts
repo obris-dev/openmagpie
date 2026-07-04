@@ -1,7 +1,7 @@
 import type { ComponentType } from "react";
-import BuildingInTheOpen, {
-  meta as buildingInTheOpenMeta,
-} from "@/posts/building-openmagpie-in-the-open.mdx";
+import FirstUsers, {
+  meta as firstUsersMeta,
+} from "@/posts/get-first-users-no-marketing-budget.mdx";
 
 // Single post registry: one entry per post (its content component + meta) is the
 // only place you register a post. Server code (index, sitemap, RSS) reads `meta`;
@@ -17,9 +17,9 @@ type PostModule = { slug: string; meta: PostMeta; Content: ComponentType };
 
 const postModules: PostModule[] = [
   {
-    slug: "building-openmagpie-in-the-open",
-    meta: buildingInTheOpenMeta,
-    Content: BuildingInTheOpen,
+    slug: "get-first-users-no-marketing-budget",
+    meta: firstUsersMeta,
+    Content: FirstUsers,
   },
 ];
 
