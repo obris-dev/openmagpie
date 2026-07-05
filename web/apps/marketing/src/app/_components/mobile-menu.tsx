@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Bars3Icon, XMarkIcon } from "@heroicons/react/24/outline";
-import { links } from "./constants";
+import { links } from "../_lib/constants";
 
 // On-page section anchors. Off-page destinations (Blog) + the CTA sit below a
 // divider so they read as "leave / act", not "jump to a section here".
@@ -13,7 +13,8 @@ const navLinks = [
 ];
 
 /**
- * Hamburger menu for < lg (mobile + tablet). Toggles a full-width drawer below
+ * Hamburger menu below 880px (mobile + tablet; the nav gates on min-[880px]).
+ * Toggles a full-width drawer below
  * the header with the on-page section links, then the Blog link and waitlist
  * CTA below a divider.
  */

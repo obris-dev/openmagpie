@@ -10,5 +10,5 @@ import { MagpieThemeProvider } from "@magpie/ui";
  * applies before first paint.
  */
 export function Providers({ children }: { children: ReactNode }) {
-  return <MagpieThemeProvider defaultTheme="system">{children}</MagpieThemeProvider>;
+  return <MagpieThemeProvider>{children}</MagpieThemeProvider>;
 }

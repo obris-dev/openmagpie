@@ -1,10 +1,9 @@
 @import "tailwindcss";
 
 /* Shared brand theme + monorepo source globs (single source of truth for color
- * tokens AND which workspace dirs Tailwind scans). Resolved by package specifier
- * (Node walks up to the workspace-root node_modules) rather than a brittle
- * `../../../../` chain; the package declares a `style` export so Tailwind v4's
- * CSS resolver finds theme.css. */
+ * tokens AND which workspace dirs Tailwind scans). Package specifier, not a deep
+ * relative path; the package declares a `style` export so Tailwind v4's CSS
+ * resolver finds theme.css. */
 @import "@magpie/tailwind-config";
 
 /* Long-form prose styling for MDX post bodies. */

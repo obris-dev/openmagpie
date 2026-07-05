@@ -1,5 +1,5 @@
 import type { AnchorHTMLAttributes, ReactNode } from "react";
-import { links } from "./constants";
+import { links } from "../_lib/constants";
 import { GithubIcon } from "./icons";
 
 /**

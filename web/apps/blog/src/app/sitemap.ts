@@ -1,12 +1,11 @@
 import type { MetadataRoute } from "next";
-import { siteMeta } from "@magpie/api-utils/site";
+import { blogBaseUrl } from "@magpie/api-utils/site";
 import { getAllPosts } from "@/app/_lib/posts";
+import { toUtcDate } from "@/app/_lib/format-date";
 
 export default function sitemap(): MetadataRoute.Sitemap {
   const posts = getAllPosts();
-  // Absolute URLs under the /blog basePath, built in code so they're correct in
-  // dev and prod regardless of whether NEXT_PUBLIC_SITE_URL carries /blog.
-  const base = `${siteMeta.url}/blog`;
+  const base = blogBaseUrl();
   return [
     {
       url: base,
@@ -15,7 +14,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     },
     ...posts.map((post) => ({
       url: `${base}${post.href}`,
-      lastModified: new Date(post.date + "T00:00:00"),
+      lastModified: toUtcDate(post.date),
       changeFrequency: "monthly" as const,
       priority: 0.7,
     })),

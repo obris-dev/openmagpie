@@ -1,5 +1,7 @@
-import { siteMeta } from "@magpie/api-utils/site";
+import { siteMeta, blogBaseUrl } from "@magpie/api-utils/site";
 import { getAllPosts } from "@/app/_lib/posts";
+import { BLOG_DESCRIPTION } from "@/app/_lib/blog-meta";
+import { toUtcDate } from "@/app/_lib/format-date";
 
 // RSS 2.0 feed at /feed.xml, built from the same post registry the index uses.
 function escapeXml(value: string): string {
@@ -14,11 +16,13 @@ function escapeXml(value: string): string {
 export function GET(): Response {
   const posts = getAllPosts();
   const title = `${siteMeta.name} Blog`;
-  // The blog lives under /blog (basePath). Build absolute feed URLs against the
-  // origin + /blog in code, so they're correct in dev and prod without relying
-  // on NEXT_PUBLIC_SITE_URL carrying the /blog segment.
-  const base = `${siteMeta.url}/blog`;
+  const base = blogBaseUrl();
   const feedUrl = `${base}/feed.xml`;
+  // Newest post drives the channel's last-build date (getAllPosts is sorted
+  // newest-first); omitted when there are no posts.
+  const lastBuildDate = posts[0]
+    ? `\n    <lastBuildDate>${toUtcDate(posts[0].date).toUTCString()}</lastBuildDate>`
+    : "";
 
   const items = posts
     .map((post) => {
@@ -28,7 +32,7 @@ export function GET(): Response {
         `      <title>${escapeXml(post.title)}</title>`,
         `      <link>${escapeXml(url)}</link>`,
         `      <guid isPermaLink="true">${escapeXml(url)}</guid>`,
-        `      <pubDate>${new Date(post.date + "T00:00:00Z").toUTCString()}</pubDate>`,
+        `      <pubDate>${toUtcDate(post.date).toUTCString()}</pubDate>`,
         post.author ? `      <dc:creator>${escapeXml(post.author)}</dc:creator>` : "",
         `      <description>${escapeXml(post.description)}</description>`,
         "    </item>",
@@ -43,9 +47,9 @@ export function GET(): Response {
   <channel>
     <title>${escapeXml(title)}</title>
     <link>${escapeXml(base)}</link>
-    <description>${escapeXml(siteMeta.description)}</description>
+    <description>${escapeXml(BLOG_DESCRIPTION)}</description>
     <language>en</language>
-    <atom:link href="${escapeXml(feedUrl)}" rel="self" type="application/rss+xml" />
+    <atom:link href="${escapeXml(feedUrl)}" rel="self" type="application/rss+xml" />${lastBuildDate}
 ${items}
   </channel>
 </rss>

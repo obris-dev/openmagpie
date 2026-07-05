@@ -1,4 +1,4 @@
-import { ThemedLogo } from "../themed-logo";
+import { ThemedLogo } from "@magpie/ui";
 
 /**
  * Suspense fallback for the auth pages (home / login / signup). They're client

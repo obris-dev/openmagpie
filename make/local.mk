@@ -28,7 +28,7 @@ down: ## Stop local Docker dev environment
 restart: ## Restart all services in place (bounces the dev servers; recompiles .next). Use `make down && make up` after docker-compose.yml changes.
 	docker compose restart
 
-restart-web: ## Restart just the web container (Next.js app + marketing + blog); the fix after host-side edits confuse its dev server
+restart-web: ## Restart just the web container (app + marketing + blog); use when host-side edits have confused its dev server
 	docker compose restart web
 
 logs: ## Tail all Docker container logs
@@ -126,7 +126,7 @@ down-jobs: ## Stop the background tickers started by up-jobs (and clear their jo
 	@echo "best-effort clearing job locks (an in-container pass may still be finishing; jobs are single-flight over idempotent work, so a brief overlap is harmless)..."
 	@$(MAKE) --no-print-directory local-manage CMD="clear_job_locks --all" || true
 
-local-web: ## Start (or restart) the Next.js dev container (app + marketing) and tail its logs
+local-web: ## Start (or restart) the Next.js dev container (app + marketing + blog) and tail its logs
 	docker compose up -d web
 	docker compose logs -f web
 

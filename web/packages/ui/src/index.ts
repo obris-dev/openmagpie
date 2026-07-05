@@ -13,11 +13,19 @@ export type { LabelProps } from "./label";
 export { ErrorMessage } from "./error-message";
 export type { ErrorMessageProps } from "./error-message";
 export { Logo, Emblem, Mascot } from "./logo";
+export { ThemedLogo } from "./themed-logo";
+export type { ThemedLogoProps } from "./themed-logo";
 export type { LogoProps, EmblemProps, MascotProps } from "./logo";
 export { ThemeToggle } from "./theme-toggle";
 export type { ThemeToggleProps } from "./theme-toggle";
 export { MagpieThemeProvider, setThemeCookie } from "./theme-provider";
 export type { MagpieThemeProviderProps } from "./theme-provider";
 export { ThemeHeadScript } from "./theme-head-script";
+export {
+  THEME,
+  THEME_COOKIE_NAME,
+  THEME_STORAGE_KEY,
+} from "./theme-constants";
+export type { Theme, ExplicitTheme } from "./theme-constants";
 export { NotificationProvider, useNotification } from "./notification";
 export type { NotifyOptions } from "./notification";

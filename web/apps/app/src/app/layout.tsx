@@ -32,10 +32,7 @@ export default function RootLayout({
       suppressHydrationWarning
       className={`${poppins.variable} ${geistMono.variable}`}
     >
-      <body
-        suppressHydrationWarning
-        className="bg-paper text-ink antialiased dark:bg-ink dark:text-paper"
-      >
+      <body className="bg-paper text-ink antialiased dark:bg-ink dark:text-paper">
         <ThemeHeadScript />
         <Providers>{children}</Providers>
       </body>

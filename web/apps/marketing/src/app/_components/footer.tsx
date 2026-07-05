@@ -1,6 +1,6 @@
-import { links } from "./constants";
+import { links } from "../_lib/constants";
 import { ExternalLink } from "./external-link";
-import { ThemedLogo } from "./themed-logo";
+import { ThemedLogo } from "@magpie/ui";
 
 export function Footer() {
   return (
@@ -11,7 +11,10 @@ export function Footer() {
           <span>© {new Date().getFullYear()} OpenMagpie</span>
         </div>
         <div className="flex items-center gap-6">
-          <ExternalLink href={links.blog}>Blog</ExternalLink>
+          {/* First-party destination: same-tab, no external glyph (matches nav). */}
+          <a href={links.blog} className="underline-offset-4 hover:underline">
+            Blog
+          </a>
           <ExternalLink href={links.docs}>Docs</ExternalLink>
           <ExternalLink href={links.github}>GitHub</ExternalLink>
         </div>

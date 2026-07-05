@@ -4,15 +4,17 @@ import { toString } from "mdast-util-to-string";
 import { getHighlighter } from "shiki";
 import { visit } from "unist-util-visit";
 
-let highlighter;
+let highlighterPromise;
 
 // Syntax-highlight fenced code blocks with Shiki's `css-variables` theme, whose
 // token colors are wired to brand tokens in globals.css. We emit proper hast
 // <span> nodes (not a `raw` HTML string) so the MDX compiler can serialize them.
 function rehypeShiki() {
   return async (tree) => {
-    highlighter =
-      highlighter ?? (await getHighlighter({ theme: "css-variables" }));
+    // Memoize the PROMISE (not the resolved value) so concurrent MDX compiles
+    // share one init instead of racing to create several highlighters.
+    highlighterPromise ??= getHighlighter({ theme: "css-variables" });
+    const highlighter = await highlighterPromise;
 
     visit(tree, "element", (node) => {
       if (node.tagName !== "pre" || node.children[0]?.tagName !== "code") return;
@@ -20,8 +22,6 @@ function rehypeShiki() {
       const codeNode = node.children[0];
       const textNode = codeNode.children[0];
       if (!textNode || textNode.type !== "text") return;
-
-      node.properties.code = textNode.value;
 
       // Language from the standard `language-<lang>` class on the code element.
       const classNames = codeNode.properties?.className;
@@ -35,6 +35,8 @@ function rehypeShiki() {
         : node.properties.language;
       if (!language) return;
 
+      // Shiki throws on an unknown/misspelled fence language, failing the build.
+      // That's intentional: surface the typo rather than ship the block unstyled.
       const lines = highlighter.codeToThemedTokens(textNode.value, language);
       const children = [];
       lines.forEach((line, index) => {
@@ -74,14 +76,14 @@ function rehypeAddMDXExports(getExports) {
     const exports = Object.entries(getExports(tree));
 
     for (const [name, value] of exports) {
-      for (const node of tree.children) {
-        if (
+      // Skip names the .mdx already exports itself, but keep processing the rest
+      // (continue, not return; a return would drop every later export).
+      const alreadyExported = tree.children.some(
+        (node) =>
           node.type === "mdxjsEsm" &&
-          new RegExp(`export\\s+const\\s+${name}\\s*=`).test(node.value)
-        ) {
-          return;
-        }
-      }
+          new RegExp(`export\\s+const\\s+${name}\\s*=`).test(node.value),
+      );
+      if (alreadyExported) continue;
 
       const exportStr = `export const ${name} = ${value}`;
       tree.children.push({

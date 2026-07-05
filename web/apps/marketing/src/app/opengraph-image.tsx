@@ -1,10 +1,11 @@
 import { ImageResponse } from "next/og";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { OG_BRAND, OG_SIZE } from "@magpie/api-utils/site";
 
 export const alt =
-  "OpenMagpie — open-source, self-hostable social listening";
-export const size = { width: 1200, height: 630 };
+  "OpenMagpie: open-source, self-hostable social listening";
+export const size = OG_SIZE;
 export const contentType = "image/png";
 
 // Branded share card. The magpie peeks from the bottom-right edge (bleeding
@@ -16,6 +17,10 @@ export default async function OpengraphImage() {
     join(process.cwd(), "public/brand/mascot.png"),
   );
   const mascotSrc = `data:image/png;base64,${mascot.toString("base64")}`;
+  const emblem = await readFile(
+    join(process.cwd(), "public/brand/emblem.svg"),
+  );
+  const emblemSrc = `data:image/svg+xml;base64,${emblem.toString("base64")}`;
 
   return new ImageResponse(
     (
@@ -28,10 +33,9 @@ export default async function OpengraphImage() {
           flexDirection: "column",
           justifyContent: "center",
           padding: "72px",
-          background: "#111111",
-          backgroundImage:
-            "radial-gradient(ellipse at top left, rgba(0,183,195,0.28), transparent 55%)",
-          color: "#f7f7f5",
+          background: OG_BRAND.ink,
+          backgroundImage: `radial-gradient(ellipse at top left, ${OG_BRAND.glow}, transparent 55%)`,
+          color: OG_BRAND.paper,
           fontFamily: "sans-serif",
         }}
       >
@@ -50,20 +54,14 @@ export default async function OpengraphImage() {
             display: "flex",
             alignItems: "center",
             gap: 16,
-            color: "#00b7c3",
+            color: OG_BRAND.signal,
             fontSize: 26,
             letterSpacing: 4,
             textTransform: "uppercase",
           }}
         >
-          <div
-            style={{
-              width: 16,
-              height: 16,
-              borderRadius: 999,
-              background: "#00b7c3",
-            }}
-          />
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={emblemSrc} width={40} height={40} alt="" />
           OpenMagpie
         </div>
 
@@ -79,14 +77,14 @@ export default async function OpengraphImage() {
           }}
         >
           <span>Find the conversations that matter,&nbsp;</span>
-          <span style={{ color: "#00b7c3" }}>while they&apos;re happening.</span>
+          <span style={{ color: OG_BRAND.signal }}>while they&apos;re happening.</span>
         </div>
 
         <div
           style={{
             marginTop: 28,
             fontSize: 27,
-            color: "rgba(247,247,245,0.7)",
+            color: OG_BRAND.paperMuted,
             maxWidth: 600,
           }}
         >

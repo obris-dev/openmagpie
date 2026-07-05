@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Button, Input, Label, PasswordInput } from "@magpie/ui";
+import { Button, Input, Label, PasswordInput, ThemedLogo } from "@magpie/ui";
 import {
   ApiError,
   authActions,
@@ -12,7 +12,6 @@ import {
 } from "@magpie/api-utils";
 import { useAuthStore } from "@magpie/auth";
 import { AuthFooter } from "@/app/(auth)/_components/auth-footer";
-import { ThemedLogo } from "@/app/(auth)/_components/themed-logo";
 
 const MIN_PASSWORD = 8;
 

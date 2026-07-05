@@ -6,8 +6,10 @@
  *   --color-signal #00B7C3
  *   --color-glow   #7DF9FF
  *
- * This file is imported from each app's `globals.css` via a relative path.
- * Update the brand palette / source globs here once; every app picks it up.
+ * Each app's `globals.css` imports this via the `@magpie/tailwind-config` package
+ * specifier, which resolves through this package's `style` export (keep that
+ * export map). Update the brand palette / source globs here once; every app
+ * picks it up.
  */
 
 /* Monorepo source globs — Tailwind v4 does NOT auto-walk into sibling

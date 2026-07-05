@@ -120,6 +120,12 @@ services:
     environment:
       NEXT_PUBLIC_API_URL: http://localhost:8000
       NEXT_PUBLIC_API_VERSION: v1
+      # Cross-app link origins (bare). Set explicitly so the dev port mapping is
+      # single-sourced here rather than relying on resolveOrigin()'s hardcoded
+      # fallbacks happening to match these ports.
+      NEXT_PUBLIC_MARKETING_URL: http://localhost:3000
+      NEXT_PUBLIC_APP_URL: http://localhost:3001
+      NEXT_PUBLIC_BLOG_URL: http://localhost:3002
       # Base the email-render sidecar uses for brand image URLs in emails. Dev
       # points at the local marketing origin so previews load the emblem; prod
       # sets it to the public asset host (defaults to the marketing site).

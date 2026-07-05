@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { siteMeta } from "@magpie/api-utils/site";
 
 /**
  * Footer for the auth surface. Renders below the card. Minimal links
@@ -23,7 +24,7 @@ export function AuthFooter() {
         </Link>
         <span aria-hidden>|</span>
         <a
-          href="https://github.com/obris-dev/openmagpie"
+          href={siteMeta.repoUrl}
           target="_blank"
           rel="noopener noreferrer"
           className="hover:text-ink dark:hover:text-paper"

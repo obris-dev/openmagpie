@@ -11,7 +11,7 @@ import { MagpieThemeProvider, NotificationProvider } from "@magpie/ui";
  */
 export function Providers({ children }: { children: ReactNode }) {
   return (
-    <MagpieThemeProvider defaultTheme="system">
+    <MagpieThemeProvider>
       <NotificationProvider>{children}</NotificationProvider>
     </MagpieThemeProvider>
   );

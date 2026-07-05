@@ -1,12 +1,14 @@
 import type { MetadataRoute } from "next";
-import { siteMeta } from "@magpie/api-utils/site";
+import { siteMeta, blogBaseUrl } from "@magpie/api-utils/site";
 
 export default function robots(): MetadataRoute.Robots {
   // Marketing owns the apex robots.txt (openmagpie.ai/robots.txt), so it also
   // points crawlers at the blog's sitemap. The blog is a separate app served
-  // under /blog, so its own robots route wouldn't be read at the apex.
+  // under /blog, so its own robots route wouldn't be read at the apex. The blog
+  // entry uses blogBaseUrl (the canonical served location), not the nav's
+  // blogLinkUrl; they agree in prod, and a sitemap URL must be canonical.
   return {
     rules: { userAgent: "*", allow: "/" },
-    sitemap: [`${siteMeta.url}/sitemap.xml`, `${siteMeta.url}/blog/sitemap.xml`],
+    sitemap: [`${siteMeta.url}/sitemap.xml`, `${blogBaseUrl()}/sitemap.xml`],
   };
 }

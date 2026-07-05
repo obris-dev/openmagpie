@@ -1,9 +1,10 @@
 @import "tailwindcss";
 
-/* Pull in the shared brand theme + monorepo source globs. Single source of
- * truth for both color tokens AND which workspace dirs Tailwind scans.
- * Relative path to dodge package-resolution edge cases in PostCSS. */
-@import "../../../../packages/tailwind-config/theme.css";
+/* Shared brand theme + monorepo source globs (single source of truth for color
+ * tokens AND which workspace dirs Tailwind scans). Package specifier, not a deep
+ * relative path; the package declares a `style` export so Tailwind v4's CSS
+ * resolver finds theme.css. */
+@import "@magpie/tailwind-config";
 
 /* Force Tailwind v4's `dark:` variant to use the `class="dark"` strategy
  * (next-themes adds the class to <html>) instead of `prefers-color-scheme`. */

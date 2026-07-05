@@ -14,6 +14,8 @@ const nextConfig = {
   // /blog* here) and localhost:3002/blog in dev. basePath makes every route,
   // internal link, and asset (/blog/_next/...) resolve under /blog, so the
   // apex domain keeps the SEO authority while this stays a separate app.
+  // Must match BLOG_BASE_PATH in @magpie/api-utils/site (Next config can't
+  // import it (it loads before transpilePackages), so keep them in sync).
   basePath: "/blog",
   transpilePackages: [
     "@magpie/api-utils",
@@ -21,10 +23,8 @@ const nextConfig = {
     "@magpie/ui",
   ],
   // Posts are MDX *content* imported by a .tsx route (not `page.mdx` routes),
-  // so the route owns `metadata` and the MDX stays a plain component. Trace the
-  // content files into the serverless/worker output.
+  // so the route owns `metadata` and the MDX stays a plain component.
   pageExtensions: ["ts", "tsx"],
-  outputFileTracingIncludes: { "/**/*": ["./src/**/*.mdx"] },
   // Nothing here is meant to be embedded; deny framing everywhere (mirrors marketing).
   async headers() {
     return [

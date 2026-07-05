@@ -11,11 +11,11 @@
   "dependencies": {
     "@heroicons/react": "^2.1.5",
     "@radix-ui/react-toast": "^1.2.6",
-    "clsx": "^2.1.1"
+    "clsx": "^2.1.1",
+    "next-themes": "^0.4.4"
   },
   "peerDependencies": {
     "next": "^16.0.0",
-    "next-themes": "^0.4.4",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },

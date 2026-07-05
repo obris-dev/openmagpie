@@ -1,11 +1,10 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { Button, Emblem } from "@magpie/ui";
+import { Button, Emblem, ThemedLogo } from "@magpie/ui";
 import { webRoutes } from "@magpie/api-utils";
 import { useRequireAuth } from "@magpie/auth";
 import { AuthFooter } from "./auth-footer";
-import { ThemedLogo } from "./themed-logo";
 
 /**
  * Root page for authenticated users. v0 doesn't have a real dashboard

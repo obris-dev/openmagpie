@@ -10,9 +10,11 @@ import wordmarkOnLight from "./brand/wordmark-on-light.svg";
 import wordmarkOnDark from "./brand/wordmark-on-dark.svg";
 import mascotSrc from "./brand/mascot.png";
 
-// Brand assets are bundled into this package and static-imported, so they're the
-// single source of truth (no per-app public/brand copies) and Next emits them
-// with the correct, basePath-aware /_next/static URL in every consuming app.
+// Brand assets are bundled into this package and static-imported for in-page
+// logos, so those are the single source of truth and Next emits them with the
+// correct, basePath-aware /_next/static URL in every consuming app. (Marketing +
+// blog also keep a public/brand copy for their build-time OG images, which Satori
+// reads off disk; see the sync note in AGENTS.md.)
 
 export interface EmblemProps {
   /** Pixel size of the rendered square. */
@@ -44,12 +46,20 @@ export interface LogoProps {
   /** Background context; controls light/dark wordmark variant. */
   on?: "light" | "dark";
   className?: string;
+  /** Preload as an LCP hint. Off by default so ThemedLogo (which renders both
+   * variants, one CSS-hidden) doesn't preload an image that never shows. */
+  priority?: boolean;
 }
 
 /**
  * The full "OpenMagpie" wordmark, emblem + Poppins 600 set text.
  */
-export function Logo({ height = 32, on = "light", className }: LogoProps) {
+export function Logo({
+  height = 32,
+  on = "light",
+  className,
+  priority = false,
+}: LogoProps) {
   const src = on === "light" ? wordmarkOnLight : wordmarkOnDark;
   // Wordmark viewBox is 1029.53x195.48 (~5.27:1).
   const width = Math.round(height * (1029.53 / 195.48));
@@ -59,7 +69,7 @@ export function Logo({ height = 32, on = "light", className }: LogoProps) {
       width={width}
       height={height}
       alt="OpenMagpie"
-      priority
+      priority={priority}
       className={clsx("h-auto", className)}
     />
   );

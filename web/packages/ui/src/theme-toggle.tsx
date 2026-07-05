@@ -4,15 +4,18 @@ import clsx from "clsx";
 import { useEffect, useState } from "react";
 import { useTheme } from "next-themes";
 import { setThemeCookie } from "./theme-provider";
+import { THEME } from "./theme-constants";
 
 export interface ThemeToggleProps {
   className?: string;
 }
 
 /**
- * Sun/moon button that flips between "light" and "dark". On first render
- * before hydration the resolved theme is unknown, so we render an invisible
- * placeholder to avoid a hydration mismatch + visual flash.
+ * Sun/moon button that flips between "light" and "dark". Both icons render and
+ * CSS `dark:` variants pick which is visible, so the icon never flashes or
+ * mismatches on hydration. The aria-label and click direction do read the
+ * resolved theme, so before hydration they assume light (a pre-hydration click
+ * on a dark page re-sets dark); that's the standard next-themes tradeoff.
  *
  * Clicking always sets an explicit "light" or "dark", opting the user out
  * of system-tracking on purpose. To return to system, they can clear the
@@ -26,13 +29,13 @@ export function ThemeToggle({ className }: ThemeToggleProps) {
     setMounted(true);
   }, []);
 
-  const isDark = mounted && resolvedTheme === "dark";
+  const isDark = mounted && resolvedTheme === THEME.DARK;
 
   return (
     <button
       type="button"
       onClick={() => {
-        const next = isDark ? "light" : "dark";
+        const next = isDark ? THEME.LIGHT : THEME.DARK;
         setTheme(next);
         setThemeCookie(next); // sync the choice across openmagpie origins
       }}

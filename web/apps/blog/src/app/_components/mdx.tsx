@@ -1,35 +1,38 @@
 import Link from "next/link";
-import type { AnchorHTMLAttributes, HTMLAttributes } from "react";
+import type { AnchorHTMLAttributes } from "react";
 
-// Internal (`/`, `#`) links go through next/link so the basePath (/blog) is
-// applied and in-app nav stays client-side; external links open in a new tab.
+// In-page anchors (`#`) are plain <a> (no routing/basePath needed); internal
+// routes (`/`) go through next/link so the /blog basePath applies and nav stays
+// client-side; everything else is external and opens in a new tab.
 export function a({
   href,
   children,
   ...props
 }: AnchorHTMLAttributes<HTMLAnchorElement>) {
-  if (href && (href.startsWith("/") || href.startsWith("#"))) {
+  // No href (rare in MDX): a plain anchor, never an external target=_blank.
+  if (!href) {
+    return <a {...props}>{children}</a>;
+  }
+  if (href.startsWith("#")) {
+    return (
+      <a href={href} {...props}>
+        {children}
+      </a>
+    );
+  }
+  // Real internal route (but NOT protocol-relative //host, which is external).
+  if (href.startsWith("/") && !href.startsWith("//")) {
     return (
       <Link href={href} {...props}>
         {children}
       </Link>
     );
   }
+  // External (incl. protocol-relative): spread props FIRST so MDX-authored
+  // attributes can't clobber rel/target.
   return (
-    <a href={href} target="_blank" rel="noopener noreferrer" {...props}>
+    <a href={href} {...props} target="_blank" rel="noopener noreferrer">
       {children}
     </a>
-  );
-}
-
-export function h2({
-  children,
-  id,
-  ...props
-}: HTMLAttributes<HTMLHeadingElement>) {
-  return (
-    <h2 id={id} {...props}>
-      {children}
-    </h2>
   );
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Button, Emblem, Input, Label } from "@magpie/ui";
+import { Button, Emblem, Input, Label, ThemedLogo } from "@magpie/ui";
 import {
   ApiError,
   authActions,
@@ -9,7 +9,6 @@ import {
 } from "@magpie/api-utils";
 import { useRequireAuth } from "@magpie/auth";
 import { AuthFooter } from "@/app/(auth)/_components/auth-footer";
-import { ThemedLogo } from "@/app/(auth)/_components/themed-logo";
 
 const PHASE = {
   CONFIRM: "confirm",

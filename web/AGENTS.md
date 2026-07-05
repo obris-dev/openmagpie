@@ -4,10 +4,11 @@ Conventions for the web monorepo. Cross-cutting rules live in [../AGENTS.md](../
 
 ## Layout
 
-pnpm workspace at `web/`. Two apps, both Next.js 16 + React 19 + TypeScript + Tailwind v4:
+pnpm workspace at `web/`. Three apps, all Next.js 16 + React 19 + TypeScript + Tailwind v4:
 
 - `apps/app`, the product UI + auth (port 3001).
 - `apps/marketing`, the public landing / waitlist (port 3000).
+- `apps/blog`, the MDX blog served at `openmagpie.ai/blog` (port 3002).
 
 The shared `@source` glob (see Tailwind v4 below) already covers every app, so a new app needs no per-app Tailwind wiring.
 
@@ -19,15 +20,26 @@ Packages:
 - `@magpie/auth`, Zustand store + auth hooks
 - `@magpie/tailwind-config`, Tailwind theme + source globs
 
+## App-local code
+
+Per-app non-component helpers (data registries, constants, URL/format utils) live in `src/app/_lib/`; `src/app/_components/` holds only React components.
+
 ## Tailwind v4
 
 Source scanning is driven by `@source` globs in `packages/tailwind-config/theme.css`, which covers every package + every app under the workspace. Don't add per-package globs; the shared theme glob picks them up.
 
-Theme tokens (Ink / Paper / Signal / Glow scales, fonts) live in the same file. Apps import via a relative path so workspace resolution doesn't bite (`@import "@magpie/tailwind-config"` fails silently).
+Theme tokens (Ink / Paper / Signal / Glow scales, fonts) live in the same file. Apps import it by package specifier (`@import "@magpie/tailwind-config"`); the package declares a `style` export so Tailwind v4's CSS resolver finds `theme.css` (no deep relative path).
 
 ## Dark mode
 
 Class-strategy via `next-themes` (`attribute="class"`) with `@custom-variant dark (&:where(.dark, .dark *))` in `globals.css`. Render both light + dark variants and let CSS pick to avoid hydration flicker.
+
+The theme contract (cookie name, localStorage key, `light`/`dark`/`system` values) lives in `@magpie/ui`'s `theme-constants.ts`. The provider, toggle, and blocking head-script all key off it, so a bare literal can't drift and silently reintroduce the first-paint flash.
+
+## Blog (`apps/blog`)
+
+- **Bundler:** the blog runs Webpack (`next dev/build --webpack`), not the Turbopack default the other apps use. Its MDX pipeline (`@next/mdx` + custom rehype/recma with Shiki) isn't Turbopack-compatible yet, so don't "fix" the flag to match the siblings. Deploy is unaffected: `opennextjs-cloudflare build` runs the app's own `build` script, inheriting the flag.
+- **Brand assets read off disk for OG cards must stay in sync with the `@magpie/ui` bundle.** Satori (the OG image renderer) can't use bundled imports, so each app rendering an OG card keeps a `public/brand/*` copy read at build time: `apps/blog/public/brand/emblem.svg`, `apps/marketing/public/brand/emblem.svg`, and `apps/marketing/public/brand/mascot.png` (the blog favicon is a third emblem copy). When a brand asset changes, update the `@magpie/ui` original AND every `public/brand` copy (blog emblem + favicon, marketing emblem + mascot) together.
 
 ## `@magpie/api-utils`
 
@@ -144,4 +156,6 @@ type Phase = (typeof PHASE)[keyof typeof PHASE];
 
 - `NEXT_PUBLIC_API_URL` is **required in production**. `resolveApiBase()` throws if missing.
 - `NEXT_PUBLIC_API_VERSION` is the prefix string (default `"v1"`); keep in lockstep with Django's `API_VERSION_PREFIX`.
+- `NEXT_PUBLIC_SITE_URL` is the CURRENT app's own origin, **bare (scheme + host, no path)**, used for canonical / OG / sitemap / feed (`siteMeta.url`). For the blog set it to the bare apex (`https://openmagpie.ai`), NOT `.../blog`: the blog composes its `/blog` URLs in code via `blogBaseUrl` (which prepends `BLOG_BASE_PATH`), so a value carrying `/blog` would double-prefix. It's stripped defensively, but keep it bare.
+- `NEXT_PUBLIC_MARKETING_URL` / `NEXT_PUBLIC_APP_URL` / `NEXT_PUBLIC_BLOG_URL` are the **bare origins** of the sibling apps, for cross-app links (`origins` in `api-utils/src/site.ts`). Each are **required in production** for the origins an app actually links to: `resolveOrigin()` throws at build if one is missing (the same fail-loud contract as `NEXT_PUBLIC_API_URL`), rather than baking in localhost. Dev falls back to the ports (3000 / 3001 / 3002). In prod marketing + blog share the apex (`https://openmagpie.ai`) and the app is on its subdomain (`https://app.openmagpie.ai`); the blog's `/blog` segment is appended by `BLOG_BASE_PATH` (see `blogLinkUrl`), so keep these bare origins and never bake `/blog` into `NEXT_PUBLIC_BLOG_URL`.
 - `ASSETS_URL` (used by `apps/email-render`) is the public base for brand image URLs baked into emails — the recipient's mail client fetches them, so it must be publicly reachable. Defaults to the marketing site; dev sets it to `http://localhost:3000` (see the `web` service in `docker-compose.yml`). Set it in prod to wherever `/brand/*` is served.

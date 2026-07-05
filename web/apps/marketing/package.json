@@ -12,6 +12,7 @@
     "start": "next start -p 3000",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
+    "clean": "rm -rf .next",
     "preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
     "cf-deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy",
     "cf-typegen": "wrangler types --env-interface CloudflareEnv cloudflare-env.d.ts"
@@ -23,7 +24,6 @@
     "@magpie/ui": "workspace:*",
     "@opennextjs/cloudflare": "^1.19.11",
     "next": "^16.1.6",
-    "next-themes": "^0.4.4",
     "react": "^19.2.4",
     "react-dom": "^19.2.4"
   },

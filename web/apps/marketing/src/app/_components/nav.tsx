@@ -1,8 +1,7 @@
-import { ThemeToggle } from "@magpie/ui";
-import { ThemedLogo } from "./themed-logo";
+import { ThemedLogo, ThemeToggle } from "@magpie/ui";
 import { GithubLink } from "./github-link";
 import { MobileMenu } from "./mobile-menu";
-import { links } from "./constants";
+import { links } from "../_lib/constants";
 
 export function Nav() {
   return (

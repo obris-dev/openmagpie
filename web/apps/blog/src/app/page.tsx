@@ -1,13 +1,7 @@
 import Link from "next/link";
 import { getAllPosts } from "@/app/_lib/posts";
-
-function formatDate(dateString: string): string {
-  return new Date(dateString + "T00:00:00").toLocaleDateString("en-US", {
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  });
-}
+import { formatDate } from "@/app/_lib/format-date";
+import { BLOG_DESCRIPTION } from "@/app/_lib/blog-meta";
 
 export default function BlogIndex() {
   const posts = getAllPosts();
@@ -19,8 +13,7 @@ export default function BlogIndex() {
           Blog
         </h1>
         <p className="mt-4 text-lg text-ink-muted dark:text-ink-subtle">
-          Notes on social listening, open source, and joining the conversations
-          that matter, from the team building OpenMagpie.
+          {BLOG_DESCRIPTION}
         </p>
       </header>
 
