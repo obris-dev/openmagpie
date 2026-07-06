@@ -98,6 +98,13 @@ conventional-commit history, in TWO tracks: the product (`CHANGELOG.md` +
 `cli-v<x.y.z>` = the PyPI `openmagpie`). Each entry comes from a merged commit's
 SUBJECT line.
 
+- **The commit TYPE picks the section a reader sees.** Release notes are grouped
+  into emoji sections (`changelog-sections` in `release-please-config.json`):
+  ✨ Features (`feat`), 🐛 Bug Fixes (`fix`), ⚡ Performance (`perf`), ⏪ Reverts
+  (`revert`), 📝 Documentation (`docs`). Everything else (`refactor`, `chore`, `ci`,
+  `test`, `build`, `style`) is hidden, so those changes stay out of the notes
+  entirely. Pick the type deliberately: it decides both the section and whether a
+  change shows up at all.
 - **A changelog entry says what the feature DOES for a user, not how it's built.**
   Lead with the capability ("a watch action that pulls fields you declare out of
   each item"); leave out internal types, migration notes, and engine internals
