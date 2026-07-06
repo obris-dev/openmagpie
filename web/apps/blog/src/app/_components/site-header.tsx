@@ -7,7 +7,7 @@ import { origins } from "@magpie/api-utils/site";
 export function SiteHeader() {
   return (
     <header className="border-b border-ink/10 dark:border-paper/10">
-      <div className="mx-auto flex max-w-3xl items-center justify-between px-6 py-4">
+      <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
         <Link href="/" className="flex items-center gap-2" aria-label="OpenMagpie Blog home">
           <ThemedLogo height={24} />
           <span className="text-sm font-medium text-ink-subtle">Blog</span>
