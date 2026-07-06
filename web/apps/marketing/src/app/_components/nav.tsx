@@ -36,7 +36,9 @@ export function Nav() {
             aria-label="OpenMagpie on GitHub"
             className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm text-ink-muted hover:text-ink dark:text-paper/70 dark:hover:text-paper"
           >
-            <span className="hidden min-[880px]:inline">GitHub</span>
+            {/* Icon-only in the tight band just above the 880px nav reveal, so
+                the section links don't wrap; the label appears once there's room. */}
+            <span className="hidden min-[960px]:inline">GitHub</span>
           </GithubLink>
           <a
             href="#waitlist"
