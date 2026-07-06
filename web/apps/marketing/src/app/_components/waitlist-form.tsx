@@ -2,6 +2,7 @@
 
 import { useState, type FormEvent } from "react";
 import { Button, Input, useNotification } from "@magpie/ui";
+import { track, ANALYTICS_EVENT, PH_NO_CAPTURE_CLASS } from "@magpie/ui/analytics";
 import {
   waitlistActions,
   WAITLIST_SOURCE,
@@ -70,8 +71,10 @@ export function WaitlistForm({ idPrefix = "wl" }: { idPrefix?: string }) {
     setSubmitting(true);
     try {
       const { ok } = await waitlistActions.submit(email.trim(), idPrefix);
-      if (ok) setPhase(PHASE.ASK);
-      else fail();
+      if (ok) {
+        track(ANALYTICS_EVENT.WAITLIST_SIGNUP, { source: idPrefix });
+        setPhase(PHASE.ASK);
+      } else fail();
     } catch {
       fail();
     } finally {
@@ -145,7 +148,11 @@ export function WaitlistForm({ idPrefix = "wl" }: { idPrefix?: string }) {
           </p>
           <p className="mt-1 text-sm text-ink/70 dark:text-paper/70">
             We&apos;ll email{" "}
-            <span className="font-medium text-ink dark:text-paper">{email}</span>{" "}
+            <span
+              className={`${PH_NO_CAPTURE_CLASS} font-medium text-ink dark:text-paper`}
+            >
+              {email}
+            </span>{" "}
             when the hosted version opens.
           </p>
         </div>

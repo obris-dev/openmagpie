@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { Button, Emblem, ThemedLogo } from "@magpie/ui";
+import { PH_NO_CAPTURE_CLASS } from "@magpie/ui/analytics";
 import { webRoutes } from "@magpie/api-utils";
 import { useRequireAuth } from "@magpie/auth";
 import { AuthFooter } from "./auth-footer";
@@ -47,7 +48,9 @@ export function HomePage() {
 
             <p className="text-sm text-ink/70 dark:text-paper/70">
               Logged in as{" "}
-              <span className="font-medium text-ink dark:text-paper">
+              <span
+                className={`${PH_NO_CAPTURE_CLASS} font-medium text-ink dark:text-paper`}
+              >
                 {user.email}
               </span>
               .

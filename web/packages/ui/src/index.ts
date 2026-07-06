@@ -29,3 +29,5 @@ export {
 export type { Theme, ExplicitTheme } from "./theme-constants";
 export { NotificationProvider, useNotification } from "./notification";
 export type { NotifyOptions } from "./notification";
+// Analytics is a subpath export (@magpie/ui/analytics) so next/navigation stays
+// out of this barrel and off framework-agnostic consumers.

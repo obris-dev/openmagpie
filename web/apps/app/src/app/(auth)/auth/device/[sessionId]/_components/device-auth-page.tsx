@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Button, Emblem, Input, Label, ThemedLogo } from "@magpie/ui";
+import { PH_NO_CAPTURE_CLASS } from "@magpie/ui/analytics";
 import {
   ApiError,
   authActions,
@@ -172,7 +173,9 @@ export function DeviceAuthPage({ sessionId }: { sessionId: string }) {
             <form className="space-y-6" onSubmit={authorize} noValidate>
               <p className="text-sm text-ink/70 dark:text-paper/70">
                 A terminal session is asking to sign in as{" "}
-                <span className="font-medium text-ink dark:text-paper">
+                <span
+                  className={`${PH_NO_CAPTURE_CLASS} font-medium text-ink dark:text-paper`}
+                >
                   {user.email}
                 </span>
                 . Only continue if you opened this page from your own{" "}
@@ -183,7 +186,9 @@ export function DeviceAuthPage({ sessionId }: { sessionId: string }) {
               </p>
 
               {info && (
-                <div className="space-y-1.5 rounded-md bg-paper-soft px-4 py-3 ring-1 ring-inset ring-ink/10 dark:bg-ink dark:ring-paper/10">
+                <div
+                  className={`${PH_NO_CAPTURE_CLASS} space-y-1.5 rounded-md bg-paper-soft px-4 py-3 ring-1 ring-inset ring-ink/10 dark:bg-ink dark:ring-paper/10`}
+                >
                   <Field
                     label="CLI"
                     value={
