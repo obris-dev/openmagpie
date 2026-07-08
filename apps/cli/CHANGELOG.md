@@ -6,6 +6,7 @@
 ### ✨ Features
 
 * backfill — re-run a watch action over the previous step's passes ([#163](https://github.com/obris-dev/openmagpie/issues/163)) ([5485192](https://github.com/obris-dev/openmagpie/commit/548519294605d5f453ac97cd0dcff2faeee6e36c))
+  * **`magpie backfill submit` / `status` / `list`**: queue a re-run of an action over the items its previous step passed (or, for a chain-head action, the watch's own feed items), check a job's progress by id, and list past jobs. Scope the target with `--action` and a required time window; `--replace` regenerates that action's output and everything downstream, and `--dry-run` previews the size (matched / to-delete / to-enqueue) before committing. An interactive submit shows the preview and asks to confirm; a piped submit needs `--yes`.
 
 ## [0.6.0](https://github.com/obris-dev/openmagpie/compare/cli-v0.5.0...cli-v0.6.0) (2026-07-01)
 
