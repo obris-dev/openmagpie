@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.0](https://github.com/obris-dev/openmagpie/compare/cli-v0.6.0...cli-v0.7.0) (2026-07-08)
+
+
+### ✨ Features
+
+* backfill — re-run a watch action over the previous step's passes ([#163](https://github.com/obris-dev/openmagpie/issues/163)) ([5485192](https://github.com/obris-dev/openmagpie/commit/548519294605d5f453ac97cd0dcff2faeee6e36c))
+
 ## [0.6.0](https://github.com/obris-dev/openmagpie/compare/cli-v0.5.0...cli-v0.6.0) (2026-07-01)
 
 
