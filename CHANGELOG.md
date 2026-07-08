@@ -11,6 +11,8 @@ and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2
 ### ✨ Features
 
 * backfill — re-run a watch action over the previous step's passes ([#163](https://github.com/obris-dev/openmagpie/issues/163)) ([5485192](https://github.com/obris-dev/openmagpie/commit/548519294605d5f453ac97cd0dcff2faeee6e36c))
+  * **Reprocess an action over history**: `magpie backfill` queues a re-run of one action over the items its previous step already passed (or, for a chain-head action, the watch's own feed items) within a time window — so a config change (e.g. a new `extract` field set) can be applied to past items without replaying the whole pipeline. Runs as a queued background job (the API returns immediately); `--dry-run` shows the size first.
+  * **Additive or full replace**: additive by default (fills only items the action never processed, non-destructive); `--replace` regenerates that action's output AND every downstream action's, from the action down. A time window is required (occurred-time and/or the source run's completion), so a backfill is always explicitly scoped.
 * **web:** blog at /blog, shared cross-origin theme, bundled brand assets ([#157](https://github.com/obris-dev/openmagpie/issues/157)) ([e10a3c4](https://github.com/obris-dev/openmagpie/commit/e10a3c4d7bc3afb0583429ef2350cfa2761eb8fe))
 
 ## [0.6.0](https://github.com/obris-dev/openmagpie/compare/v0.5.0...v0.6.0) (2026-07-01)
