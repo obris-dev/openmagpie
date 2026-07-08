@@ -5,6 +5,14 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0](https://github.com/obris-dev/openmagpie/compare/v0.6.0...v0.7.0) (2026-07-08)
+
+
+### ✨ Features
+
+* backfill — re-run a watch action over the previous step's passes ([#163](https://github.com/obris-dev/openmagpie/issues/163)) ([5485192](https://github.com/obris-dev/openmagpie/commit/548519294605d5f453ac97cd0dcff2faeee6e36c))
+* **web:** blog at /blog, shared cross-origin theme, bundled brand assets ([#157](https://github.com/obris-dev/openmagpie/issues/157)) ([e10a3c4](https://github.com/obris-dev/openmagpie/commit/e10a3c4d7bc3afb0583429ef2350cfa2761eb8fe))
+
 ## [0.6.0](https://github.com/obris-dev/openmagpie/compare/v0.5.0...v0.6.0) (2026-07-01)
 
 
