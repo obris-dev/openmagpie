@@ -11,6 +11,7 @@ import typer
 from .commands import activity_export as _activity_export  # noqa: F401
 from .commands.activity import activity_app
 from .commands.auth import auth_app
+from .commands.backfill import backfill_app
 from .commands.delivery import delivery_app
 from .commands.feed import feed_app
 from .commands.telemetry import telemetry_app
@@ -63,6 +64,11 @@ app.add_typer(
     delivery_app,
     name="delivery",
     help="Audit an action's outbound webhook calls.",
+)
+app.add_typer(
+    backfill_app,
+    name="backfill",
+    help="Re-run an action over the previous step's passes: submit / status / list.",
 )
 app.add_typer(
     telemetry_app,

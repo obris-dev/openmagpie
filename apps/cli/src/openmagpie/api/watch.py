@@ -11,6 +11,7 @@ from __future__ import annotations
 import builtins
 from typing import Any
 
+from openmagpie_schema.backfill import BackfillJob, BackfillListResponse, BackfillPreview
 from openmagpie_schema.watch import (
     WatchActionMutationResponse,
     WatchActionWire,
@@ -27,6 +28,9 @@ from .. import routes
 from ..http import MagpieClient
 
 __all__ = [
+    "BackfillJob",
+    "BackfillListResponse",
+    "BackfillPreview",
     "WatchActionMutationResponse",
     "WatchApi",
     "WatchInput",
@@ -122,3 +126,36 @@ class WatchApi:
 
     def delete_action(self, action_id: str) -> None:
         self._http.delete(routes.actions.detail(action_id))
+
+    # ── Backfill (re-run an action over the previous step's passes) ─────
+
+    def preview_backfill(self, action_id: str, *, replace: bool, windows: dict[str, str]) -> BackfillPreview:
+        """POST `?dry_run=true` — a synchronous size preview, NO job queued. `windows`
+        are the RAW values (`7d` / ISO); the server resolves them. The caller should
+        confirm `preview.dry_run` (the server-honored marker) before trusting it."""
+        raw = self._http.post(
+            routes.actions.backfill(action_id), json_body={"replace": replace, **windows}, params={"dry_run": "true"}
+        )
+        return BackfillPreview.model_validate(raw)
+
+    def submit_backfill(self, action_id: str, *, replace: bool, windows: dict[str, str]) -> BackfillJob:
+        """POST a backfill of `action_id` — QUEUE it (the cron runs it) and return the
+        job. `windows` are the RAW values the server resolves against its clock."""
+        raw = self._http.post(routes.actions.backfill(action_id), json_body={"replace": replace, **windows})
+        return BackfillJob.model_validate(raw)
+
+    def get_backfill(self, backfill_id: str) -> BackfillJob:
+        """GET one backfill job's state + progress (the status readback)."""
+        raw = self._http.get(routes.action_backfills.detail(backfill_id))
+        return BackfillJob.model_validate(raw)
+
+    def list_backfills(self, *, after: str | None = None, limit: int | None = None) -> BackfillListResponse:
+        """One page of this account's backfill jobs (newest-first). `after` = id of
+        the last job from the previous page; `next_cursor` is None when done."""
+        params: dict[str, Any] = {}
+        if after:
+            params["after"] = after
+        if limit is not None:
+            params["limit"] = limit
+        raw = self._http.get(routes.action_backfills.collection, params=params or None)
+        return BackfillListResponse.model_validate(raw)

@@ -69,19 +69,26 @@ class WatchActionService:
         return WatchAction.objects.get(id=action_id, account_id=self.account_id)
 
     def next_in_chain(self, action: WatchAction, /) -> WatchAction | None:
-        """The next action down the same path, or None if `action` is the
-        chain tail. The drain calls this to advance after a SUCCEEDED run.
+        """The next action down the same path (smallest rank STRICTLY GREATER), or
+        None at the chain tail. The drain calls this to advance after a SUCCEEDED
+        run."""
+        return self._adjacent(action, forward=True)
 
-        'Next' = the smallest rank STRICTLY GREATER than this one, not
-        `rank + 1` ; today's chain is dense so they coincide, but querying
-        next-greater stays correct if ranks ever go sparse (the planned
-        gap/rebalance optimization) instead of silently dead-ending the
-        chain on a gap. Rides the `(account, path, rank)` unique index as a
-        range seek (order matches the index), so it's a point lookup, not a
-        scan."""
+    def prev_in_chain(self, action: WatchAction, /) -> WatchAction | None:
+        """The previous action up the same path (largest rank STRICTLY LESS), or None
+        at the chain head. The backfill resolves it to find the step whose SUCCEEDED
+        passes seed a re-run of `action`."""
+        return self._adjacent(action, forward=False)
+
+    def _adjacent(self, action: WatchAction, /, *, forward: bool) -> WatchAction | None:
+        """The chain neighbor of `action` on its path: the next-greater rank
+        (`forward`) or the next-smaller. Strictly-greater/less (not `rank +/- 1`) so a
+        sparse-rank chain (the planned gap/rebalance) traverses correctly, not
+        dead-ends on a gap; rides `(account, path, rank)` as a range seek."""
+        rank_filter = {"rank__gt": action.rank} if forward else {"rank__lt": action.rank}
         return (
-            WatchAction.objects.filter(account_id=self.account_id, path_id=action.path_id, rank__gt=action.rank)
-            .order_by("rank")
+            WatchAction.objects.filter(account_id=self.account_id, path_id=action.path_id, **rank_filter)
+            .order_by("rank" if forward else "-rank")
             .first()
         )
 

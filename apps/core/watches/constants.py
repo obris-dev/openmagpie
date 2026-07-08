@@ -12,6 +12,7 @@ source of truth for validation + branching.
 
 from openmagpie_schema.watch_enums import (
     DeliveryCadence,
+    WatchActionBackfillState,
     WatchActionDeliveryState,
     WatchActionKind,
     WatchActionRunState,
@@ -20,6 +21,7 @@ from openmagpie_schema.watch_enums import (
 
 __all__ = [
     "DeliveryCadence",
+    "WatchActionBackfillState",
     "WatchActionDeliveryState",
     "WatchActionKind",
     "WatchActionRunState",

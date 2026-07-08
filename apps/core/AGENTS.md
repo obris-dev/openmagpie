@@ -25,7 +25,10 @@ watches/
   models/                 one file per model (Watch, WatchFeed, WatchPath, WatchAction, WatchActionRun, WatchActionDigestWindow, WatchActionDelivery)
   services/
     watches/              WatchService (+ _actions.py chain ops, _global.py cross-tenant)
-    runs.py               WatchActionRunService (enqueue / claim / complete) + Global
+    runs/                 WatchActionRunService + Global (_service.py enqueue / claim / complete;
+                          _drain.py cross-tenant drain; _backfill_select.py BackfillSelectMixin: backfill
+                          source-select + terminal-delete over a `present` Subquery)
+    backfills.py          WatchActionBackfillService (+ Global claim/reap) for the queued backfill jobs
     _run_batches.py       DigestBatchMixin (digest_batch / complete_batch / fail_batch)
     digest.py             WatchDigestWindowService (window open/close coordination) + Global
     deliveries.py         WatchActionDeliveryService (record / list) for the HTTP-call audit
@@ -37,12 +40,13 @@ watches/
                           per-item source), supports POST | PUT | PATCH, and returns an OutboundActionResult
                           so the operations layer logs a WatchActionDelivery per call.
   operations/             one-shot orchestrators: trigger.py, drain.py, digest_flush.py, advance.py (enqueue_next),
+                          backfill.py (WatchBackfillOperation: re-run an action over the previous step's passes),
                           run_inputs.py (build_run_inputs: enrich runs+items+watch into ActionItem/ActionContext)
   registry.py             CONFIG registry: kind -> Pydantic config class (parse / validate / load_config)
   policy.py               write-time guards (engine registered, digest interval bound, webhook SSRF)
-  run_messages.py         operator-facing WatchActionRun.error strings (sanitized; raw cause -> logs)
-  management/commands/    process_due_watches (trigger) / process_due_runs (drain) / process_due_digests (flush)
-  api.py / views.py (watch/action CRUD) / views_audit.py (runs + deliveries read views)
+  run_messages.py         operator-facing WatchActionRun.error + backfill-job.error strings (sanitized; raw cause -> logs)
+  management/commands/    process_due_watches (trigger) / process_due_backfills (queue setup) / process_due_runs (drain) / process_due_digests (flush)
+  api.py / views.py (watch/action CRUD) / views_audit.py (runs + deliveries read views) / views_backfill.py (backfill submit + status/list)
   serializers.py / urls.py / action_urls.py (leaf /v1/actions/<id>) / constants.py
 ```
 
@@ -126,7 +130,7 @@ Each model carries queryable common fields top-level + a `data`/`config`/`result
 
 ## Watch execution model: trigger -> drain -> flush
 
-A `WatchActionRun` is ONE action against ONE FeedItem. Three cron stages, each a `SingleFlightCommand` (a pass that outruns its interval self-skips instead of stacking), each backed by `common.locks.job_lock`:
+A `WatchActionRun` is ONE action against ONE FeedItem. Four cron stages, each a `SingleFlightCommand` (a pass that outruns its interval self-skips instead of stacking), each backed by `common.locks.job_lock`. Stage 1b (backfill) is on-demand (only does work when backfill jobs are queued):
 
 ```
 # stage 1 — TRIGGER (process_due_watches): enqueue head-action runs for new items
@@ -137,6 +141,13 @@ for watch in WatchService.Global.iter_active():
         if head is a digest: open its window first, stamp scheduled_at = window close
         enqueue a PENDING run for `head` per item   # idempotent on (account, watch, action, feed_item)
         advance WatchFeed.last_item_id
+
+# stage 1b — BACKFILL (process_due_backfills): on-demand re-enqueue over history
+reap_stale()                                   # RUNNING past WATCH_BACKFILL_STALE_SECONDS -> FAILED (retryable/terminal by completed_at)
+for job in claim_due():                         # CAS PENDING/retryable-FAILED -> RUNNING, attempts += 1
+    WatchBackfillOperation(job).run()           # resolve source; if replace, delete terminal runs of target + downstream; enqueue PENDING target runs
+# the DRAIN below then executes those runs. Ordered before DRAIN only where the tick
+# is serial (local-tick / tick.sh); under independent tickers they drain next pass.
 
 # stage 2 — DRAIN (process_due_runs): execute due per-item runs
 reap_stale()                                   # RUNNING past WATCH_RUN_STALE_SECONDS -> FAILED (crashed worker)
@@ -228,8 +239,10 @@ When list rows reference a related entity, **don't embed that entity on every ro
 /v1/actions/<id>                                   GET/PUT/DELETE  one action by own id
 /v1/actions/<id>/activity                          GET        run audit log ("activity", cursor, ?state=)
 /v1/actions/<id>/deliveries                        GET        delivery audit log (cursor, ?state=)
+/v1/actions/<id>/backfill                          POST       queue a backfill of this action (?dry_run= for a preview)
 /v1/action-activity/<id>                           GET        one run by own id
 /v1/action-deliveries/<id>                         GET        one delivery by own id
+/v1/action-backfills[/<id>]                        GET        backfill jobs (list, cursor) + one job by own id
 
 /v1/engines                                        GET        registered engines + reachability
 /healthz                                           GET        DB + cache pings (public)

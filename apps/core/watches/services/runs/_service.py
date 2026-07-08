@@ -13,11 +13,11 @@ from typing import NamedTuple
 from django.db.models import Count
 from django.utils import timezone
 
-from feeds.services import FeedItemService
 from openmagpie_schema.watch_enums import WatchActionRunState
 from watches.models import WatchActionRun
 
 from .._run_batches import DigestBatchMixin
+from ._backfill_select import BackfillSelectMixin
 from ._common import _ENQUEUE_CHUNK, _FAILED, _PENDING, _RUNNING, completion_ts
 from ._drain import WatchActionRunGlobal
 
@@ -32,9 +32,10 @@ class ActivitySummary(NamedTuple):
     retrying: int
 
 
-class WatchActionRunService(DigestBatchMixin):
+class WatchActionRunService(DigestBatchMixin, BackfillSelectMixin):
     """Account-scoped run reads + writes (enqueue, complete). The digest-batch
-    surface (digest_batch / complete_batch / fail_batch) is the mixin."""
+    surface (digest_batch / complete_batch / fail_batch) is DigestBatchMixin; the
+    backfill source-selection + terminal-delete surface is BackfillSelectMixin."""
 
     Global = WatchActionRunGlobal
 
@@ -294,20 +295,13 @@ class WatchActionRunService(DigestBatchMixin):
             qs = qs.filter(watch_id=watch_id)
         if state:
             qs = qs.filter(state=state)
-        if completed_since is not None:
-            qs = qs.filter(completed_at__gte=completed_since)
-        if completed_until is not None:
-            qs = qs.filter(completed_at__lt=completed_until)
-        if occurred_since is not None or occurred_until is not None:
-            # feed_item_id is a plain CharField (no ORM relation), so join by a
-            # subquery of matching item ids; the windowed-item query is owned by
-            # FeedItemService (cross-app reads go through the owning service, which
-            # hands back a ready Subquery, not a QuerySet). NULL occurred_at fails
-            # the bound -> dropped.
-            item_id_subquery = FeedItemService(account_id=self.account_id).occurred_window_id_subquery(
-                since=occurred_since, until=occurred_until
-            )
-            qs = qs.filter(feed_item_id__in=item_id_subquery)
+        qs = self._apply_run_windows(
+            qs,
+            completed_since=completed_since,
+            completed_until=completed_until,
+            occurred_since=occurred_since,
+            occurred_until=occurred_until,
+        )
         if after:
             qs = qs.filter(id__lt=after)
         return builtins.list(qs.order_by("-id")[:limit])

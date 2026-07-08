@@ -34,12 +34,14 @@ if [ "$_reachable" = 0 ]; then
 fi
 
 echo "LLM reachable. Scoring your backlog now: the semantic filter calls your LLM once per post, so this can take a minute. Progress, an ETA, and any matches stream below as they happen."
-# poll -> trigger -> drain -> digest (the scoring stages of `make local-tick`,
-# without its send_outbound_emails). The seeded watch delivers via `log`
-# (instant), so the digest flush is a no-op for it, but running it means a watch
-# that adds a webhook + digest delivery still gets flushed. send_outbound_emails
-# is skipped on purpose: email is a hosted-only concern, not part of a local trial.
-if manage poll_due_feeds && manage process_due_watches && manage process_due_runs && manage process_due_digests; then
+# poll -> trigger -> backfill -> drain -> digest (the scoring stages of `make
+# local-tick`, without its send_outbound_emails). process_due_backfills runs
+# BEFORE the drain so a queued backfill's freshly-enqueued runs drain the same
+# tick. The seeded watch delivers via `log` (instant), so the digest flush is a
+# no-op for it, but running it means a watch that adds a webhook + digest delivery
+# still gets flushed. send_outbound_emails is skipped on purpose: email is a
+# hosted-only concern, not part of a local trial.
+if manage poll_due_feeds && manage process_due_watches && manage process_due_backfills && manage process_due_runs && manage process_due_digests; then
     tick_msg="Tick done. Posts that cleared the threshold printed above, tagged with the watch's prefix (e.g. [quickstart]); a backlog can also score zero on the first pass."
     # The quickstart (run.sh) prints its own consolidated next-steps with the
     # activity command + login, so it sets OPENMAGPIE_QUICKSTART to suppress this

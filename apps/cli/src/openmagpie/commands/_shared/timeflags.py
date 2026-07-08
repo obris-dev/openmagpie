@@ -23,19 +23,20 @@ from openmagpie_schema.run_windows import resolve_run_windows, run_window_params
 _DEFAULT_WINDOW = "7d"
 
 
-def _build_windows(
+def validated_window_params(
     *,
     occurred_since: str | None = None,
     occurred_until: str | None = None,
     completed_since: str | None = None,
     completed_until: str | None = None,
-) -> tuple[dict[str, str], bool]:
+) -> dict[str, str]:
     """Map the run-window flags to the RAW query values the server resolves (a
-    duration like `7d` or an ISO datetime). The values are validated here (a fast
-    BadParameter, via the shared resolver) but sent RAW -- the server owns the
-    authoritative resolution (its clock), the until-without-since bound, and the
-    ordering check. Returns `(windows, defaulted)`: with NO flag set, default to the
-    last `_DEFAULT_WINDOW` on completion and flag it for the caller to announce."""
+    duration like `7d` or an ISO datetime) and validate them (format + ordering) via
+    the shared resolver, raising `typer.BadParameter` on a bad value -- a fast, local
+    error before the round-trip. The values are still sent RAW: the server owns the
+    authoritative resolution (its clock) + the until-without-since bound. The EMPTY
+    result (no flag set) is returned as-is; each caller decides what that means (an
+    export defaults it, a backfill requires it)."""
     raw = run_window_params(
         occurred_since=occurred_since,
         occurred_until=occurred_until,
@@ -43,9 +44,28 @@ def _build_windows(
         completed_until=completed_until,
     )
     try:
-        resolve_run_windows(raw, now=datetime.now(UTC))  # validate (format + ordering); the raw values are sent
+        resolve_run_windows(raw, now=datetime.now(UTC))
     except ValueError as exc:
         raise typer.BadParameter(str(exc)) from None
+    return raw
+
+
+def _build_windows(
+    *,
+    occurred_since: str | None = None,
+    occurred_until: str | None = None,
+    completed_since: str | None = None,
+    completed_until: str | None = None,
+) -> tuple[dict[str, str], bool]:
+    """The export's window resolution: `validated_window_params` + the no-window
+    default. Returns `(windows, defaulted)`: with NO flag set, default to the last
+    `_DEFAULT_WINDOW` on completion and flag it for the caller to announce."""
+    raw = validated_window_params(
+        occurred_since=occurred_since,
+        occurred_until=occurred_until,
+        completed_since=completed_since,
+        completed_until=completed_until,
+    )
     if raw:
         return raw, False
     return {"completed_since": _DEFAULT_WINDOW}, True

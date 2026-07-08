@@ -36,3 +36,11 @@ TIMED_OUT_EXHAUSTED = "The run repeatedly timed out and has exhausted its retry 
 # Terminal: a digest item kept failing to deliver and ran out of retries (the
 # flush won't re-gather it). Mirrors TIMED_OUT_EXHAUSTED for the batch path.
 TRANSIENT_EXHAUSTED = "This item repeatedly failed to deliver and has exhausted its retry attempts."
+
+# Backfill-job `error` text (WatchActionBackfill.error), surfaced by
+# `magpie backfill status`. Same no-leak policy; kept here so the
+# backfill reaper + processor don't drift their own inline strings.
+BACKFILL_TARGET_GONE = "The target action was removed before the backfill could run."
+BACKFILL_WATCH_GONE = "The watch was removed before the backfill could run."
+BACKFILL_TIMED_OUT = "The backfill exceeded its time limit and was reset to retry."
+BACKFILL_TIMED_OUT_EXHAUSTED = "The backfill repeatedly timed out and has exhausted its retry attempts."

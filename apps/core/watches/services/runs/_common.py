@@ -10,6 +10,7 @@ from openmagpie_schema.watch_enums import CLAIMABLE_STATES, TERMINAL_STATES, Wat
 _PENDING = WatchActionRunState.PENDING.value
 _RUNNING = WatchActionRunState.RUNNING.value
 _FAILED = WatchActionRunState.FAILED.value
+_SUCCEEDED = WatchActionRunState.SUCCEEDED.value
 
 # Value-string views of the shared enum classification (queries compare the
 # bare CharField). _CLAIMABLE: states the drain may re-claim (PENDING +

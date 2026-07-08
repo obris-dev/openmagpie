@@ -20,10 +20,12 @@ from common.fields import min_ulid_at
 from feeds.models import Feed, FeedItem
 from sources.payloads import SourcePayload
 
+from ._backfill_select import FeedBackfillSelectMixin
+
 logger = logging.getLogger("feeds")
 
 
-class FeedItemService:
+class FeedItemService(FeedBackfillSelectMixin):
     """Account-scoped service for FeedItem reads + writes against a Feed."""
 
     def __init__(self, *, account_id: str) -> None:

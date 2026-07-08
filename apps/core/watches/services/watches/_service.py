@@ -50,6 +50,12 @@ class WatchService:
         returns the oldest match (id order) for a stable result."""
         return Watch.objects.filter(account_id=self.account_id, name=name).order_by("id").first()
 
+    def watch_id_for_path(self, path_id: str, /) -> str:
+        """The watch id owning `path_id`. A WatchAction carries only its path_id, so
+        the backfill resolves the watch this way to scope + stamp the runs it
+        enqueues. Raises WatchPath.DoesNotExist if missing / another account's."""
+        return str(WatchPath.objects.get(id=path_id, account_id=self.account_id).watch_id)
+
     def list(self, *, after: str | None = None, limit: int = 50) -> builtins.list[Watch]:
         """This account's watches, newest first (by ULID pk). Cursor-
         paginated: `after=<id>` fetches rows older than that id."""

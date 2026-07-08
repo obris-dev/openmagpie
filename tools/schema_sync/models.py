@@ -13,6 +13,7 @@ Three lists, kept separate from the build/guard logic in generate.py so the
 """
 
 from openmagpie_schema.auth import AuthUser
+from openmagpie_schema.backfill import BackfillJob, BackfillListResponse, BackfillPreview
 from openmagpie_schema.configs import (
     HackerNewsCommentSourceSpec,
     HackerNewsFeedSourceSpec,
@@ -86,6 +87,10 @@ CONTRACT_MODELS = [
     WatchActionRunListResponse,
     WatchActionDeliveryView,
     WatchActionDeliveryListResponse,
+    # Backfill (re-run an action over the previous step's passes)
+    BackfillPreview,
+    BackfillJob,
+    BackfillListResponse,
     # Per-kind action config + result (the opaque `config`/`result` blobs,
     # typed; the kind -> config map itself lives server-side in the registry)
     SemanticFilterConfig,

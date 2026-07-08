@@ -15,7 +15,7 @@ apart from their action, so their by-own-id detail routes are parent-qualified
 
 from common.urls import api_path
 
-from . import views, views_audit
+from . import views, views_audit, views_backfill
 
 urlpatterns = [
     api_path(
@@ -32,5 +32,10 @@ urlpatterns = [
         "<str:action_id>/deliveries",
         views_audit.ActionDeliveriesView.as_view(),
         name="action_deliveries",
+    ),
+    api_path(
+        "<str:action_id>/backfill",
+        views_backfill.BackfillActionView.as_view(),
+        name="action_backfill",
     ),
 ]

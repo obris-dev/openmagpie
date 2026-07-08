@@ -152,3 +152,36 @@ TERMINAL_STATES = frozenset(
         WatchActionRunState.SKIPPED,
     }
 )
+
+
+class WatchActionBackfillState(StrEnum):
+    """Lifecycle of one WatchActionBackfill job (a queued request to re-run an
+    action over the previous step's passes).
+
+    The `process_due_backfills` cron claims a PENDING job (CAS -> RUNNING), does
+    the select/delete/enqueue, then marks it terminal:
+      - DONE   : the setup finished, and the enqueued runs are now the drain's job.
+      - FAILED : same dual meaning as a run's FAILED, transient-until-exhausted, and
+                 (like a run) readable off `completed_at`: FAILED with `completed_at`
+                 UNSET is retryable (the reaper cleared it so claim_due re-picks it);
+                 FAILED with `completed_at` SET is terminal (attempts hit the cap). The
+                 reaper resets a stale RUNNING to FAILED (retryable, `completed_at`
+                 cleared), and a permanent setup defect (source action gone) fails with
+                 attempts bumped to the cap AND `completed_at` stamped, so it isn't
+                 re-claimed. Terminality is the attempts cap / `completed_at`, not the
+                 state alone.
+    A RUNNING job whose worker died is reaped to FAILED (retryable), so a crash
+    mid-setup is retried, safe because the setup is idempotent and guarded by the
+    job's `replace_deleted_at` delete-once marker.
+    """
+
+    PENDING = "pending"
+    RUNNING = "running"
+    DONE = "done"
+    FAILED = "failed"
+
+
+# The cron claims PENDING (or a retryable FAILED under the attempts cap) and reaps
+# stale RUNNING. Terminality of a FAILED job (like a run's) is decided by the
+# attempts cap, not set membership, so there's no BACKFILL_TERMINAL_STATES set.
+BACKFILL_CLAIMABLE_STATES = frozenset({WatchActionBackfillState.PENDING, WatchActionBackfillState.FAILED})

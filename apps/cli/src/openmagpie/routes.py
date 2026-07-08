@@ -21,6 +21,7 @@ _FEED_ITEMS = f"/{API_VERSION}/feed-items"
 _ACTIONS = f"/{API_VERSION}/actions"
 _ACTION_ACTIVITY = f"/{API_VERSION}/action-activity"
 _ACTION_DELIVERIES = f"/{API_VERSION}/action-deliveries"
+_BACKFILLS = f"/{API_VERSION}/action-backfills"
 _ENGINES = f"/{API_VERSION}/engines"
 _TELEMETRY = f"/{API_VERSION}/telemetry"
 
@@ -124,6 +125,24 @@ class actions:
     @staticmethod
     def deliveries(action_id: str) -> str:
         return f"{_ACTIONS}/{action_id}/deliveries"
+
+    @staticmethod
+    def backfill(action_id: str) -> str:
+        # Submit a backfill of this action (the job's list + status are
+        # parent-qualified at /v1/action-backfills; see the `action_backfills` class).
+        return f"{_ACTIONS}/{action_id}/backfill"
+
+
+class action_backfills:
+    """`/v1/action-backfills` — this account's backfill jobs (list), and `<id>` for one
+    job's status (the SUBMIT is `/v1/actions/<id>/backfill`). Parent-qualified with the
+    `action-` prefix, like `action_activity` / `deliveries`."""
+
+    collection = _BACKFILLS
+
+    @staticmethod
+    def detail(backfill_id: str) -> str:
+        return f"{_BACKFILLS}/{backfill_id}"
 
 
 class action_activity:

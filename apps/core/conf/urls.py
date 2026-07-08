@@ -33,6 +33,10 @@ urlpatterns = [
     # action, so parent-qualified) ; the lists are nested under the action.
     api_include(f"{_V1}/action-activity", "watches.activity_urls"),
     api_include(f"{_V1}/action-deliveries", "watches.delivery_urls"),
+    # A backfill job's list + status by its own ULID (dependent records of an action,
+    # so parent-qualified, like action-activity / action-deliveries; the submit is
+    # action-scoped at /v1/actions/<id>/backfill ; see watches.backfill_urls).
+    api_include(f"{_V1}/action-backfills", "watches.backfill_urls"),
     api_include(f"{_V1}/engines", "engine.urls"),
     # Public, unauthenticated waitlist signup (marketing site).
     api_include(f"{_V1}/waitlist", "waitlist.urls"),

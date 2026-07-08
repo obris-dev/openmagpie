@@ -52,7 +52,7 @@ from .output import (
     _print_detail,
     _print_next_page,
 )
-from .timeflags import _DEFAULT_WINDOW, _build_windows
+from .timeflags import _DEFAULT_WINDOW, _build_windows, validated_window_params
 
 __all__ = [
     "CONTRACT_MISMATCH_MESSAGE",
@@ -90,4 +90,5 @@ __all__ = [
     "_ts",
     "_unreachable_message",
     "col",
+    "validated_window_params",
 ]

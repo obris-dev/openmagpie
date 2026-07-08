@@ -282,6 +282,14 @@ WATCH_RUN_MAX_ATTEMPTS = int(os.environ.get("WATCH_RUN_MAX_ATTEMPTS", "3"))
 # slow-but-alive call is never false-reaped; a real crash recovers in <=10m.
 WATCH_RUN_STALE_SECONDS = int(os.environ.get("WATCH_RUN_STALE_SECONDS", "600"))
 
+# Backfill jobs (process_due_backfills). A job is pure DB work (scan the source
+# passes, optionally delete, bulk-enqueue), chunked, no LLM calls -- so it's not
+# sized against the judge timeout. STALE_SECONDS is generous because a wide
+# window can scan/enqueue many rows; a job reaped past it rejoins the pool (its
+# setup is idempotent + delete-once guarded). Past MAX_ATTEMPTS a job stays FAILED.
+WATCH_BACKFILL_MAX_ATTEMPTS = int(os.environ.get("WATCH_BACKFILL_MAX_ATTEMPTS", "3"))
+WATCH_BACKFILL_STALE_SECONDS = int(os.environ.get("WATCH_BACKFILL_STALE_SECONDS", "900"))
+
 # Refresh-token rotation lock failsafe. The critical section is one row
 # read + revoke + mint, so milliseconds in practice; 30s leaves plenty
 # of headroom if the DB is briefly slow.

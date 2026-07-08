@@ -30,6 +30,255 @@
       "title": "AuthUser",
       "type": "object"
     },
+    "BackfillJob": {
+      "description": "A queued backfill's definition + progress.\n\nThe counts are 0 until `process_due_backfills` runs the job, then reflect what\nit actually did: `matched` source passes in the window, `present`/`pruned`\nsplit, `deleted` terminal runs removed (target + downstream, when `replace`),\n`enqueued` fresh target runs created. `source_action_id` is empty for a\nchain-head target (see `BackfillPreview`).\n\n`kind` is the target action's kind (a `WatchActionKind`; `| str` tolerates a\nsince-removed kind, mirroring the run wire). The four window bounds are the\nresolved absolute datetimes (None = unbounded on that side). `error` carries the\nreason when `state` is FAILED; a FAILED job is retryable while `completed_at` is\nunset and terminal once it's set (the attempts cap was hit), mirroring a run.",
+      "properties": {
+        "completed_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Completed At"
+        },
+        "completed_since": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Completed Since"
+        },
+        "completed_until": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Completed Until"
+        },
+        "created_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Created At"
+        },
+        "deleted": {
+          "default": 0,
+          "title": "Deleted",
+          "type": "integer"
+        },
+        "enqueued": {
+          "default": 0,
+          "title": "Enqueued",
+          "type": "integer"
+        },
+        "error": {
+          "default": "",
+          "title": "Error",
+          "type": "string"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/WatchActionKind"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "default": "",
+          "title": "Kind"
+        },
+        "matched": {
+          "default": 0,
+          "title": "Matched",
+          "type": "integer"
+        },
+        "occurred_since": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Occurred Since"
+        },
+        "occurred_until": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Occurred Until"
+        },
+        "present": {
+          "default": 0,
+          "title": "Present",
+          "type": "integer"
+        },
+        "pruned": {
+          "default": 0,
+          "title": "Pruned",
+          "type": "integer"
+        },
+        "replace": {
+          "default": false,
+          "title": "Replace",
+          "type": "boolean"
+        },
+        "source_action_id": {
+          "default": "",
+          "title": "Source Action Id",
+          "type": "string"
+        },
+        "source_is_head": {
+          "default": false,
+          "title": "Source Is Head",
+          "type": "boolean"
+        },
+        "started_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Started At"
+        },
+        "state": {
+          "$ref": "#/$defs/WatchActionBackfillState"
+        },
+        "target_action_id": {
+          "title": "Target Action Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "state",
+        "target_action_id"
+      ],
+      "title": "BackfillJob",
+      "type": "object"
+    },
+    "BackfillListResponse": {
+      "description": "`GET /v1/action-backfills` envelope: this account's backfill jobs, newest-first.\n`next_cursor` is the id to pass as `?after=` for the next page (None at the\nend).",
+      "properties": {
+        "items": {
+          "items": {
+            "$ref": "#/$defs/BackfillJob"
+          },
+          "title": "Items",
+          "type": "array"
+        },
+        "next_cursor": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Next Cursor"
+        }
+      },
+      "title": "BackfillListResponse",
+      "type": "object"
+    },
+    "BackfillPreview": {
+      "description": "`--dry-run` preview: the size of the backfill without queuing it.\n\n`dry_run` is always True on a real preview: the server stamps it so the client\ncan assert the request was actually honored (a `BackfillJob` response, if the\nserver ever ignored `?dry_run`, would validate here with `dry_run` defaulting\nFalse, so the client catches the silent-side-effect case).\n\n`source_action_id` is the step whose passes define the set (the target's\npredecessor) ; empty when `source_is_head` (the target is the chain head, so\nthe source is the watch's feed items, not an upstream action's runs).\n\n`matched` is every source pass in the window ; `present`/`pruned` split it by\nwhether the feed item still exists (a pruned item can't be re-run).\n`would_delete` is the terminal runs `replace` would remove (target AND every\ndownstream action), matching the job's eventual `deleted` (0 without `replace`) ;\n`would_enqueue` is how many target runs the backfill would create (all present\nitems with `replace` ; only the ones lacking a target run otherwise).",
+      "properties": {
+        "dry_run": {
+          "default": false,
+          "title": "Dry Run",
+          "type": "boolean"
+        },
+        "matched": {
+          "default": 0,
+          "title": "Matched",
+          "type": "integer"
+        },
+        "present": {
+          "default": 0,
+          "title": "Present",
+          "type": "integer"
+        },
+        "pruned": {
+          "default": 0,
+          "title": "Pruned",
+          "type": "integer"
+        },
+        "replace": {
+          "default": false,
+          "title": "Replace",
+          "type": "boolean"
+        },
+        "source_action_id": {
+          "default": "",
+          "title": "Source Action Id",
+          "type": "string"
+        },
+        "source_is_head": {
+          "default": false,
+          "title": "Source Is Head",
+          "type": "boolean"
+        },
+        "would_delete": {
+          "default": 0,
+          "title": "Would Delete",
+          "type": "integer"
+        },
+        "would_enqueue": {
+          "default": 0,
+          "title": "Would Enqueue",
+          "type": "integer"
+        }
+      },
+      "title": "BackfillPreview",
+      "type": "object"
+    },
     "CuratedFeedConfig": {
       "description": "Schema for Feed.data when Feed.kind == 'curated'.\n\nSources are user-maintained ; one Source row per place data comes\nfrom, regardless of whether they were typed in by hand or generated\nby an external script. Watermarks + per-source metadata live on the\nSource rows; this config only carries feed-level knobs.\n\n`default_field_map` is a connector-readable hint dictionary that\napplies to every source in the feed; per-source overrides on a\nSource row's `field_map` take precedence. Keys a connector doesn't\nrecognise are ignored.",
       "properties": {
@@ -2157,6 +2406,17 @@
       "title": "TelemetryState",
       "type": "object"
     },
+    "WatchActionBackfillState": {
+      "description": "Lifecycle of one WatchActionBackfill job (a queued request to re-run an\naction over the previous step's passes).\n\nThe `process_due_backfills` cron claims a PENDING job (CAS -> RUNNING), does\nthe select/delete/enqueue, then marks it terminal:\n  - DONE   : the setup finished, and the enqueued runs are now the drain's job.\n  - FAILED : same dual meaning as a run's FAILED, transient-until-exhausted, and\n             (like a run) readable off `completed_at`: FAILED with `completed_at`\n             UNSET is retryable (the reaper cleared it so claim_due re-picks it);\n             FAILED with `completed_at` SET is terminal (attempts hit the cap). The\n             reaper resets a stale RUNNING to FAILED (retryable, `completed_at`\n             cleared), and a permanent setup defect (source action gone) fails with\n             attempts bumped to the cap AND `completed_at` stamped, so it isn't\n             re-claimed. Terminality is the attempts cap / `completed_at`, not the\n             state alone.\nA RUNNING job whose worker died is reaped to FAILED (retryable), so a crash\nmid-setup is retried, safe because the setup is idempotent and guarded by the\njob's `replace_deleted_at` delete-once marker.",
+      "enum": [
+        "pending",
+        "running",
+        "done",
+        "failed"
+      ],
+      "title": "WatchActionBackfillState",
+      "type": "string"
+    },
     "WatchActionConfigSummary": {
       "description": "Display-only projection of an action config for the CLI preview.\n\nBuilt server-side from the typed config (the only place that knows\nthe schema), so the CLI prints it without parsing the `config` blob ;\nno shadow schema on the client. `detail` is presentation, not a\ncontract ; the action's `kind` is carried separately (the column /\nwire), so it isn't repeated here.",
       "properties": {
@@ -2424,6 +2684,17 @@
       ],
       "title": "WatchActionDeliveryWire",
       "type": "object"
+    },
+    "WatchActionKind": {
+      "description": "The kind of node in a watch's action chain ; selects the impl + the\nconfig/result contract.\n\nThree families:\n  - FILTER:   semantic_filter ; gates the chain (a pass=false GATES).\n  - EXTRACT:  extract ; hydrates declared fields onto the run's result.\n              Gates nothing, delivers nothing ; always advances.\n  - DELIVERY: webhook, log ; emit the item outward. Delivery cadence\n              (instant vs digest) is a `delivery` field in the action's\n              config, NOT a separate kind.",
+      "enum": [
+        "semantic_filter",
+        "extract",
+        "webhook",
+        "log"
+      ],
+      "title": "WatchActionKind",
+      "type": "string"
     },
     "WatchActionMutationResponse": {
       "description": "Single-action add/edit response (POST `/actions` + PUT `/actions/<id>`,\nreal and `?dry_run=true`). `dry_run` is True for a validation-only preview;\n`action` is the typed action node (a discriminated union). On a dry-run the\naction isn't persisted, so `action.id` is \"\" (WatchActionWire can't be\nsubclassed to null the id, so the response nests the action rather than\nflattening it as the pre-union shape did).",
@@ -3366,6 +3637,15 @@
     },
     {
       "$ref": "#/$defs/WatchActionDeliveryListResponse"
+    },
+    {
+      "$ref": "#/$defs/BackfillPreview"
+    },
+    {
+      "$ref": "#/$defs/BackfillJob"
+    },
+    {
+      "$ref": "#/$defs/BackfillListResponse"
     },
     {
       "$ref": "#/$defs/SemanticFilterConfig"

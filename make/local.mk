@@ -66,9 +66,10 @@ local-migrate: ## Run Django database migrations + ensure cache table exists + b
 	$(MAKE) local-manage CMD=createcachetable
 	$(MAKE) local-manage CMD=bootstrap_oauth_app
 
-local-tick: ## Run one pipeline pass: poll feeds -> trigger watches -> drain runs -> flush digests -> send email
+local-tick: ## Run one pipeline pass: poll feeds -> trigger watches -> run backfills -> drain runs -> flush digests -> send email
 	$(MAKE) local-manage CMD="poll_due_feeds"
 	$(MAKE) local-manage CMD="process_due_watches"
+	$(MAKE) local-manage CMD="process_due_backfills"
 	$(MAKE) local-manage CMD="process_due_runs"
 	$(MAKE) local-manage CMD="process_due_digests"
 	$(MAKE) local-manage CMD="send_outbound_emails"
@@ -84,6 +85,7 @@ local-tick: ## Run one pipeline pass: poll feeds -> trigger watches -> drain run
 JOBS_DIR := .jobs
 POLL_INTERVAL ?= 300
 TRIGGER_INTERVAL ?= 300
+BACKFILL_INTERVAL ?= 60
 DRAIN_INTERVAL ?= 60
 DIGEST_INTERVAL ?= 60
 EMAIL_INTERVAL ?= 60
@@ -91,7 +93,7 @@ EMAIL_INTERVAL ?= 60
 # given a chance to fire, so a coarse hourly poke is plenty.
 HEARTBEAT_INTERVAL ?= 3600
 
-up-jobs: ## Start poll/trigger/drain/digest/email as independent background tickers
+up-jobs: ## Start poll/trigger/backfill/drain/digest/email as independent background tickers
 	@mkdir -p $(JOBS_DIR)
 	@# Pre-flight: a lock held BEFORE we start anything is suspicious (a prior
 	@# run's orphan or another machine), and the new tickers would skip every
@@ -100,6 +102,7 @@ up-jobs: ## Start poll/trigger/drain/digest/email as independent background tick
 	@$(MAKE) --no-print-directory local-manage CMD="clear_job_locks --all --dry-run" || true
 	@$(MAKE) --no-print-directory _job-up NAME=poll    CMD=poll_due_feeds      INTERVAL=$(POLL_INTERVAL)
 	@$(MAKE) --no-print-directory _job-up NAME=trigger CMD=process_due_watches INTERVAL=$(TRIGGER_INTERVAL)
+	@$(MAKE) --no-print-directory _job-up NAME=backfill CMD=process_due_backfills INTERVAL=$(BACKFILL_INTERVAL)
 	@$(MAKE) --no-print-directory _job-up NAME=drain   CMD=process_due_runs    INTERVAL=$(DRAIN_INTERVAL)
 	@$(MAKE) --no-print-directory _job-up NAME=digest  CMD=process_due_digests INTERVAL=$(DIGEST_INTERVAL)
 	@$(MAKE) --no-print-directory _job-up NAME=email   CMD=send_outbound_emails INTERVAL=$(EMAIL_INTERVAL)
@@ -118,7 +121,7 @@ _job-up:
 	fi
 
 down-jobs: ## Stop the background tickers started by up-jobs (and clear their job locks)
-	@for n in poll trigger drain digest email heartbeat; do \
+	@for n in poll trigger backfill drain digest email heartbeat; do \
 		if [ -f $(JOBS_DIR)/$$n.pid ]; then \
 			kill $$(cat $(JOBS_DIR)/$$n.pid) 2>/dev/null; rm -f $(JOBS_DIR)/$$n.pid; echo "$$n stopped"; \
 		else echo "$$n not running"; fi; \
