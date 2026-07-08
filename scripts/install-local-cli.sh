@@ -5,11 +5,11 @@
 # dev-loop alias for this, and the quickstart (scripts/quickstart/run.sh) runs
 # it for you. Both need uv, not make.
 #
-# It's a local-build install because no published package exists yet; once one
-# does, that becomes the normal install path and this stays the from-source
-# option. A future installer can tell the two apart via `uv tool list` (uv
-# records each tool's install source), so it could offer to replace a local
-# build with the released package.
+# This is the from-SOURCE install (a snapshot of this checkout). A released
+# package now exists on PyPI (`openmagpie`), so `magpie upgrade` can replace this
+# local build with the published one (it detects which installer manages the CLI
+# via `uv tool list`, then reinstalls via it). This script stays the from-source
+# path the quickstart uses.
 #
 # uv (Astral's Python toolchain) builds the CLI wheel. If it's missing we print
 # how to install it and exit non-zero, the same way the quickstart guides a

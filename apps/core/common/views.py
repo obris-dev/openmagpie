@@ -11,6 +11,7 @@ from __future__ import annotations
 import secrets
 from typing import Any
 
+from django.conf import settings
 from django.core.cache import cache
 from django.db import connection
 from django.http import HttpRequest, JsonResponse
@@ -55,7 +56,10 @@ def healthz(request: HttpRequest) -> JsonResponse:
         "cache": _check_cache(),
     }
     ok = all(v == "ok" for v in checks.values())
+    # `version` is the running PRODUCT version (release-please `.` track), so a
+    # client (`magpie version`) can report what the server is on. Unauthenticated +
+    # always present, even when degraded.
     return JsonResponse(
-        {"ok": ok, "checks": checks},
+        {"ok": ok, "version": settings.PRODUCT_VERSION, "checks": checks},
         status=200 if ok else 503,
     )

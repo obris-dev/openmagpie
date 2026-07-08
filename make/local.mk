@@ -1,4 +1,4 @@
-.PHONY: install-local-cli up build down restart restart-web logs logs-core logs-web local-exec local-manage local-test local-makemigrations local-dbshell local-migrate local-tick up-jobs down-jobs _job-up local-lint local-lint-fix local-types local-check local-web local-web-reinstall local-web-shell local-cli-sync local-cli hooks
+.PHONY: install-local-cli upgrade up build down restart restart-web logs logs-core logs-web local-exec local-manage local-test local-makemigrations local-dbshell local-migrate local-tick up-jobs down-jobs _job-up local-lint local-lint-fix local-types local-check local-web local-web-reinstall local-web-shell local-cli-sync local-cli hooks
 
 # Getting started is the curl|sh installer (scripts/quickstart/bootstrap.sh) or,
 # in a clone, ./scripts/quickstart/run.sh. That orchestration lives in POSIX sh,
@@ -14,6 +14,9 @@ install-local-cli: ## Install the local magpie CLI on your PATH (snapshot of thi
 	# can install the CLI without make ; this target is the dev-loop alias. The
 	# script needs uv (and prints how to get it if missing).
 	@./scripts/install-local-cli.sh --force
+
+upgrade: ## Upgrade this install to the latest release (advance tag, rebuild, migrate, refresh CLI); data preserved
+	@sh ./scripts/upgrade.sh
 
 up: ## Start local Docker dev environment
 	docker compose up -d

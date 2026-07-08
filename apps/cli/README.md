@@ -39,6 +39,10 @@ Create a feed of sources to watch, then a watch that subscribes to it and runs a
 | `magpie activity summary` / `list` / `get` | One action's run audit, scoped by `--action <id>`: `summary` is a per-state breakdown over a window, `list` the individual run log (`--state` / `--after`), `get <run_id>` one run in full. Works for every action kind (filter, webhook, log); item title + feed name come from the response join, with the filter score + reason shown only for `semantic_filter` actions |
 | `magpie delivery list` / `get` | Outbound webhook delivery audit: `list --action <id>` the attempts (state / HTTP / host / items / attempt), `get <delivery_id>` one call in full incl. the exact body sent |
 | `magpie feed template` / `watch template` | Emit a config skeleton to stdout |
+| `magpie backfill submit` / `status` / `list` | Re-run an action over the previous step's passes: `submit --action <id>` + a required time window (`--replace` regenerates the whole chain from that action down; `--dry-run` previews the size), `status <job_id>` a queued job's progress, `list` past jobs |
+| `magpie version` | Show the CLI + connected-server versions, each flagged when a newer release exists on its own track |
+| `magpie upgrade` | Self-update the CLI to the latest release on PyPI (`--check` to only report; `--yes` off a TTY). Upgrades the CLI, not the server |
+| `magpie telemetry status` / `enable` / `disable` | Read or set this instance's anonymous-telemetry mode |
 
 Observability views (`activity`, `delivery`) render a human table. On a terminal it is **prompt-paged**: each page prints under a `Page: <n>` marker, then `Fetch next page? [Y/n]` (Enter advances) until you decline or run out, with earlier pages in your terminal's scrollback. Piped or redirected, it prints one page plus a `Next page: --after <id>` hint. `--jsonl` emits newline-delimited JSON (one object per row) for `jq` / piping — also prompt-paged at a terminal, one page when piped. It pairs with `-o <file>` to dump a page to the file while the next cursor prints to stdout (a bare id, empty when done) — so a script loops on the cursor and passes `--after`:
 

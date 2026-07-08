@@ -5,11 +5,12 @@ from collections.abc import Callable
 from typing import cast
 from unittest import mock
 
+from django.conf import settings
 from django.core.cache import cache
 from django.core.exceptions import ImproperlyConfigured
 from django.core.management import call_command
 from django.core.management.base import BaseCommand, CommandError
-from django.test import SimpleTestCase, override_settings
+from django.test import Client, SimpleTestCase, TestCase, override_settings
 
 from common.commands import SingleFlightCommand, _sigterm_as_systemexit
 from common.email import EmailRenderError, EmailService
@@ -282,3 +283,26 @@ class EmailRenderTemplateTests(SimpleTestCase):
         post.return_value = self._response(json_value={"success": True, "html": "<p>hi</p>", "plainText": "hi"})
         out = EmailService.render_template(template="x", props={})
         self.assertEqual(out, {"html": "<p>hi</p>", "plainText": "hi"})
+
+
+class HealthzVersionTests(TestCase):
+    """`/healthz` reports the running product version (for `magpie version`)."""
+
+    def test_healthz_carries_product_version(self) -> None:
+        body = Client().get("/healthz").json()  # body is present regardless of 200/503
+        self.assertEqual(body["version"], settings.PRODUCT_VERSION)
+
+    @override_settings(PRODUCT_VERSION="9.9.9")
+    def test_healthz_reports_the_configured_version(self) -> None:
+        # Pin a literal so the assertion isn't tautological against the setting: this
+        # catches the value silently going "unknown" or the key being dropped/renamed.
+        self.assertEqual(Client().get("/healthz").json()["version"], "9.9.9")
+
+    @override_settings(PRODUCT_VERSION="9.9.9")
+    @mock.patch("common.views._check_database", return_value="error: down")
+    def test_version_present_on_degraded_503(self, _db: mock.Mock) -> None:
+        # The CLI reads `version` off a 503 body (a degraded server still reports it);
+        # guard that contract against a refactor that moves the field into an `if ok:`.
+        resp = Client().get("/healthz")
+        self.assertEqual(resp.status_code, 503)
+        self.assertEqual(resp.json()["version"], "9.9.9")

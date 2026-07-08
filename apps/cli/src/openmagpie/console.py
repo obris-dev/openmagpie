@@ -8,6 +8,7 @@ is implicit in the intent, not duplicated at every call site:
   success(msg) green,  stdout   — operation completed (auto-prepends "✓ ")
   header(msg)  cyan,   stdout   — section title above a block of detail
   log(msg)     plain,  stdout   — neutral output (field rows, list items, body text)
+  hint(msg)    cyan,   stderr   — ambient notice (e.g. the update-available nudge)
 
 Plus small value formatters:
 
@@ -46,6 +47,13 @@ def header(msg: str, *, err: bool = False) -> None:
 
 def log(msg: str) -> None:
     typer.echo(msg)
+
+
+def hint(msg: str) -> None:
+    # An ambient, non-error notice (e.g. the update-available nudge). Cyan, stderr,
+    # so it never mixes into machine-readable stdout (--jsonl / -o) or reads as a
+    # failure the way warn() (yellow) would.
+    typer.secho(msg, fg=typer.colors.CYAN, err=True)
 
 
 # Default per-column ceiling so one wide cell (e.g. a long meta dict) can't

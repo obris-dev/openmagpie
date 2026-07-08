@@ -29,7 +29,7 @@ import tempfile
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 CONFIG_DIR_NAME = ".magpie"
 CONFIG_FILE_NAME = "config.json"
@@ -51,6 +51,26 @@ class UserInfo(BaseModel):
     id: str
     email: str
     account_id: str | None = None
+
+
+class UpdateCheck(BaseModel):
+    """Cached result of the once-a-day "is a newer CLI on PyPI" check (see
+    update_check.py). It's CLI-global, not per-server, so it lives on
+    the wrapper below rather than a per-env Config. `latest` is None when the most
+    recent check couldn't reach PyPI (the timestamp still advances, so we don't re-hit
+    the network on every command)."""
+
+    last_checked_at: datetime
+    latest: str | None = None
+
+    @field_validator("last_checked_at")
+    @classmethod
+    def _ensure_aware(cls, value: datetime) -> datetime:
+        # Our own writes are always UTC-aware, but a hand-edited / externally-written
+        # config.json could carry a NAIVE timestamp. Coerce it to UTC on load so the
+        # once-a-day staleness compare (aware `now` minus this) can't raise TypeError
+        # and break a command from the on-close nudge.
+        return value if value.tzinfo is not None else value.replace(tzinfo=UTC)
 
 
 class Config(BaseModel):
@@ -130,6 +150,9 @@ class ConfigFile(BaseModel):
 
     active_env: str = DEFAULT_ACTIVE_ENV
     envs: dict[str, Config] = Field(default_factory=lambda: {ENV_LOCAL: Config()})
+    # CLI-global update-check cache (not tied to a server env). Optional so existing
+    # config files (and fresh ones) validate without it.
+    update_check: UpdateCheck | None = None
 
     @property
     def active(self) -> Config:
@@ -167,11 +190,8 @@ def load() -> Config:
     return load_file().active
 
 
-def save(config: Config) -> None:
-    """Persist `config` as the active environment's record.
-
-    Reads the existing wrapper (preserving any other envs) and writes
-    the whole file back atomically with 0600 perms.
+def _atomic_write(wrapper: ConfigFile) -> None:
+    """Write the whole wrapper back to config.json atomically with 0600 perms.
 
     `tempfile.NamedTemporaryFile` gives us:
       - a randomized name in the same directory as the target, so two
@@ -182,9 +202,6 @@ def save(config: Config) -> None:
         world-readable window between create and chmod
     Followed by `os.replace` for the atomic rename onto `target`.
     """
-    wrapper = load_file()
-    wrapper.envs[wrapper.active_env] = config
-
     directory = config_dir()
     directory.mkdir(mode=0o700, exist_ok=True)
     target = config_path()
@@ -210,3 +227,23 @@ def save(config: Config) -> None:
             with contextlib.suppress(FileNotFoundError):
                 os.unlink(tmp_path)
         raise
+
+
+def save(config: Config) -> None:
+    """Persist `config` as the active environment's record. Reads the existing
+    wrapper (preserving other envs + the update-check cache) and writes it back."""
+    wrapper = load_file()
+    wrapper.envs[wrapper.active_env] = config
+    _atomic_write(wrapper)
+
+
+def load_update_check() -> UpdateCheck | None:
+    """The cached once-a-day update check (None if never run)."""
+    return load_file().update_check
+
+
+def save_update_check(update_check: UpdateCheck) -> None:
+    """Persist the update-check cache on the wrapper, preserving every env record."""
+    wrapper = load_file()
+    wrapper.update_check = update_check
+    _atomic_write(wrapper)

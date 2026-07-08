@@ -151,6 +151,17 @@ MARKETING_BASE_URL = os.environ["MARKETING_BASE_URL"]
 # lockstep when bumping versions.
 API_VERSION_PREFIX = os.environ.get("API_VERSION_PREFIX", "v1")
 
+# Product version: the release-please `.` track's version.txt at the repo root (NOT
+# apps/core's own pyproject version, and NOT API_VERSION_PREFIX, the route/compat
+# axis). It's always present (bind-mounted to /app in dev, COPY'd into the image), so
+# we just read it; "unknown" only if it's somehow unreadable (best-effort: never crash
+# settings import over a cosmetic string). Exposed on /healthz so a client can see what
+# the server is running.
+try:
+    PRODUCT_VERSION = (REPO_ROOT / "version.txt").read_text(encoding="utf-8").strip() or "unknown"
+except (OSError, UnicodeDecodeError):
+    PRODUCT_VERSION = "unknown"
+
 # Transactional email. Enqueued (mailer.OutboundEmail) by request handlers, then
 # rendered out-of-process by the email-render service (EMAIL_RENDER_URL/render)
 # and sent via Django's EMAIL_BACKEND by the send_outbound_emails drain. The

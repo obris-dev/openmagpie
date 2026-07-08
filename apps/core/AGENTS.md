@@ -245,7 +245,7 @@ When list rows reference a related entity, **don't embed that entity on every ro
 /v1/action-backfills[/<id>]                        GET        backfill jobs (list, cursor) + one job by own id
 
 /v1/engines                                        GET        registered engines + reachability
-/healthz                                           GET        DB + cache pings (public)
+/healthz                                           GET        DB + cache pings + product version (public)
 ```
 
 ## Cache-backed state pattern

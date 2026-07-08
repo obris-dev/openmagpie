@@ -15,8 +15,11 @@ from .commands.backfill import backfill_app
 from .commands.delivery import delivery_app
 from .commands.feed import feed_app
 from .commands.telemetry import telemetry_app
+from .commands.upgrade import upgrade
+from .commands.version import version
 from .commands.watch import watch_app
 from .context import AppContext, bind_app_ctx, unbind_app_ctx
+from .update_check import maybe_nudge
 
 app = typer.Typer(
     name="magpie",
@@ -42,6 +45,10 @@ def main(
     token = bind_app_ctx(obj)
     ctx.call_on_close(obj.close)
     ctx.call_on_close(lambda: unbind_app_ctx(token))
+    # After the command's own output: the ambient once-a-day "newer magpie available"
+    # nudge (stderr, TTY-only, opt-out via MAGPIE_NO_UPDATE_CHECK). No-ops when the
+    # cached check is fresh, so it adds no per-command network cost.
+    ctx.call_on_close(lambda: maybe_nudge(ctx.invoked_subcommand))
 
 
 app.add_typer(auth_app, name="auth", help="Sign in / out and inspect identity.")
@@ -75,3 +82,6 @@ app.add_typer(
     name="telemetry",
     help="Read or set this instance's anonymous-telemetry mode.",
 )
+# Bare top-level verbs (not noun groups).
+app.command(name="version", help="Show the CLI + connected-server versions.")(version)
+app.command(name="upgrade", help="Update the magpie CLI to the latest release.")(upgrade)

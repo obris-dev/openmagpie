@@ -80,7 +80,10 @@ The paginated views render a human table by default. **Paging follows the termin
 
 Today `activity` and `delivery` are **action-scoped only** (`--action` / `-a`): the runs and deliveries endpoints are addressed by the action's own id in the path, with no watch-level rollup or `?watch=` filter. A watch-scoped observability view (`--watch` on `activity` / `delivery`) needs a new aggregate endpoint and is deferred to Phase 2; until then `-w` is a scope flag for the config commands (`watch action list --watch`) only.
 
-Every noun now follows this shape; new commands MUST too.
+Every noun now follows this shape; new commands MUST too. The one exception is
+tool-level meta-verbs that act on the CLI ITSELF, not a server resource: `magpie
+version` and `magpie upgrade` are bare top-level commands (registered via
+`app.command(...)`, not `add_typer` noun groups), since there's no resource to name.
 
 ## AppContext
 

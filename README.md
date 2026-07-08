@@ -125,6 +125,16 @@ Each stage is single-flight: a pass that outruns its interval self-skips the nex
 
 Run `make help` for the full target list (`make up` / `down`, `make logs`, `make local-test`, `make local-check`, and so on).
 
+### Upgrading
+
+The quickstart pins your checkout to the latest release. When a newer one ships, upgrade in place from your install directory:
+
+```bash
+make upgrade                  # or: ./scripts/upgrade.sh
+```
+
+It advances the checkout to the latest release tag, rebuilds the stack, applies migrations, and refreshes the `magpie` CLI. **Your data is preserved** (the database volume persists, migrations are additive, and it never re-seeds). For the bleeding edge instead of a release, `OPENMAGPIE_BRANCH=main make upgrade`.
+
 ## How it works
 
 A `Feed` is a reusable, curated stream (a set of sources plus an item log). A `Watch` subscribes to one or more feeds and runs an ordered **action chain** over each new item: a `semantic_filter` gates the chain (a score below threshold stops it), and downstream `webhook` / `log` actions deliver what passes. One feed can back many watches, so you pay for source polling once.
