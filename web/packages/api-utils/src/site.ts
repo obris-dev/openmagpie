@@ -29,7 +29,7 @@ export const siteMeta = {
   repoUrl: "https://github.com/obris-dev/openmagpie",
   description:
     "Open-source, self-hostable social listening for Reddit, Hacker News, and your feeds. Describe what you care about in natural language and OpenMagpie surfaces the threads worth your reply.",
-  tagline: "Join the conversations that matter, while they're happening",
+  tagline: "Open source social listening",
 } as const;
 
 // Brand palette for OG / share cards. Satori inlines these as plain color
