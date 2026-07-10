@@ -56,11 +56,26 @@ LOCAL_APPS = [
     "waitlist",
     "mailer",
     "telemetry",
+    "plugins",
 ]
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
 
 AUTH_USER_MODEL = "accounts.User"
+
+# ── Plugins ──────────────────────────────────────────────────────────────
+# Self-registering plugin hooks loaded once at startup by the `plugins` app.
+# Same behaviour in every env. PLUGIN_HOOKS: `module:function` import paths
+# (the no-packaging path -- a fork points OPENMAGPIE_PLUGIN_HOOKS at an in-repo
+# hook). PLUGIN_ENTRYPOINT_ALLOW: optional allowlist of `openmagpie.plugins`
+# entry-point names -- unset (None) loads every installed plugin; set
+# OPENMAGPIE_PLUGIN_ALLOW to restrict (e.g. a multi-tenant deployment that only
+# wants vetted plugins). Both env vars are comma-separated, OPENMAGPIE_-namespaced.
+PLUGIN_HOOKS = [h.strip() for h in os.environ.get("OPENMAGPIE_PLUGIN_HOOKS", "").split(",") if h.strip()]
+_plugin_allow = os.environ.get("OPENMAGPIE_PLUGIN_ALLOW")
+PLUGIN_ENTRYPOINT_ALLOW: list[str] | None = (
+    None if _plugin_allow is None else [a.strip() for a in _plugin_allow.split(",") if a.strip()]
+)
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
