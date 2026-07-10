@@ -5,7 +5,9 @@ from pathlib import Path
 
 from django.core.exceptions import ImproperlyConfigured
 
-from common.env import env_bool
+from common.env import env_bool, env_list
+from plugins.db.config import load_db_config
+from plugins.guards import resolve_entrypoint_allow, resolve_extra_apps
 
 # Log timestamps in UTC regardless of the host clock. Python's logging
 # `asctime` uses `time.localtime` by default ; the app is TIME_ZONE="UTC",
@@ -59,22 +61,37 @@ LOCAL_APPS = [
     "plugins",
 ]
 
+# Forkable extensibility: a fork can add its own Django apps without editing this
+# list, via a comma-separated OPENMAGPIE_EXTRA_APPS env var. They join LOCAL_APPS
+# so each also gets a per-app logger (below). A name that collides with any
+# already-installed app (Django, third-party, or local), or a duplicate within
+# the env var itself, is a misconfig and fails loudly (resolve_extra_apps) rather
+# than silently shadowing an app or registering one twice.
+LOCAL_APPS += resolve_extra_apps(
+    env_list("OPENMAGPIE_EXTRA_APPS"), installed=DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
+)
+
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
 
 AUTH_USER_MODEL = "accounts.User"
 
 # ── Plugins ──────────────────────────────────────────────────────────────
 # Self-registering plugin hooks loaded once at startup by the `plugins` app.
-# Same behaviour in every env. PLUGIN_HOOKS: `module:function` import paths
-# (the no-packaging path -- a fork points OPENMAGPIE_PLUGIN_HOOKS at an in-repo
-# hook). PLUGIN_ENTRYPOINT_ALLOW: optional allowlist of `openmagpie.plugins`
-# entry-point names -- unset (None) loads every installed plugin; set
-# OPENMAGPIE_PLUGIN_ALLOW to restrict (e.g. a multi-tenant deployment that only
-# wants vetted plugins). Both env vars are comma-separated, OPENMAGPIE_-namespaced.
-PLUGIN_HOOKS = [h.strip() for h in os.environ.get("OPENMAGPIE_PLUGIN_HOOKS", "").split(",") if h.strip()]
-_plugin_allow = os.environ.get("OPENMAGPIE_PLUGIN_ALLOW")
-PLUGIN_ENTRYPOINT_ALLOW: list[str] | None = (
-    None if _plugin_allow is None else [a.strip() for a in _plugin_allow.split(",") if a.strip()]
+# PLUGIN_HOOKS holds `module:function` import paths (the no-packaging path,
+# where a fork points OPENMAGPIE_PLUGIN_HOOKS at an in-repo hook).
+#
+# PLUGIN_ENTRYPOINT_ALLOW gates `openmagpie.plugins` entry-point discovery.
+# Loading an entry point runs arbitrary code at boot, so the default follows the
+# repo's fail-safe posture (see IS_CLOUD above): the `cloud` env defaults to an
+# empty allowlist (no installed plugin loads until it is named), while `local`
+# defaults to None (load every installed plugin). Because any production deploy
+# runs DJANGO_ENV=cloud (there is no separate self-host-prod module), a
+# self-hosted production instance is `cloud` too and must name its plugins; only
+# `local` (dev) loads all by default. Setting OPENMAGPIE_PLUGIN_ALLOW overrides
+# either default. Both env vars are comma-separated and OPENMAGPIE_-namespaced.
+PLUGIN_HOOKS = env_list("OPENMAGPIE_PLUGIN_HOOKS")
+PLUGIN_ENTRYPOINT_ALLOW: list[str] | None = resolve_entrypoint_allow(
+    os.environ.get("OPENMAGPIE_PLUGIN_ALLOW"), default_when_unset=[] if IS_CLOUD else None
 )
 
 MIDDLEWARE = [
@@ -117,6 +134,9 @@ WSGI_APPLICATION = "conf.wsgi.application"
 # under real volume, whereas Postgres' MVCC + row-level locking lets the CAS
 # `claim_due`, the `select_for_update` digest windows, and the poll lease work
 # as designed. Params are env-driven (the docker stack points HOST at `db`).
+# Persistent connections for the web workers (the short-lived cron commands
+# reconnect each run anyway); shared by plugin databases so they don't diverge.
+DB_CONN_MAX_AGE = int(os.environ.get("DB_CONN_MAX_AGE", "60"))
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.postgresql",
@@ -127,11 +147,23 @@ DATABASES = {
         "PASSWORD": os.environ["POSTGRES_PASSWORD"],
         "HOST": os.environ.get("POSTGRES_HOST", "localhost"),
         "PORT": os.environ.get("POSTGRES_PORT", "5432"),
-        # Persistent connections for the web workers ; the short-lived cron
-        # commands reconnect each run anyway.
-        "CONN_MAX_AGE": int(os.environ.get("DB_CONN_MAX_AGE", "60")),
+        "CONN_MAX_AGE": DB_CONN_MAX_AGE,
     }
 }
+
+# Forkable extensibility: a fork can add its own database connections (and route
+# its apps to them) via a JSON file pointed at by OPENMAGPIE_DB_CONFIG, so its
+# tables live in whatever database it chooses and never enter core's schema or
+# migrations. See plugins.db.config for the file shape. A conflicting alias, or a
+# route to an unknown alias, fails loudly there.
+PLUGIN_DB_ROUTING: dict[str, str] = {}
+_db_config_path = os.environ.get("OPENMAGPIE_DB_CONFIG")
+if _db_config_path:
+    PLUGIN_DB_ROUTING = load_db_config(_db_config_path, DATABASES, conn_max_age=DB_CONN_MAX_AGE)
+
+# One router, a no-op until an app is routed: it sends a routed app's models to
+# its declared database and keeps every other app on `default`.
+DATABASE_ROUTERS = ["plugins.db.routers.PluginAppRouter"]
 
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
@@ -214,9 +246,9 @@ EMAIL_SEND_RETRY_SECONDS = int(os.environ.get("EMAIL_SEND_RETRY_SECONDS", "300")
 
 # CORS / CSRF for the web client. Empty by default so prod has to opt-in
 # explicitly via env; `local.py` overrides with permissive dev defaults.
-CORS_ALLOWED_ORIGINS = [o.strip() for o in os.environ.get("CORS_ALLOWED_ORIGINS", "").split(",") if o.strip()]
+CORS_ALLOWED_ORIGINS = env_list("CORS_ALLOWED_ORIGINS")
 CORS_ALLOW_CREDENTIALS = True
-CSRF_TRUSTED_ORIGINS = [o.strip() for o in os.environ.get("CSRF_TRUSTED_ORIGINS", "").split(",") if o.strip()]
+CSRF_TRUSTED_ORIGINS = env_list("CSRF_TRUSTED_ORIGINS")
 
 # `auth_token` browser cookie (set by auth_api.cookies). Secure-by-default
 # in base; local.py loosens it for plain-HTTP dev. Domain is unset (host-only)

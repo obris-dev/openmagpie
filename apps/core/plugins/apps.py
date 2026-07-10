@@ -10,10 +10,10 @@ class PluginsConfig(AppConfig):
         # to the allowlist). See plugins.loader.
         from django.conf import settings
 
-        from plugins.loader import load_hooks
+        from plugins.loader import ENTRY_POINT_GROUP, load_hooks
 
         load_hooks(
             settings.PLUGIN_HOOKS,
-            entry_group="openmagpie.plugins",
+            entry_group=ENTRY_POINT_GROUP,
             allow=settings.PLUGIN_ENTRYPOINT_ALLOW,
         )

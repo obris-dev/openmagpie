@@ -1,12 +1,14 @@
 """Generic plugin registry: a `kind` string -> value map.
 
-OpenMagpie has four hand-rolled registries of this exact shape
+OpenMagpie has four hand-rolled registries of this shape
 (`watches.actions.registry`, `watches.registry`, `sources.registry`,
-`engine.registry`) -- each a module-level dict keyed by a `kind` string with
-`get`/`register`. `Registry` is the shared primitive for NEW plugin categories
+`engine.registry`), each a module-level dict keyed by a `kind` string, though
+their accessors differ (`watches.registry`, for instance, exposes
+`get_config_class` / `parse_config` and a frozen `KNOWN_KINDS`, not
+`get`/`register`). `Registry` is the shared primitive for NEW plugin categories
 (e.g. a future datastore); the existing four are intentionally left as-is.
 
-`get` raises `KeyError` on an unknown kind -- the same contract the existing
+`get` raises `KeyError` on an unknown kind, the same contract the existing
 registries use (callers already treat that as "no executor" / a clean 400).
 """
 

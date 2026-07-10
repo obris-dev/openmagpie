@@ -46,7 +46,7 @@ _ORIGINS = "https://app.openmagpie.ai,https://www.openmagpie.ai,https://openmagp
 os.environ.setdefault("CORS_ALLOWED_ORIGINS", _ORIGINS)
 os.environ.setdefault("CSRF_TRUSTED_ORIGINS", _ORIGINS)
 
-from common.env import env_bool  # noqa: E402
+from common.env import env_bool, split_csv  # noqa: E402
 
 from .base import *  # noqa: E402, F403
 
@@ -54,7 +54,7 @@ from .base import *  # noqa: E402, F403
 DEBUG = False
 
 # Host(s) this serves (seeded above; override via env).
-ALLOWED_HOSTS = [h.strip() for h in os.environ["ALLOWED_HOSTS"].split(",") if h.strip()]
+ALLOWED_HOSTS = split_csv(os.environ["ALLOWED_HOSTS"])
 
 # Allow this instance's own IP so health checks that reach it directly by IP
 # (rather than by hostname) aren't rejected by ALLOWED_HOSTS under DEBUG=False.
