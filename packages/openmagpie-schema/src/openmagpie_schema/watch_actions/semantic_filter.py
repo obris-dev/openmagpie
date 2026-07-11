@@ -6,6 +6,8 @@ from typing import Any, ClassVar
 
 from pydantic import BaseModel, Field
 
+from openmagpie_schema.watch_enums import WatchActionKind
+
 from ._engine import EngineActionConfigBase, ExternalContentStatus
 from .base import WatchActionConfigBase, WatchActionConfigSummary
 
@@ -20,7 +22,7 @@ class SemanticFilterConfig(EngineActionConfigBase):
     no feed (the Watch subscribes to feeds) and no delivery (that's the
     delivery actions)."""
 
-    CONFIG_KIND: ClassVar[str] = "semantic_filter"
+    CONFIG_KIND: ClassVar[str] = WatchActionKind.SEMANTIC_FILTER.value
 
     # What the engine scores items against (required ; an empty filter
     # would pass everything and defeat the purpose).

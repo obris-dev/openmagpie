@@ -39,9 +39,11 @@ from .columns import (
 from .errors import (
     CONTRACT_MISMATCH_MESSAGE,
     _abort_contract_mismatch,
+    _abort_union_validation_error,
     _flatten_errors,
     _handle_api_errors,
     _print_api_error,
+    _union_error_lines,
     _unreachable_message,
 )
 from .files import _maybe_to_file, _open_editor_or_abort, _read_file_or_abort
@@ -62,6 +64,7 @@ __all__ = [
     "_Page",
     "_abort_contract_mismatch",
     "_abort_unexpected",
+    "_abort_union_validation_error",
     "_active_flip_note",
     "_as_enum",
     "_build_windows",
@@ -88,6 +91,7 @@ __all__ = [
     "_read_file_or_abort",
     "_transpose_option",
     "_ts",
+    "_union_error_lines",
     "_unreachable_message",
     "col",
     "validated_window_params",

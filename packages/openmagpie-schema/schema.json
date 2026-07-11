@@ -1732,6 +1732,232 @@
       "title": "NewRedditPostPayload",
       "type": "object"
     },
+    "PluginActionInput": {
+      "description": "Fallback input member for a plugin (non-built-in) action kind. Mirrors\nPluginActionWire on the write path; `config` is required (you can't author an\naction without one) but open (validated server-side by the kind's registry).",
+      "properties": {
+        "config": {
+          "$ref": "#/$defs/PluginConfigBlob"
+        },
+        "id": {
+          "default": "",
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "maxLength": 32,
+          "minLength": 1,
+          "title": "Kind",
+          "type": "string"
+        },
+        "rank": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rank"
+        }
+      },
+      "required": [
+        "kind",
+        "config"
+      ],
+      "title": "PluginActionInput",
+      "type": "object"
+    },
+    "PluginActionWire": {
+      "description": "Fallback wire member for a plugin (non-built-in) action kind. `kind` is any\nnon-built-in string; `config` is an untyped blob (a fork's typed config schema\nlives in the fork's own contract, and its web/CLI narrow on `kind`). Selected\nonly when no built-in discriminator matches (see the left-to-right union).",
+      "properties": {
+        "config": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Config"
+        },
+        "created_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Created At"
+        },
+        "id": {
+          "default": "",
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "maxLength": 32,
+          "minLength": 1,
+          "title": "Kind",
+          "type": "string"
+        },
+        "rank": {
+          "title": "Rank",
+          "type": "integer"
+        },
+        "summary": {
+          "$ref": "#/$defs/WatchActionConfigSummary"
+        }
+      },
+      "required": [
+        "rank",
+        "kind"
+      ],
+      "title": "PluginActionWire",
+      "type": "object"
+    },
+    "PluginConfigBlob": {
+      "additionalProperties": true,
+      "description": "The write-side config for a plugin action kind: an open blob. The server\nre-validates it against the kind's registered Pydantic config (watches.registry),\nso the wire type stays permissive; `extra=\"allow\"` keeps every submitted key\nthrough `model_dump(mode=\"json\")`.",
+      "properties": {},
+      "title": "PluginConfigBlob",
+      "type": "object"
+    },
+    "PluginRunWire": {
+      "description": "Fallback run member for a plugin (non-built-in) action kind. `result` is an\nuntyped blob (a fork's typed result schema lives in its own contract). Selected\nonly when no built-in discriminator matches (left-to-right union).",
+      "properties": {
+        "action_id": {
+          "title": "Action Id",
+          "type": "string"
+        },
+        "completed_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Completed At"
+        },
+        "created_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Created At"
+        },
+        "error": {
+          "default": "",
+          "title": "Error",
+          "type": "string"
+        },
+        "feed_item_id": {
+          "title": "Feed Item Id",
+          "type": "string"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "maxLength": 32,
+          "minLength": 1,
+          "title": "Kind",
+          "type": "string"
+        },
+        "result": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Result"
+        },
+        "scheduled_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Scheduled At"
+        },
+        "started_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Started At"
+        },
+        "state": {
+          "$ref": "#/$defs/WatchActionRunState"
+        },
+        "watch_id": {
+          "title": "Watch Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "watch_id",
+        "action_id",
+        "feed_item_id",
+        "state",
+        "kind"
+      ],
+      "title": "PluginRunWire",
+      "type": "object"
+    },
+    "PluginSourceSpec": {
+      "additionalProperties": true,
+      "description": "Fallback spec member for a plugin (non-built-in) source kind. `kind` is any\nnon-built-in string; the rest of the spec is an open blob (a fork's typed spec\nschema lives in its own contract, and its web/CLI narrow on `kind`). Selected\nonly when no built-in discriminator matches (the left-to-right union below).\n`extra=\"allow\"` keeps every submitted field through `model_dump(mode=\"json\")`,\nso `canonical_spec` / `source_identity` (the spec_hash basis) stay stable.",
+      "properties": {
+        "kind": {
+          "maxLength": 32,
+          "minLength": 1,
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "title": "PluginSourceSpec",
+      "type": "object"
+    },
     "RedditSubredditSourceSpec": {
       "description": "Identity of one subreddit source. Bound to RedditSubRedditConnector.",
       "properties": {
@@ -2206,27 +2432,34 @@
           "type": "object"
         },
         "spec": {
-          "discriminator": {
-            "mapping": {
-              "hn_comment": "#/$defs/HackerNewsCommentSourceSpec",
-              "hn_feed": "#/$defs/HackerNewsFeedSourceSpec",
-              "reddit_subreddit": "#/$defs/RedditSubredditSourceSpec",
-              "rss": "#/$defs/RssSourceSpec"
-            },
-            "propertyName": "kind"
-          },
-          "oneOf": [
+          "anyOf": [
             {
-              "$ref": "#/$defs/RedditSubredditSourceSpec"
+              "discriminator": {
+                "mapping": {
+                  "hn_comment": "#/$defs/HackerNewsCommentSourceSpec",
+                  "hn_feed": "#/$defs/HackerNewsFeedSourceSpec",
+                  "reddit_subreddit": "#/$defs/RedditSubredditSourceSpec",
+                  "rss": "#/$defs/RssSourceSpec"
+                },
+                "propertyName": "kind"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/RedditSubredditSourceSpec"
+                },
+                {
+                  "$ref": "#/$defs/RssSourceSpec"
+                },
+                {
+                  "$ref": "#/$defs/HackerNewsFeedSourceSpec"
+                },
+                {
+                  "$ref": "#/$defs/HackerNewsCommentSourceSpec"
+                }
+              ]
             },
             {
-              "$ref": "#/$defs/RssSourceSpec"
-            },
-            {
-              "$ref": "#/$defs/HackerNewsFeedSourceSpec"
-            },
-            {
-              "$ref": "#/$defs/HackerNewsCommentSourceSpec"
+              "$ref": "#/$defs/PluginSourceSpec"
             }
           ],
           "title": "Spec"
@@ -2341,27 +2574,34 @@
           "type": "object"
         },
         "spec": {
-          "discriminator": {
-            "mapping": {
-              "hn_comment": "#/$defs/HackerNewsCommentSourceSpec",
-              "hn_feed": "#/$defs/HackerNewsFeedSourceSpec",
-              "reddit_subreddit": "#/$defs/RedditSubredditSourceSpec",
-              "rss": "#/$defs/RssSourceSpec"
-            },
-            "propertyName": "kind"
-          },
-          "oneOf": [
+          "anyOf": [
             {
-              "$ref": "#/$defs/RedditSubredditSourceSpec"
+              "discriminator": {
+                "mapping": {
+                  "hn_comment": "#/$defs/HackerNewsCommentSourceSpec",
+                  "hn_feed": "#/$defs/HackerNewsFeedSourceSpec",
+                  "reddit_subreddit": "#/$defs/RedditSubredditSourceSpec",
+                  "rss": "#/$defs/RssSourceSpec"
+                },
+                "propertyName": "kind"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/RedditSubredditSourceSpec"
+                },
+                {
+                  "$ref": "#/$defs/RssSourceSpec"
+                },
+                {
+                  "$ref": "#/$defs/HackerNewsFeedSourceSpec"
+                },
+                {
+                  "$ref": "#/$defs/HackerNewsCommentSourceSpec"
+                }
+              ]
             },
             {
-              "$ref": "#/$defs/RssSourceSpec"
-            },
-            {
-              "$ref": "#/$defs/HackerNewsFeedSourceSpec"
-            },
-            {
-              "$ref": "#/$defs/HackerNewsCommentSourceSpec"
+              "$ref": "#/$defs/PluginSourceSpec"
             }
           ],
           "title": "Spec"
@@ -2700,27 +2940,34 @@
       "description": "Single-action add/edit response (POST `/actions` + PUT `/actions/<id>`,\nreal and `?dry_run=true`). `dry_run` is True for a validation-only preview;\n`action` is the typed action node (a discriminated union). On a dry-run the\naction isn't persisted, so `action.id` is \"\" (WatchActionWire can't be\nsubclassed to null the id, so the response nests the action rather than\nflattening it as the pre-union shape did).",
       "properties": {
         "action": {
-          "discriminator": {
-            "mapping": {
-              "extract": "#/$defs/ExtractActionWire",
-              "log": "#/$defs/LogActionWire",
-              "semantic_filter": "#/$defs/SemanticFilterActionWire",
-              "webhook": "#/$defs/WebhookActionWire"
-            },
-            "propertyName": "kind"
-          },
-          "oneOf": [
+          "anyOf": [
             {
-              "$ref": "#/$defs/SemanticFilterActionWire"
+              "discriminator": {
+                "mapping": {
+                  "extract": "#/$defs/ExtractActionWire",
+                  "log": "#/$defs/LogActionWire",
+                  "semantic_filter": "#/$defs/SemanticFilterActionWire",
+                  "webhook": "#/$defs/WebhookActionWire"
+                },
+                "propertyName": "kind"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/SemanticFilterActionWire"
+                },
+                {
+                  "$ref": "#/$defs/ExtractActionWire"
+                },
+                {
+                  "$ref": "#/$defs/LogActionWire"
+                },
+                {
+                  "$ref": "#/$defs/WebhookActionWire"
+                }
+              ]
             },
             {
-              "$ref": "#/$defs/ExtractActionWire"
-            },
-            {
-              "$ref": "#/$defs/LogActionWire"
-            },
-            {
-              "$ref": "#/$defs/WebhookActionWire"
+              "$ref": "#/$defs/PluginActionWire"
             }
           ],
           "title": "Action"
@@ -2768,6 +3015,9 @@
               ]
             },
             {
+              "$ref": "#/$defs/PluginActionWire"
+            },
+            {
               "type": "null"
             }
           ],
@@ -2790,27 +3040,34 @@
         },
         "items": {
           "items": {
-            "discriminator": {
-              "mapping": {
-                "extract": "#/$defs/ExtractRunWire",
-                "log": "#/$defs/LogRunWire",
-                "semantic_filter": "#/$defs/SemanticFilterRunWire",
-                "webhook": "#/$defs/WebhookRunWire"
-              },
-              "propertyName": "kind"
-            },
-            "oneOf": [
+            "anyOf": [
               {
-                "$ref": "#/$defs/SemanticFilterRunWire"
+                "discriminator": {
+                  "mapping": {
+                    "extract": "#/$defs/ExtractRunWire",
+                    "log": "#/$defs/LogRunWire",
+                    "semantic_filter": "#/$defs/SemanticFilterRunWire",
+                    "webhook": "#/$defs/WebhookRunWire"
+                  },
+                  "propertyName": "kind"
+                },
+                "oneOf": [
+                  {
+                    "$ref": "#/$defs/SemanticFilterRunWire"
+                  },
+                  {
+                    "$ref": "#/$defs/ExtractRunWire"
+                  },
+                  {
+                    "$ref": "#/$defs/LogRunWire"
+                  },
+                  {
+                    "$ref": "#/$defs/WebhookRunWire"
+                  }
+                ]
               },
               {
-                "$ref": "#/$defs/ExtractRunWire"
-              },
-              {
-                "$ref": "#/$defs/LogRunWire"
-              },
-              {
-                "$ref": "#/$defs/WebhookRunWire"
+                "$ref": "#/$defs/PluginRunWire"
               }
             ]
           },
@@ -2946,6 +3203,9 @@
               ]
             },
             {
+              "$ref": "#/$defs/PluginActionWire"
+            },
+            {
               "type": "null"
             }
           ],
@@ -2975,27 +3235,34 @@
           "default": null
         },
         "run": {
-          "discriminator": {
-            "mapping": {
-              "extract": "#/$defs/ExtractRunWire",
-              "log": "#/$defs/LogRunWire",
-              "semantic_filter": "#/$defs/SemanticFilterRunWire",
-              "webhook": "#/$defs/WebhookRunWire"
-            },
-            "propertyName": "kind"
-          },
-          "oneOf": [
+          "anyOf": [
             {
-              "$ref": "#/$defs/SemanticFilterRunWire"
+              "discriminator": {
+                "mapping": {
+                  "extract": "#/$defs/ExtractRunWire",
+                  "log": "#/$defs/LogRunWire",
+                  "semantic_filter": "#/$defs/SemanticFilterRunWire",
+                  "webhook": "#/$defs/WebhookRunWire"
+                },
+                "propertyName": "kind"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/SemanticFilterRunWire"
+                },
+                {
+                  "$ref": "#/$defs/ExtractRunWire"
+                },
+                {
+                  "$ref": "#/$defs/LogRunWire"
+                },
+                {
+                  "$ref": "#/$defs/WebhookRunWire"
+                }
+              ]
             },
             {
-              "$ref": "#/$defs/ExtractRunWire"
-            },
-            {
-              "$ref": "#/$defs/LogRunWire"
-            },
-            {
-              "$ref": "#/$defs/WebhookRunWire"
+              "$ref": "#/$defs/PluginRunWire"
             }
           ],
           "title": "Run"
@@ -3023,27 +3290,34 @@
       "properties": {
         "actions": {
           "items": {
-            "discriminator": {
-              "mapping": {
-                "extract": "#/$defs/ExtractActionInput",
-                "log": "#/$defs/LogActionInput",
-                "semantic_filter": "#/$defs/SemanticFilterActionInput",
-                "webhook": "#/$defs/WebhookActionInput"
-              },
-              "propertyName": "kind"
-            },
-            "oneOf": [
+            "anyOf": [
               {
-                "$ref": "#/$defs/SemanticFilterActionInput"
+                "discriminator": {
+                  "mapping": {
+                    "extract": "#/$defs/ExtractActionInput",
+                    "log": "#/$defs/LogActionInput",
+                    "semantic_filter": "#/$defs/SemanticFilterActionInput",
+                    "webhook": "#/$defs/WebhookActionInput"
+                  },
+                  "propertyName": "kind"
+                },
+                "oneOf": [
+                  {
+                    "$ref": "#/$defs/SemanticFilterActionInput"
+                  },
+                  {
+                    "$ref": "#/$defs/ExtractActionInput"
+                  },
+                  {
+                    "$ref": "#/$defs/LogActionInput"
+                  },
+                  {
+                    "$ref": "#/$defs/WebhookActionInput"
+                  }
+                ]
               },
               {
-                "$ref": "#/$defs/ExtractActionInput"
-              },
-              {
-                "$ref": "#/$defs/LogActionInput"
-              },
-              {
-                "$ref": "#/$defs/WebhookActionInput"
+                "$ref": "#/$defs/PluginActionInput"
               }
             ]
           },
@@ -3104,27 +3378,34 @@
       "properties": {
         "actions": {
           "items": {
-            "discriminator": {
-              "mapping": {
-                "extract": "#/$defs/ExtractActionWire",
-                "log": "#/$defs/LogActionWire",
-                "semantic_filter": "#/$defs/SemanticFilterActionWire",
-                "webhook": "#/$defs/WebhookActionWire"
-              },
-              "propertyName": "kind"
-            },
-            "oneOf": [
+            "anyOf": [
               {
-                "$ref": "#/$defs/SemanticFilterActionWire"
+                "discriminator": {
+                  "mapping": {
+                    "extract": "#/$defs/ExtractActionWire",
+                    "log": "#/$defs/LogActionWire",
+                    "semantic_filter": "#/$defs/SemanticFilterActionWire",
+                    "webhook": "#/$defs/WebhookActionWire"
+                  },
+                  "propertyName": "kind"
+                },
+                "oneOf": [
+                  {
+                    "$ref": "#/$defs/SemanticFilterActionWire"
+                  },
+                  {
+                    "$ref": "#/$defs/ExtractActionWire"
+                  },
+                  {
+                    "$ref": "#/$defs/LogActionWire"
+                  },
+                  {
+                    "$ref": "#/$defs/WebhookActionWire"
+                  }
+                ]
               },
               {
-                "$ref": "#/$defs/ExtractActionWire"
-              },
-              {
-                "$ref": "#/$defs/LogActionWire"
-              },
-              {
-                "$ref": "#/$defs/WebhookActionWire"
+                "$ref": "#/$defs/PluginActionWire"
               }
             ]
           },
@@ -3194,27 +3475,34 @@
       "properties": {
         "actions": {
           "items": {
-            "discriminator": {
-              "mapping": {
-                "extract": "#/$defs/ExtractActionWire",
-                "log": "#/$defs/LogActionWire",
-                "semantic_filter": "#/$defs/SemanticFilterActionWire",
-                "webhook": "#/$defs/WebhookActionWire"
-              },
-              "propertyName": "kind"
-            },
-            "oneOf": [
+            "anyOf": [
               {
-                "$ref": "#/$defs/SemanticFilterActionWire"
+                "discriminator": {
+                  "mapping": {
+                    "extract": "#/$defs/ExtractActionWire",
+                    "log": "#/$defs/LogActionWire",
+                    "semantic_filter": "#/$defs/SemanticFilterActionWire",
+                    "webhook": "#/$defs/WebhookActionWire"
+                  },
+                  "propertyName": "kind"
+                },
+                "oneOf": [
+                  {
+                    "$ref": "#/$defs/SemanticFilterActionWire"
+                  },
+                  {
+                    "$ref": "#/$defs/ExtractActionWire"
+                  },
+                  {
+                    "$ref": "#/$defs/LogActionWire"
+                  },
+                  {
+                    "$ref": "#/$defs/WebhookActionWire"
+                  }
+                ]
               },
               {
-                "$ref": "#/$defs/ExtractActionWire"
-              },
-              {
-                "$ref": "#/$defs/LogActionWire"
-              },
-              {
-                "$ref": "#/$defs/WebhookActionWire"
+                "$ref": "#/$defs/PluginActionWire"
               }
             ]
           },

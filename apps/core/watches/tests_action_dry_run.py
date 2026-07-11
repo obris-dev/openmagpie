@@ -7,6 +7,8 @@ preview keeps the existing action's (unchanged) id. Validation runs identically
 preview exactly as on a real write.
 """
 
+import json
+
 from django.test import TestCase
 from rest_framework.test import APIClient
 
@@ -67,6 +69,24 @@ class WatchActionDryRunTests(TestCase):
         )
         self.assertEqual(resp.status_code, 400, resp.content)  # same validation as a real add
         self.assertEqual(WatchAction.objects.count(), before)  # nothing persisted on the error path
+
+    def test_bad_config_400_body_is_clean_per_field(self) -> None:
+        # Regression: the single-action endpoints must emit per-field config errors, not
+        # the extensible-union's internal `tagged-union[...]` prefix or its plugin-branch
+        # "built-in kind" error. semantic_filter here: instructions missing, threshold > 1.
+        resp = self.client.post(
+            f"/v1/watches/{self.watch_id}/actions?dry_run=true",
+            {"kind": "semantic_filter", "config": {"threshold": 5}},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 400, resp.content)
+        body = resp.json()
+        self.assertIn("instructions", body["config"])  # the missing field, named
+        self.assertIn("threshold", body["config"])  # the out-of-range field, named
+        blob = json.dumps(body)
+        self.assertNotIn("tagged-union", blob)  # no union machinery leaked into the body
+        self.assertNotIn("PluginActionInput", blob)
+        self.assertNotIn("built-in kind", blob)
 
     def test_extract_dry_run_previews_and_validates(self) -> None:
         # A valid extract action previews (200, nothing persisted)...
@@ -175,8 +195,8 @@ class CorruptConfigWireTests(TestCase):
     def test_unknown_kind_skips_the_row(self) -> None:
         from watches.serializers import watch_action_wire
 
-        # A corrupt kind column (not a known action kind) selects no union member,
-        # so the row is skipped (None) rather than 500-ing the read. Callers over a
-        # list drop it; the KNOWN_KINDS invariant test rules this out for live data.
+        # A corrupt kind column (not a known action kind) is skipped by the
+        # known_kinds() gate (None) rather than 500-ing the read. Callers over a
+        # list drop it; the registry invariant test rules this out for live data.
         action = WatchAction(kind="not_a_kind", config={}, rank=0)
         self.assertIsNone(watch_action_wire(action))

@@ -1,7 +1,7 @@
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 
-from common.models import BaseModel
+from common.models import KIND_MAX_LENGTH, BaseModel
 
 
 class WatchAction(BaseModel):
@@ -24,8 +24,12 @@ class WatchAction(BaseModel):
 
     account_id = models.CharField(_("account id"), max_length=26)
     path_id = models.CharField(_("path id"), max_length=26)
+    # The column now legitimately holds a built-in WatchActionKind OR a registered plugin
+    # kind (the union is extensible). help_text still names WatchActionKind (the built-in
+    # case) and is left as-is on purpose: rewording it would generate a DB-no-op AlterField
+    # migration, which this change deliberately avoids.
     kind = models.CharField(
-        _("kind"), max_length=32, help_text=_("WatchActionKind value; selects impl + config contract")
+        _("kind"), max_length=KIND_MAX_LENGTH, help_text=_("WatchActionKind value; selects impl + config contract")
     )
     config = models.JSONField(_("config"), default=dict, help_text=_("Kind-specific config blob, validated per kind"))
     rank = models.PositiveIntegerField(_("rank"), help_text=_("Dense 0-based position within the path"))

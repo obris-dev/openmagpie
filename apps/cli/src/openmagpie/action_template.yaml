@@ -18,7 +18,10 @@ config:
   threshold: 0.7   # pass when relevance >= this (0.0 < threshold <= 1.0)
   # engine: {kind: "", model: ""}   # optional; empty = server default
 
-# --- Other kinds (replace the `kind` + `config` above with one of these) -----
+# --- Other built-in kinds (replace the `kind` + `config` above with one) --------
+# (Not exhaustive: a deployment may register additional plugin kinds. The server
+# accepts any registered kind. For a fork's kinds and their `config` shape, ask your
+# operator or run `magpie watch action get <id>` on an existing action of that kind.)
 #
 # extract: pull a declared set of fields out of each item with the LLM and
 # record them on the run, to export later with `magpie activity export`. Hydration only

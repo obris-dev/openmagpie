@@ -1,7 +1,7 @@
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 
-from common.models import BaseModel
+from common.models import KIND_MAX_LENGTH, BaseModel
 from watches.constants import WatchActionBackfillState
 
 
@@ -42,8 +42,12 @@ class WatchActionBackfill(BaseModel):
     # Denormalized target kind (like WatchActionRun.kind), so the job (and its wire
     # shape) still render if the action is later deleted. The processor enqueues runs
     # with the action's LIVE kind, not this pin, so a mid-flight kind edit doesn't
-    # matter; this is purely for rendering a job whose action is gone.
-    kind = models.CharField(_("kind"), max_length=32, default="", help_text=_("target WatchActionKind value"))
+    # matter; this is purely for rendering a job whose action is gone. Holds a built-in
+    # WatchActionKind OR a registered plugin kind (extensible union); help_text still
+    # names WatchActionKind and is left as-is to avoid a DB-no-op AlterField migration.
+    kind = models.CharField(
+        _("kind"), max_length=KIND_MAX_LENGTH, default="", help_text=_("target WatchActionKind value")
+    )
     # replace=False -> additive (fill only never-processed items). replace=True ->
     # regenerate the whole chain from the target down for the matched items.
     replace = models.BooleanField(_("replace"), default=False)

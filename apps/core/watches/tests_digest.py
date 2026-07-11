@@ -5,19 +5,24 @@ import ulid
 from django.conf import settings
 from django.test import TestCase, override_settings
 from django.utils import timezone
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 
 from feeds.models import FeedItem
 from openmagpie_schema.watch import build_watch_action_input
 from openmagpie_schema.watch_actions import LogConfig
 from openmagpie_schema.watch_enums import DeliveryCadence, WatchActionRunState
+from watches import registry as config_registry
 from watches.actions.log import LogAction
-from watches.actions.protocol import ActionResult
-from watches.models import WatchAction, WatchActionDigestWindow, WatchActionRun
+from watches.actions.protocol import ActionResult, OutboundActionResult, OutboundCall
+from watches.models import WatchAction, WatchActionDelivery, WatchActionDigestWindow, WatchActionRun
 from watches.operations.digest_flush import WatchDigestFlushOperation
 from watches.operations.drain import WatchDrainOperation
 from watches.policy import PolicyError
 from watches.services import WatchActionRunService, WatchDigestWindowService, WatchService
+
+
+class _ScoreResult(BaseModel):
+    score: int
 
 
 class DigestDeliveryTests(TestCase):
@@ -103,6 +108,41 @@ class DigestDeliveryTests(TestCase):
         self.assertEqual(self._count(str(a1.id), "succeeded"), 3)
         window.refresh_from_db()
         self.assertIsNone(window.close_at)
+
+    def test_nonconforming_result_errors_the_digest_batch(self) -> None:
+        # Result-schema enforcement runs on the DIGEST flush path (not just the instant
+        # drain): a SUCCEEDED batch whose result violates the kind's registered schema
+        # is marked ERRORED. Injects the schema into the registry directly (the flushed
+        # kind is a built-in here, which register_result would refuse) and patches the
+        # impl to return the bad result, so this drives the real WatchDigestFlushOperation.
+        now = timezone.now()
+        _, a1, window = self._digest_window_with_items(3, now=now)
+        bad = ActionResult(state=WatchActionRunState.SUCCEEDED, result={"score": "x"})
+        later = window.close_at + timedelta(seconds=1)
+        with (
+            mock.patch.dict(config_registry._RESULT_REGISTRY, {LogConfig.CONFIG_KIND: _ScoreResult}, clear=False),
+            mock.patch.object(LogAction, "run", return_value=bad),
+        ):
+            self._flush_due(later)
+        self.assertEqual(self._count(str(a1.id), "errored"), 3)
+        self.assertEqual(self._count(str(a1.id), "succeeded"), 0)
+
+    def test_violating_outbound_digest_result_still_records_delivery(self) -> None:
+        # A digest delivery that really POSTed but returned a schema-violating result is
+        # ERRORED, yet its outbound audit row is still written (the OutboundActionResult
+        # subtype is preserved through enforcement).
+        now = timezone.now()
+        _, a1, window = self._digest_window_with_items(2, now=now)
+        call = OutboundCall(target_host="x.test", method="POST", http_status=200, item_count=2, request_payload={})
+        bad = OutboundActionResult(state=WatchActionRunState.SUCCEEDED, result={"score": "x"}, outbound=call)
+        later = window.close_at + timedelta(seconds=1)
+        with (
+            mock.patch.dict(config_registry._RESULT_REGISTRY, {LogConfig.CONFIG_KIND: _ScoreResult}, clear=False),
+            mock.patch.object(LogAction, "run", return_value=bad),
+        ):
+            self._flush_due(later)
+        self.assertEqual(self._count(str(a1.id), "errored"), 2)
+        self.assertTrue(WatchActionDelivery.objects.filter(action_id=str(a1.id)).exists())
 
     def test_persistent_failure_exhausts_and_closes_window(self) -> None:
         # A down destination must not spiral: each failed flush burns one

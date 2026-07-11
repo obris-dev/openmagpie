@@ -8,10 +8,12 @@ narrows `config` to its exact type.
 """
 
 from datetime import datetime
-from typing import Annotated, Any, Literal
+from enum import Enum
+from typing import Annotated, Any, Literal, get_args
 
-from pydantic import BaseModel, Field, TypeAdapter
+from pydantic import BaseModel, Field, TypeAdapter, field_validator
 
+from .._unions import _PLUGIN_MEMBER_LOC_NAMES, KIND_MAX_LENGTH, builtin_union_kinds, reject_builtin_kind
 from ..watch_actions import (
     ExtractConfig,
     LogConfig,
@@ -19,7 +21,11 @@ from ..watch_actions import (
     WatchActionConfigSummary,
     WebhookConfig,
 )
-from ..watch_enums import WatchActionKind
+from ..watch_enums import BUILTIN_ACTION_KINDS, WatchActionKind
+
+# Built-in action kinds (the shared exported set); the plugin fallback members reject
+# these so a malformed built-in config can't be absorbed as a raw blob.
+_BUILTIN_KINDS = BUILTIN_ACTION_KINDS
 
 # An action node is a discriminated union keyed by `kind`. `config` is the PURE
 # kind-specific typed shape (NO `kind` nested inside; `kind` is the sibling
@@ -28,7 +34,7 @@ from ..watch_enums import WatchActionKind
 # exact type. The server validates + builds these via the kind registry.
 
 
-class _WatchActionWireFields(BaseModel):
+class WatchActionWireFields(BaseModel):
     """Kind-independent fields every action node carries on the wire.
 
     `id` is "" only on a dry-run preview (the action isn't persisted yet); a
@@ -46,33 +52,52 @@ class _WatchActionWireFields(BaseModel):
 # longer types (a manual DB edit, a tightened schema) degrades to None rather than
 # 500 the list, mirroring the run wire's `result: <Typed> | None`. The INPUT
 # members below keep config REQUIRED (you can't author an action without one).
-class SemanticFilterActionWire(_WatchActionWireFields):
+class SemanticFilterActionWire(WatchActionWireFields):
     kind: Literal[WatchActionKind.SEMANTIC_FILTER] = WatchActionKind.SEMANTIC_FILTER
     config: SemanticFilterConfig | None = None
 
 
-class ExtractActionWire(_WatchActionWireFields):
+class ExtractActionWire(WatchActionWireFields):
     kind: Literal[WatchActionKind.EXTRACT] = WatchActionKind.EXTRACT
     config: ExtractConfig | None = None
 
 
-class LogActionWire(_WatchActionWireFields):
+class LogActionWire(WatchActionWireFields):
     kind: Literal[WatchActionKind.LOG] = WatchActionKind.LOG
     config: LogConfig | None = None
 
 
-class WebhookActionWire(_WatchActionWireFields):
+class WebhookActionWire(WatchActionWireFields):
     kind: Literal[WatchActionKind.WEBHOOK] = WatchActionKind.WEBHOOK
     config: WebhookConfig | None = None
 
 
-# One action node on the wire: a discriminated union keyed by `kind` (a plain
-# type alias, like SourceSpec, so `action.kind` / `action.config` read straight
-# off the narrowed member with no wrapper).
-WatchActionWire = Annotated[
+class PluginActionWire(WatchActionWireFields):
+    """Fallback wire member for a plugin (non-built-in) action kind. `kind` is any
+    non-built-in string; `config` is an untyped blob (a fork's typed config schema
+    lives in the fork's own contract, and its web/CLI narrow on `kind`). Selected
+    only when no built-in discriminator matches (see the left-to-right union)."""
+
+    kind: str = Field(min_length=1, max_length=KIND_MAX_LENGTH)
+    config: dict[str, Any] | None = None
+
+    @field_validator("kind")
+    @classmethod
+    def _not_builtin(cls, v: str) -> str:
+        return reject_builtin_kind(v, _BUILTIN_KINDS)
+
+
+# One action node on the wire, keyed by `kind`: the four built-ins as a
+# discriminated union, then a left-to-right fallthrough to the plugin member for
+# any other kind. A built-in tag always takes its typed branch; a built-in whose
+# config is malformed fails BOTH branches (the plugin member rejects built-in
+# kinds), so the server's per-row catch still degrades it to config=None rather
+# than the fallback silently absorbing a corrupt built-in config as a raw dict.
+_BuiltinWatchActionWire = Annotated[
     SemanticFilterActionWire | ExtractActionWire | LogActionWire | WebhookActionWire,
     Field(discriminator="kind"),
 ]
+WatchActionWire = Annotated[_BuiltinWatchActionWire | PluginActionWire, Field(union_mode="left_to_right")]
 
 # The union is a type alias, not a class, so it has no `.model_validate`; this
 # adapter is the single validation entry (both the server builders and the CLI
@@ -103,7 +128,7 @@ def build_watch_action_wire(
     return watch_action_wire_adapter.validate_python(payload)
 
 
-class _WatchActionInputFields(BaseModel):
+class WatchActionInputFields(BaseModel):
     """Kind-independent fields on a create / edit / add-action request.
 
     `id` is the STABLE identity of an existing action, carried back on a
@@ -121,34 +146,100 @@ class _WatchActionInputFields(BaseModel):
     model_config = {"extra": "ignore"}
 
 
-class SemanticFilterActionInput(_WatchActionInputFields):
+class SemanticFilterActionInput(WatchActionInputFields):
     kind: Literal[WatchActionKind.SEMANTIC_FILTER] = WatchActionKind.SEMANTIC_FILTER
     config: SemanticFilterConfig
 
 
-class ExtractActionInput(_WatchActionInputFields):
+class ExtractActionInput(WatchActionInputFields):
     kind: Literal[WatchActionKind.EXTRACT] = WatchActionKind.EXTRACT
     config: ExtractConfig
 
 
-class LogActionInput(_WatchActionInputFields):
+class LogActionInput(WatchActionInputFields):
     kind: Literal[WatchActionKind.LOG] = WatchActionKind.LOG
     config: LogConfig
 
 
-class WebhookActionInput(_WatchActionInputFields):
+class WebhookActionInput(WatchActionInputFields):
     kind: Literal[WatchActionKind.WEBHOOK] = WatchActionKind.WEBHOOK
     config: WebhookConfig
 
 
-# One action on a create / edit / add-action request: a discriminated union
-# keyed by `kind`, with `config` the pure typed kind-specific shape. A plain
-# type alias (like SourceSpec) so field access needs no wrapper; the persisted
-# blob stays the pure config (no `kind` nested inside).
-WatchActionInput = Annotated[
+class PluginConfigBlob(BaseModel):
+    """The write-side config for a plugin action kind: an open blob. The server
+    re-validates it against the kind's registered Pydantic config (watches.registry),
+    so the wire type stays permissive; `extra="allow"` keeps every submitted key
+    through `model_dump(mode="json")`."""
+
+    model_config = {"extra": "allow"}
+
+
+class PluginActionInput(WatchActionInputFields):
+    """Fallback input member for a plugin (non-built-in) action kind. Mirrors
+    PluginActionWire on the write path; `config` is required (you can't author an
+    action without one) but open (validated server-side by the kind's registry)."""
+
+    kind: str = Field(min_length=1, max_length=KIND_MAX_LENGTH)
+    config: PluginConfigBlob
+
+    @field_validator("kind")
+    @classmethod
+    def _not_builtin(cls, v: str) -> str:
+        return reject_builtin_kind(v, _BUILTIN_KINDS)
+
+
+# One action on a create / edit / add-action request, keyed by `kind`: the four
+# built-ins as a discriminated union, then a left-to-right fallthrough to the
+# plugin member (same discipline as WatchActionWire). The persisted blob stays the
+# pure config (no `kind` nested inside).
+_BuiltinWatchActionInput = Annotated[
     SemanticFilterActionInput | ExtractActionInput | LogActionInput | WebhookActionInput,
     Field(discriminator="kind"),
 ]
+WatchActionInput = Annotated[_BuiltinWatchActionInput | PluginActionInput, Field(union_mode="left_to_right")]
+
+# Import-time parity guard (the enum-side analogue of configs.py's source guard): the
+# built-in members of BOTH unions must be exactly the WatchActionKind enum, so the
+# enum-derived _BUILTIN_KINDS the plugin fallback rejects can't drift from what the
+# unions actually discriminate. The activity-failsafe test also pins this; the raise
+# makes it loud at import for a fork.
+for _name, _union in (("WatchActionWire", _BuiltinWatchActionWire), ("WatchActionInput", _BuiltinWatchActionInput)):
+    if builtin_union_kinds(_union) != _BUILTIN_KINDS:
+        raise RuntimeError(
+            f"{_name} built-in members {sorted(builtin_union_kinds(_union))} != "
+            f"WatchActionKind {sorted(_BUILTIN_KINDS)}"
+        )
+
+# Cross-pin each built-in member's `kind` Literal to its config class's CONFIG_KIND (the
+# action analogue of configs.py's SOURCE_KIND pin). The discriminator Literal, the enum,
+# and the config's own declared CONFIG_KIND are three INDEPENDENT declarations; without
+# this a member could validate as one kind while its config's registration key claims
+# another (the config registry keys on CONFIG_KIND). Core's BuiltinActionKindInvariantTests
+# catches this drift downstream, but pinning it here makes the package self-defending,
+# matching the source side. Derive the members from the union (like configs.py's pin),
+# NOT a hand-written tuple: a fifth built-in added to the union would otherwise pass the
+# kind-set guard above but silently skip this pin, half-recreating the drift it closes.
+for _member in get_args(get_args(_BuiltinWatchActionInput)[0]):
+    _literal = get_args(_member.model_fields["kind"].annotation)
+    _config_kind = getattr(_member.model_fields["config"].annotation, "CONFIG_KIND", None)
+    # Normalize each Literal via `.value` (guarded), exactly like builtin_union_kinds, so
+    # the pin doesn't depend on WatchActionKind being a StrEnum: `str()` would yield
+    # "WatchActionKind.X" for a plain Enum and raise a false import-time RuntimeError for
+    # every consumer. The set compares the "exactly one, and it matches" check in one go.
+    _kinds = {v.value if isinstance(v, Enum) else v for v in _literal}
+    if _kinds != {_config_kind}:
+        raise RuntimeError(
+            f"{_member.__name__}: kind Literal {_literal} must match its config's CONFIG_KIND {_config_kind!r}; "
+            f"the discriminator and the config registration key would otherwise diverge"
+        )
+
+# Pin the fallback member names against the hand-maintained set in `_unions` (which sits
+# below this module, so it can't reference the classes): a rename here that isn't
+# mirrored there would silently turn off clean_union_errors' loc-stripping.
+for _member in (PluginActionWire, PluginActionInput):
+    if _member.__name__ not in _PLUGIN_MEMBER_LOC_NAMES:
+        raise RuntimeError(f"{_member.__name__} missing from _unions._PLUGIN_MEMBER_LOC_NAMES")
 
 # Companion adapter for the write-side union (see watch_action_wire_adapter):
 # the single validation entry for a `{kind, config, ...}` action request dict.

@@ -37,6 +37,7 @@ from .._shared import (
     _transpose_option,
 )
 from ._apps import WATCH_TEMPLATE_YAML, watch_app
+from ._config import _edit_seed_config
 from ._render import _WATCH_COLUMNS, _print_watch
 
 # ── Template ───────────────────────────────────────────────────────────
@@ -273,14 +274,13 @@ def _action_edit_seed(a: WatchActionWire) -> dict[str, Any]:
     an empty `{}` placeholder for the operator to fill rather than crash on the
     None (and rather than feed a None to `build_watch_action_input`, which needs a
     dict). A readable config still round-trips through the typed input envelope."""
-    if a.config is None:
+    config, corrupt = _edit_seed_config(a)  # shared corrupt-degrade rule (see _config)
+    if corrupt:
         # Match the readable branch's dump so the two seed shapes don't drift:
         # `str(kind)` (a plain string, not the enum) and `rank: None`
         # (build_watch_action_input leaves rank unset -> null).
-        return {"id": a.id, "kind": str(a.kind), "rank": None, "config": {}}
-    return build_watch_action_input(id=a.id, kind=a.kind, config=a.config.model_dump(mode="json")).model_dump(
-        mode="json"
-    )
+        return {"id": a.id, "kind": str(a.kind), "rank": None, "config": config}
+    return build_watch_action_input(id=a.id, kind=a.kind, config=config).model_dump(mode="json")
 
 
 def _corrupt_config_note(actions: list[WatchActionWire]) -> str | None:

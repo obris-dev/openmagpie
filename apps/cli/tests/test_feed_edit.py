@@ -73,5 +73,48 @@ class SourcesIgnoredNoteTests(unittest.TestCase):
             self.assertIn(f"-f {_FILE_PLACEHOLDER}", note)
 
 
+class ParseSetPayloadErrorTests(unittest.TestCase):
+    """`feed source set` renders a malformed BUILT-IN source spec as clean per-field
+    errors, not the extensible-union's internal noise (shared clean_union_errors)."""
+
+    def test_malformed_builtin_spec_renders_clean(self) -> None:
+        from unittest import mock
+
+        import typer
+
+        from openmagpie.commands.feed._sources import _parse_set_payload
+
+        text = '{"sources": [{"spec": {"kind": "rss", "url": "not-a-url"}}]}'
+        # The per-field printing lives in the shared _abort_union_validation_error, so
+        # patch the console it uses (not the caller module's).
+        with (
+            mock.patch("openmagpie.commands._shared.errors.console") as console_mock,
+            self.assertRaises(typer.Exit),
+        ):
+            _parse_set_payload(text, "src.json")
+        msgs = " ".join(str(c.args[0]) for c in console_mock.error.call_args_list)
+        self.assertNotIn("tagged-union", msgs)  # union machinery stripped
+        self.assertNotIn("built-in kind", msgs)  # plugin fallback's contract line dropped
+        self.assertIn("url", msgs)  # the per-field path survives
+
+    def test_padded_fallback_kind_renders_clean(self) -> None:
+        from unittest import mock
+
+        import typer
+
+        from openmagpie.commands.feed._sources import _parse_set_payload
+
+        text = '{"sources": [{"spec": {"kind": " rss ", "url": "https://x.test/f"}}]}'
+        with (
+            mock.patch("openmagpie.commands._shared.errors.console") as console_mock,
+            self.assertRaises(typer.Exit),
+        ):
+            _parse_set_payload(text, "src.json")
+        msgs = " ".join(str(c.args[0]) for c in console_mock.error.call_args_list)
+        self.assertNotIn("does not match any of the expected tags", msgs)  # union_tag_invalid dropped
+        self.assertNotIn("tagged-union", msgs)
+        self.assertIn("padded", msgs)  # the real "kind must not be padded" error survives
+
+
 if __name__ == "__main__":
     unittest.main()

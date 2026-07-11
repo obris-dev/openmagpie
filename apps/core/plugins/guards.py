@@ -11,6 +11,8 @@ touch the app registry or import models (that would break settings loading).
 
 from __future__ import annotations
 
+import keyword
+
 from django.core.exceptions import ImproperlyConfigured
 
 from common.env import split_csv
@@ -60,3 +62,40 @@ def resolve_entrypoint_allow(raw: str | None, *, default_when_unset: list[str] |
     if names:
         return names
     return default_when_unset
+
+
+def resolve_plugin_api_urls(raw: str | None) -> list[str]:
+    """Parse OPENMAGPIE_PLUGIN_API_URLS into a list of urlconf MODULE paths.
+
+    Each comma-separated entry is a dotted module path (e.g. `myfork.urls`), like
+    the other OPENMAGPIE_PLUGIN_* module references. conf.urls includes each UNDER
+    the API version prefix, so the fork writes version-relative routes (no repeated
+    or hardcoded `v1`) and adds REST endpoints with zero core edits. This only validates
+    the dotted-path SYNTAX (each segment a non-keyword identifier): a malformed entry
+    fails loud here at boot, but a well-formed path to a module that doesn't exist still
+    surfaces as a bare ModuleNotFoundError at include() time. Unset -> []."""
+    modules: list[str] = []
+    for entry in split_csv(raw or ""):
+        # Every dot-separated segment must be a non-keyword Python identifier. This
+        # rejects a path/assignment/empty-segment AND embedded whitespace or
+        # separators (tab, newline, `;`) that a "contains a space" check would miss
+        # (split_csv only strips the edges); the keyword check keeps the friendly
+        # boot error tight (a segment like `import` is a valid identifier lexically
+        # but can never name a real module).
+        segments = entry.split(".")
+        if not all(seg.isidentifier() and not keyword.iskeyword(seg) for seg in segments):
+            raise ImproperlyConfigured(
+                f"OPENMAGPIE_PLUGIN_API_URLS entry {entry!r} must be a dotted urlconf module path (e.g. 'myfork.urls')"
+            )
+        modules.append(entry)
+    # A repeated module double-includes (the second copy silently dead-routes), so
+    # reject it as a config typo. Overlapping ROUTE paths across modules can't be
+    # detected here (they're regexes); Django resolves first-match-wins and core's
+    # patterns are listed before these, so a core route that MATCHES is served by core.
+    # It's not absolute, though: Django backtracks past a core include that 404s
+    # internally, so a sub-path core doesn't serve can fall through to a plugin (see
+    # conf/urls.py). A plugin can't take over a route core actually serves.
+    dupes = sorted({m for m in modules if modules.count(m) > 1})
+    if dupes:
+        raise ImproperlyConfigured(f"OPENMAGPIE_PLUGIN_API_URLS contains duplicate module(s): {dupes}")
+    return modules

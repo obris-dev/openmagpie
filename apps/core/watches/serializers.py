@@ -31,7 +31,7 @@ from openmagpie_schema.watch import (
 from openmagpie_schema.watch_actions import WatchActionConfigSummary
 from watches.models import Watch, WatchAction
 from watches.policy import PolicyError
-from watches.registry import KNOWN_KINDS, load_config, validate_config
+from watches.registry import known_kinds, load_config, validate_config
 
 logger = logging.getLogger("watches")
 
@@ -60,11 +60,12 @@ class WatchCreateSerializer(serializers.Serializer):
         self._validate_feed_ids(attrs.get("feed_ids") or [])
         validated_actions: list[WatchActionInput] = []
         errors: dict[str, Any] = {}
+        kinds = known_kinds()  # read once; the registry is fixed for the request
         for i, raw in enumerate(attrs.get("actions") or []):
             kind = raw.get("kind") if isinstance(raw, dict) else None
             config = raw.get("config") if isinstance(raw, dict) else None
-            if kind not in KNOWN_KINDS:
-                errors[str(i)] = {"kind": [f"unknown action kind {kind!r}; known: {sorted(KNOWN_KINDS)}"]}
+            if kind not in kinds:
+                errors[str(i)] = {"kind": [f"unknown action kind {kind!r}; known: {sorted(kinds)}"]}
                 continue
             if not isinstance(config, dict):
                 errors[str(i)] = {"config": ["this field is required and must be an object"]}
@@ -149,10 +150,13 @@ def _is_unsaved(action: WatchAction) -> bool:
     return action._state.adding
 
 
-def watch_action_wire(action: WatchAction) -> WatchActionWire | None:
+def watch_action_wire(action: WatchAction, *, known: frozenset[str] | None = None) -> WatchActionWire | None:
     """One action's wire shape (redacted typed config + display summary). `id` is
     empty for an UNSAVED row (a dry-run preview built in memory), real for a
     persisted one - so previews and reads share this one serializer.
+
+    `known` is the known-kinds set; pass it when rendering a LIST so the frozenset is
+    built once, not per row (it's fixed for the request). Omit for a single row.
 
     Two at-rest degrades keep a `many` read from 500-ing on one bad row:
     - a config that no longer types renders with `config=None` (`_action_redacted`
@@ -160,12 +164,13 @@ def watch_action_wire(action: WatchAction) -> WatchActionWire | None:
       to validate into its member, belt-and-suspenders; the summary already fell
       back to empty independently).
     - a `kind` that isn't a known action kind can't select ANY union member, so
-      the row is SKIPPED (returns None) and the caller drops it. The KNOWN_KINDS
-      invariant test rules this out for live data; this is the corrupt-kind-column
-      backstop, mirroring the run wire's kind guard."""
+      the row is SKIPPED (returns None) and the caller drops it. The
+      set(WatchActionKind) subset-of known_kinds() invariant test rules this out
+      for live data; this is the corrupt-kind-column backstop, mirroring the run
+      wire's kind guard."""
     kind = str(action.kind)
     ref = "preview" if _is_unsaved(action) else action.id
-    if kind not in KNOWN_KINDS:
+    if kind not in (known if known is not None else known_kinds()):
         logger.error("action %s has an unrenderable kind=%s; skipping the row", ref, kind)
         return None
     common = {
@@ -182,7 +187,9 @@ def watch_action_wire(action: WatchAction) -> WatchActionWire | None:
         return build_watch_action_wire(config=None, **common)
 
 
-def watch_action_input_wire(action: WatchActionInput, rank: int) -> WatchActionWire:
+def watch_action_input_wire(
+    action: WatchActionInput, rank: int, *, known: frozenset[str] | None = None
+) -> WatchActionWire:
     """Wire shape for a not-yet-persisted action (a whole-watch dry-run preview).
     Re-validates the config (shape + policy) so it redacts the SAME normalized
     blob the single-action dry-run does - the two preview surfaces stay
@@ -200,7 +207,7 @@ def watch_action_input_wire(action: WatchActionInput, rank: int) -> WatchActionW
     config = validate_config(action.kind, action.config.model_dump(mode="json")).model_dump(mode="json")
     # validate_config above rejects an unknown kind, so watch_action_wire always
     # builds here (never the corrupt-kind None); assert narrows for the type.
-    wire = watch_action_wire(WatchAction(kind=action.kind, config=config, rank=rank))
+    wire = watch_action_wire(WatchAction(kind=action.kind, config=config, rank=rank), known=known)
     assert wire is not None
     return wire
 
@@ -234,9 +241,10 @@ def watch_wire(watch: Watch, *, feed_ids: list[str]) -> WatchWire:
 
 def watch_view(watch: Watch, *, feed_ids: list[str], actions: list[WatchAction]) -> WatchView:
     """GET-detail response: envelope + the initial path's ordered chain."""
+    known = known_kinds()  # read once for the whole chain
     return WatchView(
         **watch_wire(watch, feed_ids=feed_ids).model_dump(),
-        actions=[wire for a in actions if (wire := watch_action_wire(a)) is not None],
+        actions=[wire for a in actions if (wire := watch_action_wire(a, known=known)) is not None],
     )
 
 
@@ -245,8 +253,9 @@ def watch_mutation(
 ) -> WatchMutationResponse:
     """Create / edit response: envelope + chain + dry_run, so the CLI's
     confirm-preview shows the resulting watch."""
+    known = known_kinds()  # read once for the whole chain
     return WatchMutationResponse(
         **watch_wire(watch, feed_ids=feed_ids).model_dump(),
-        actions=[wire for a in actions if (wire := watch_action_wire(a)) is not None],
+        actions=[wire for a in actions if (wire := watch_action_wire(a, known=known)) is not None],
         dry_run=dry_run,
     )

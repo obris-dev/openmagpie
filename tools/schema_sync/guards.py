@@ -11,11 +11,18 @@ import inspect
 import json
 import pkgutil
 from collections import Counter
+from collections.abc import Sequence
+from types import ModuleType
 from typing import Any
 
 from pydantic import BaseModel
 
 import openmagpie_schema
+
+# The packages the coverage guards walk by default: just the core schema package. A
+# fork passes `(openmagpie_schema, myfork_schema)`. Named once here (shared by
+# discovered_models + generate.render/guard_failure) so the default isn't restated.
+DEFAULT_DISCOVERY_PACKAGES: tuple[ModuleType, ...] = (openmagpie_schema,)
 
 
 def _reraise(name: str) -> None:
@@ -27,22 +34,29 @@ def _reraise(name: str) -> None:
     raise
 
 
-def discovered_models() -> list[tuple[str, str]]:
-    """(name, defining module) for every concrete BaseModel in the package.
+def discovered_models(packages: Sequence[ModuleType] = DEFAULT_DISCOVERY_PACKAGES) -> list[tuple[str, str]]:
+    """(name, defining module) for every concrete BaseModel in each package.
 
-    Walks the package so a newly added model is discovered automatically. Keyed
+    Walks each package so a newly added model is discovered automatically. Keyed
     by defining module (not import site), so a re-exported class dedups while
-    two DISTINCT classes sharing a name surface as two entries (a collision)."""
-    pkg = openmagpie_schema.__name__
+    two DISTINCT classes sharing a name surface as two entries (a collision).
+
+    Defaults to the core `openmagpie_schema`. A FORK passes BOTH its own schema
+    package and `openmagpie_schema` (e.g. `(openmagpie_schema, myfork_schema)`) so
+    the completeness + stale-exclusion guards cover its models AND the core ones it
+    reuses; otherwise a fork gets no coverage of its own classes and false-positive
+    stale exclusions for the core names in its excluded set."""
     found: set[tuple[str, str]] = set()
-    for info in pkgutil.walk_packages(openmagpie_schema.__path__, pkg + ".", onerror=_reraise):
-        module = importlib.import_module(info.name)
-        for _, obj in inspect.getmembers(module, inspect.isclass):
-            # `== pkg or startswith(pkg + ".")`, not `startswith(pkg)`, so a
-            # sibling top-level package sharing the prefix can't leak in.
-            own = obj.__module__ == pkg or obj.__module__.startswith(pkg + ".")
-            if issubclass(obj, BaseModel) and obj is not BaseModel and own:
-                found.add((obj.__name__, obj.__module__))
+    for package in packages:
+        pkg = package.__name__
+        for info in pkgutil.walk_packages(package.__path__, pkg + ".", onerror=_reraise):
+            module = importlib.import_module(info.name)
+            for _, obj in inspect.getmembers(module, inspect.isclass):
+                # `== pkg or startswith(pkg + ".")`, not `startswith(pkg)`, so a
+                # sibling top-level package sharing the prefix can't leak in.
+                own = obj.__module__ == pkg or obj.__module__.startswith(pkg + ".")
+                if issubclass(obj, BaseModel) and obj is not BaseModel and own:
+                    found.add((obj.__name__, obj.__module__))
     return sorted(found)
 
 

@@ -6,6 +6,8 @@ from typing import Any, ClassVar
 
 from pydantic import BaseModel, Field
 
+from openmagpie_schema.watch_enums import WatchActionKind
+
 from ._delivery import DeliveryConfigBase
 from .base import WatchActionConfigBase, WatchActionConfigSummary
 
@@ -24,7 +26,7 @@ class LogConfig(DeliveryConfigBase):
     duplicate log line is harmless ; don't treat the log as an exactly-once
     record."""
 
-    CONFIG_KIND: ClassVar[str] = "log"
+    CONFIG_KIND: ClassVar[str] = WatchActionKind.LOG.value
 
     prefix: str = "[watch]"
     include_fields: list[str] = Field(default_factory=list)

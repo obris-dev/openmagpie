@@ -9,10 +9,12 @@ from policy is what lets this module be a dependency-free shared package.
 
 import json
 import re
-from typing import Annotated, ClassVar, Literal, NamedTuple
+from typing import Annotated, ClassVar, Literal, NamedTuple, get_args
 from urllib.parse import urlsplit
 
 from pydantic import BaseModel, Field, field_validator
+
+from ._unions import _PLUGIN_MEMBER_LOC_NAMES, KIND_MAX_LENGTH, builtin_union_kinds, reject_builtin_kind
 
 # ── Source specs (discriminated union over kind) ──────────────────────────
 
@@ -24,6 +26,7 @@ class RedditSubredditSourceSpec(BaseModel):
     """Identity of one subreddit source. Bound to RedditSubRedditConnector."""
 
     SOURCE_KIND: ClassVar[str] = "reddit_subreddit"
+    URL_FIELDS: ClassVar[tuple[str, ...]] = ()  # no operator-supplied URL to SSRF-check
 
     kind: Literal["reddit_subreddit"] = "reddit_subreddit"
     subreddit: str
@@ -57,6 +60,10 @@ class RssSourceSpec(BaseModel):
     """Identity of one RSS/Atom source by URL. Bound to a generic RSS connector."""
 
     SOURCE_KIND: ClassVar[str] = "rss"
+    # Fields the connector actually FETCHES, so the write-time SSRF gate checks only
+    # these (not display-only fields like `name`, which the connector never dereferences
+    # and which shouldn't 400 for containing a private-IP-looking string).
+    URL_FIELDS: ClassVar[tuple[str, ...]] = ("url",)
 
     kind: Literal["rss"] = "rss"
     url: str
@@ -87,6 +94,8 @@ class _HackerNewsSpec(BaseModel):
     `match` picks AND (default, every word must appear) vs ANY (OR, via
     Algolia `optionalWords`). Empty `query` means no pre-filter (fine for the
     low-volume story feeds; the comment spec makes it required)."""
+
+    URL_FIELDS: ClassVar[tuple[str, ...]] = ()  # no operator-supplied URL to SSRF-check
 
     query: str = ""
     match: Literal["all", "any"] = "all"
@@ -140,10 +149,85 @@ class HackerNewsCommentSourceSpec(_HackerNewsSpec):
         return f'HN comments: "{self.query}"'
 
 
-SourceSpec = Annotated[
+# The built-ins as a discriminated union over `kind` (defined before the plugin
+# fallback so the built-in kind set can be derived from it below). A built-in kind
+# with a malformed spec fails its typed member here and is rejected by the fallback,
+# so it surfaces as a validation error rather than being absorbed as a raw blob.
+_BuiltinSourceSpec = Annotated[
     RedditSubredditSourceSpec | RssSourceSpec | HackerNewsFeedSourceSpec | HackerNewsCommentSourceSpec,
     Field(discriminator="kind"),
 ]
+
+# Built-in source kinds, DERIVED from the union members above rather than kept as a
+# second hand-maintained list, so the set the plugin fallback rejects can never drift
+# from the union (adding a member to _BuiltinSourceSpec extends this for free). Taken
+# from each member's `SOURCE_KIND` ClassVar (a plain str, always present) rather than
+# the `kind` field default, which is fragile: a multi-value Literal would capture only
+# the default, and a member without a default would inject PydanticUndefined.
+_BUILTIN_SOURCE_SPECS = get_args(get_args(_BuiltinSourceSpec)[0])
+# Reject-set: the kind values the union DISPATCHES on, via the SAME shared helper the
+# action/run unions use (it reads every Literal arg, so a multi-value Literal is
+# handled). Sharing the helper is why the SOURCE_KIND cross-pin below is the ONLY
+# source-specific piece.
+_BUILTIN_SOURCE_KINDS = builtin_union_kinds(_BuiltinSourceSpec)
+
+# Import-time guards, load-bearing so raised explicitly (a bare `assert` is stripped
+# under `python -O`, and this is a shared library):
+# (1) If the union is ever refactored down to a single member, `get_args` returns ()
+#     and the reject-set goes empty, silently letting the fallback absorb EVERY
+#     malformed built-in spec (the exact hole this set closes). Require >=2, one per
+#     member.
+# (2) Source-specific cross-pin: each member also carries a SOURCE_KIND ClassVar (the
+#     connector registry's key), declared independently of the `kind` Literal. Pin the
+#     Literal to exactly (SOURCE_KIND,) so the discriminator, the reject-set, and the
+#     connector key can't diverge (a divergence would let a malformed built-in slip
+#     past the reject-set). getattr default keeps a missing SOURCE_KIND a curated
+#     RuntimeError, not a bare AttributeError.
+if not (len(_BUILTIN_SOURCE_KINDS) == len(_BUILTIN_SOURCE_SPECS) >= 2):
+    raise RuntimeError(f"expected >=2 built-in source kinds, one per union member; got {sorted(_BUILTIN_SOURCE_KINDS)}")
+for _spec in _BUILTIN_SOURCE_SPECS:
+    if get_args(_spec.model_fields["kind"].annotation) != (getattr(_spec, "SOURCE_KIND", None),):
+        raise RuntimeError(
+            f"{_spec.__name__}: kind Literal {get_args(_spec.model_fields['kind'].annotation)} must be exactly "
+            f"(SOURCE_KIND,) = ({getattr(_spec, 'SOURCE_KIND', None)!r},); the discriminator, reject-set, and "
+            f"connector key would otherwise diverge"
+        )
+
+
+class PluginSourceSpec(BaseModel):
+    """Fallback spec member for a plugin (non-built-in) source kind. `kind` is any
+    non-built-in string; the rest of the spec is an open blob (a fork's typed spec
+    schema lives in its own contract, and its web/CLI narrow on `kind`). Selected
+    only when no built-in discriminator matches (the left-to-right union below).
+    `extra="allow"` keeps every submitted field through `model_dump(mode="json")`,
+    so `canonical_spec` / `source_identity` (the spec_hash basis) stay stable."""
+
+    model_config = {"extra": "allow"}
+
+    kind: str = Field(min_length=1, max_length=KIND_MAX_LENGTH)
+
+    @field_validator("kind")
+    @classmethod
+    def _not_builtin(cls, v: str) -> str:
+        return reject_builtin_kind(v, _BUILTIN_SOURCE_KINDS)
+
+    def display(self) -> str:
+        # No typed shape, so fall back to an operator label if the blob carries one,
+        # else the kind. A fork's typed spec member supplies a real display().
+        extra = self.model_extra or {}
+        label = extra.get("name") or extra.get("label")
+        return str(label) if label else self.kind
+
+
+# One source spec, keyed by `kind`: the built-in discriminated union above, then a
+# left-to-right fallthrough to the plugin member for any other kind (same discipline
+# as WatchActionWire).
+SourceSpec = Annotated[_BuiltinSourceSpec | PluginSourceSpec, Field(union_mode="left_to_right")]
+
+# Pin the fallback member name against `_unions._PLUGIN_MEMBER_LOC_NAMES` (see _nodes):
+# a rename that isn't mirrored there silently turns off clean_union_errors' stripping.
+if PluginSourceSpec.__name__ not in _PLUGIN_MEMBER_LOC_NAMES:
+    raise RuntimeError(f"{PluginSourceSpec.__name__} missing from _unions._PLUGIN_MEMBER_LOC_NAMES")
 
 
 def canonical_spec(spec: SourceSpec) -> str:

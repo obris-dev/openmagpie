@@ -13,7 +13,7 @@ from urllib.parse import urlsplit
 
 from pydantic import BaseModel, Field, field_validator
 
-from openmagpie_schema.watch_enums import DeliveryCadence, WebhookMethod
+from openmagpie_schema.watch_enums import DeliveryCadence, WatchActionKind, WebhookMethod
 
 from ._delivery import DeliveryConfigBase
 from ._secrets import REDACTED, looks_redacted_url, redact_url
@@ -32,7 +32,7 @@ class WebhookConfig(DeliveryConfigBase):
     `redacted_dump` and carried forward by `merge_preserving` when the
     operator leaves them masked on an edit."""
 
-    CONFIG_KIND: ClassVar[str] = "webhook"
+    CONFIG_KIND: ClassVar[str] = WatchActionKind.WEBHOOK.value
 
     url: str
     method: WebhookMethod = WebhookMethod.POST

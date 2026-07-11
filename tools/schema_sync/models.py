@@ -38,6 +38,7 @@ from openmagpie_schema.telemetry import TelemetryState
 from openmagpie_schema.watch import (
     ExtractActionInput,
     LogActionInput,
+    PluginActionInput,
     SemanticFilterActionInput,
     WatchActionDeliveryListResponse,
     WatchActionDeliveryView,
@@ -132,9 +133,9 @@ EXCLUDED_MODELS = frozenset(
         "_HackerNewsSpec",
         # Kind-independent field bases for the action-node + run unions; their
         # fields inline into the per-kind members (which ARE in the contract).
-        "_WatchActionWireFields",
-        "_WatchActionInputFields",
-        "_WatchActionRunFields",
+        "WatchActionWireFields",
+        "WatchActionInputFields",
+        "WatchActionRunFields",
         # Outbound webhook body: what magpie POSTs to a third-party webhook.
         # It reaches the API only as WatchActionDeliveryView.request_payload, an
         # opaque dict, so it crosses the wire untyped and needs no schema def.
@@ -161,6 +162,10 @@ INPUT_MODELS = [
     ExtractActionInput,
     LogActionInput,
     WebhookActionInput,
+    # The plugin fallback input member (+ its open PluginConfigBlob, pulled in by ref):
+    # in the parity guard for symmetry with the built-in members above, so a future
+    # alias / computed field on it can't slip the validation-vs-serialization check.
+    PluginActionInput,
     SourceInput,
     SourceSetPayload,
     CuratedFeedConfig,

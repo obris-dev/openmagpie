@@ -5,3 +5,7 @@ cross-boundary shapes (config + wire), resolved as a uv workspace
 member by both core and the magpie CLI (see project memory
 project_schema_authority_northstar).
 """
+
+from ._unions import KIND_MAX_LENGTH
+
+__all__ = ["KIND_MAX_LENGTH"]

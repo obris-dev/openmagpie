@@ -9,7 +9,7 @@ from auth_api.operations.signup import SignupOperation
 from openmagpie_schema.watch import WatchActionRunWire
 from openmagpie_schema.watch_enums import WatchActionKind
 from watches.models import WatchAction, WatchActionRun
-from watches.registry import KNOWN_KINDS
+from watches.registry import known_kinds
 
 
 class ActionActivityFailSafeTests(TestCase):
@@ -50,12 +50,27 @@ class ActionActivityFailSafeTests(TestCase):
         self.assertEqual(resp.status_code, 200, resp.content)  # the whole page must not 500
         self.assertEqual([i["id"] for i in resp.json()["items"]], [str(good.id)])
 
-    def test_unrenderable_kind_row_is_skipped(self) -> None:
+    def test_structurally_corrupt_kind_row_is_skipped(self) -> None:
         good = self._run(kind="log")
-        self._run(kind="not_a_kind")  # no union member -> unbuildable, dropped
+        # A whitespace-padded kind fails BOTH wire branches (the typed union has no such
+        # literal; the plugin fallback rejects padding), a corrupt column: unbuildable
+        # even with result=None, so the row is dropped rather than 500-ing the page.
+        self._run(kind=" not a kind ")
         resp = self.client.get(f"/v1/actions/{self.action_id}/activity")
         self.assertEqual(resp.status_code, 200, resp.content)
         self.assertEqual([i["id"] for i in resp.json()["items"]], [str(good.id)])
+
+    def test_unregistered_plugin_kind_renders_via_fallback(self) -> None:
+        # A plugin kind's run must render even when the plugin's hook ISN'T loaded (an
+        # uninstall, or one replica missing the hooks env): PluginRunWire needs no
+        # registration. This kind is registered in NEITHER registry, yet the row shows.
+        # Regression for the old known_kinds() gate that hid a plugin's whole history.
+        run = self._run(kind="unregistered_plugin_kind", result={"anything": 1})
+        resp = self.client.get(f"/v1/actions/{self.action_id}/activity")
+        self.assertEqual(resp.status_code, 200, resp.content)
+        row = next(i for i in resp.json()["items"] if i["id"] == str(run.id))
+        self.assertEqual(row["kind"], "unregistered_plugin_kind")
+        self.assertEqual(row["result"], {"anything": 1})  # the blob renders as-is
 
     def test_malformed_result_degrades_to_null(self) -> None:
         # A semantic_filter result needs a numeric `score` + `passed`; a degenerate
@@ -70,20 +85,25 @@ class ActionActivityFailSafeTests(TestCase):
 
 
 class RunUnionKindInvariantTests(SimpleTestCase):
-    """`watch_action_run_wire` gates a run on KNOWN_KINDS (the config registry),
-    then does an UNGUARDED rebuild against the run union's members. That is only
-    safe while the two sets coincide: a kind in the registry with no run-union
-    member would pass the gate and then 500 the page on the unguarded rebuild.
-    Enforce the invariant so a future kind can't drift the two apart silently."""
+    """`watch_action_run_wire` renders a run against the run union (no registry gate: a
+    plugin run degrades safely via the PluginRunWire fallback, hook loaded or not). Two
+    invariants keep that safe: (1) the run union's BUILT-IN tagged members are exactly
+    the closed `WatchActionKind` enum, so every built-in kind renders as its TYPED member
+    (not the open fallback, which would drop its typed result shape); (2) every built-in
+    enum kind is registered, so `set(WatchActionKind)` is a SUBSET of known_kinds()
+    (plugins add more), keeping the built-in write/drain path whole."""
 
-    def test_known_kinds_equal_run_union_members_equal_enum(self) -> None:
-        # Derive the run union's discriminators from the union itself (not a
-        # hardcoded list), so a new member is picked up automatically.
-        run_members = get_args(get_args(WatchActionRunWire)[0])
+    def test_builtin_run_union_members_match_enum_and_enum_subset_of_known(self) -> None:
+        # The run union is now Annotated[_Builtin | PluginRunWire, left_to_right],
+        # so unwrapping to the tagged built-in members takes one extra layer than
+        # before. The plugin fallback (kind: str, no Literal default) is excluded.
+        outer_members = get_args(get_args(WatchActionRunWire)[0])  # (_Builtin annotated, PluginRunWire)
+        builtin_union = get_args(outer_members[0])[0]  # the discriminated Union of tagged members
+        run_members = get_args(builtin_union)
         run_union_kinds = {str(member.model_fields["kind"].default) for member in run_members}
         enum_kinds = {str(kind) for kind in WatchActionKind}
         self.assertEqual(run_union_kinds, enum_kinds)
-        self.assertEqual({str(kind) for kind in KNOWN_KINDS}, enum_kinds)
+        self.assertLessEqual(enum_kinds, known_kinds())  # every built-in kind is registered
 
     def test_result_models_have_fields_so_a_real_dump_is_never_empty(self) -> None:
         """`build_watch_action_run_wire` coalesces an empty result dict ({}) to

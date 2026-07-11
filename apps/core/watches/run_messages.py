@@ -19,6 +19,7 @@ ITEM_GONE = "The source item is no longer available (it may have aged out of ret
 NO_EXECUTOR = "This action type can't be run by the current server."
 ITEM_UNREADABLE = "The source item couldn't be read (its stored format is no longer recognized)."
 CONFIG_INVALID = "This action's configuration is invalid and can't be run."
+RESULT_INVALID = "The action produced a result that doesn't match its registered result schema."
 ENGINE_UNAVAILABLE = "The configured engine isn't available on this server."
 # The LLM answered, but rejected the request as malformed/unauthorized/not-found
 # (a 4xx retrying can't fix) - a server-config defect, not a transient blip.

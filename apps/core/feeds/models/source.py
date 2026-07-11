@@ -1,7 +1,7 @@
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 
-from common.models import BaseModel
+from common.models import KIND_MAX_LENGTH, BaseModel
 
 
 class Source(BaseModel):
@@ -28,7 +28,7 @@ class Source(BaseModel):
     feed_id = models.CharField(_("feed id"), max_length=26)
     kind = models.CharField(
         _("kind"),
-        max_length=32,
+        max_length=KIND_MAX_LENGTH,
         help_text=_("Denormalized from spec; matches the SourceSpec discriminator"),
     )
     spec = models.JSONField(

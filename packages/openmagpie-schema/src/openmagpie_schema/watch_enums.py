@@ -37,6 +37,12 @@ class WatchActionKind(StrEnum):
     LOG = "log"
 
 
+# The built-in action kinds as a plain-string set. Exported so the action unions
+# (`watch/_nodes.py`, `_runs.py`) and the CLI's error filter derive the plugin-fallback
+# reject-set from ONE place instead of re-deriving `frozenset(k.value ...)` each.
+BUILTIN_ACTION_KINDS = frozenset(k.value for k in WatchActionKind)
+
+
 class DeliveryCadence(StrEnum):
     """Cadence of a DELIVERY action (webhook / log): emit per item, or
     batch a window into one emission. A field in the action's config, not

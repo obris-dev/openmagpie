@@ -17,6 +17,8 @@ from typing import Any, ClassVar
 
 from pydantic import BaseModel, Field, field_validator
 
+from openmagpie_schema.watch_enums import WatchActionKind
+
 from ._engine import EngineActionConfigBase, ExternalContentStatus
 from .base import WatchActionConfigBase, WatchActionConfigSummary
 
@@ -70,7 +72,7 @@ class ExtractConfig(EngineActionConfigBase):
     always SUCCEEDS so the chain advances. Domain-agnostic ; the field set
     and `instructions` are entirely operator-supplied."""
 
-    CONFIG_KIND: ClassVar[str] = "extract"
+    CONFIG_KIND: ClassVar[str] = WatchActionKind.EXTRACT.value
 
     # The user-declared fields to pull out (required, non-empty ; an empty
     # set would extract nothing). Names must be unique (they're result keys).

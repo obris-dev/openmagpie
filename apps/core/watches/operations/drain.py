@@ -33,6 +33,7 @@ from watches.models import WatchAction, WatchActionRun
 from watches.services import WatchActionDeliveryService, WatchActionRunService, WatchActionService
 
 from .advance import enqueue_next
+from .result_enforce import enforce_result_schema
 from .run_inputs import build_run_inputs
 
 logger = logging.getLogger("watches")
@@ -122,6 +123,17 @@ class WatchDrainOperation:
             self._maybe_emit_first_match(action)
         return result
 
+    def _enforce_result_schema(self, action: WatchAction | None, outcome: ActionResult) -> ActionResult:
+        """A SUCCEEDED run whose kind registered a result schema (via
+        `register_action(..., result=...)`) MUST carry a conforming result, so a
+        consumer can rely on the shape. A mismatch is an action defect, not a
+        silently-stored bad blob -> ERRORED. Shared with the digest flush (both write
+        SUCCEEDED results), so the guarantee holds on both paths. No-op when the
+        action is unresolvable (kind unknown) since there's no schema to check."""
+        if action is None:
+            return outcome
+        return enforce_result_schema(str(action.kind), outcome, label=f"run {self.action_run.id}")
+
     def _resolve(self) -> tuple[WatchAction | None, ActionResult]:
         """Load the run's action + item, run the kind's impl, and return
         (action, result). The action is returned even on a downstream failure
@@ -163,7 +175,9 @@ class WatchDrainOperation:
             # the failed attempt is still logged ; this catch is the backstop.)
             logger.exception("run=%s kind=%s failed: %s", run.id, action.kind, exc)
             return action, ActionResult(state=WatchActionRunState.FAILED, error=run_messages.TRANSIENT)
-        return action, result
+        # A SUCCEEDED result that violates the kind's registered result schema is a
+        # defect, normalized to ERRORED here alongside the other terminal outcomes.
+        return action, self._enforce_result_schema(action, result)
 
     def _maybe_emit_first_match(self, action: WatchAction | None) -> None:
         """Called on EVERY successful run; emits the `first_match` milestone only on

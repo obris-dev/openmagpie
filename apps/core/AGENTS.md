@@ -42,7 +42,8 @@ watches/
                           so the operations layer logs a WatchActionDelivery per call.
   operations/             one-shot orchestrators: trigger.py, drain.py, digest_flush.py, advance.py (enqueue_next),
                           backfill.py (WatchBackfillOperation: re-run an action over the previous step's passes),
-                          run_inputs.py (build_run_inputs: enrich runs+items+watch into ActionItem/ActionContext)
+                          run_inputs.py (build_run_inputs: enrich runs+items+watch into ActionItem/ActionContext),
+                          result_enforce.py (enforce_result_schema: shared by drain + digest flush)
   registry.py             CONFIG registry: kind -> Pydantic config class (parse / validate / load_config)
   policy.py               write-time guards (engine registered, digest interval bound, webhook SSRF)
   run_messages.py         operator-facing WatchActionRun.error + backfill-job.error strings (sanitized; raw cause -> logs)
@@ -153,7 +154,7 @@ for job in claim_due():                         # CAS PENDING/retryable-FAILED -
 # stage 2 — DRAIN (process_due_runs): execute due per-item runs
 reap_stale()                                   # RUNNING past WATCH_RUN_STALE_SECONDS -> FAILED (crashed worker)
 for run in claim_due():                         # CAS PENDING/FAILED -> RUNNING, attempts += 1; excludes digest actions
-    outcome = registry.get(action.kind).run(action, item_data=item.data)
+    outcome = registry.get(action.kind).run(action, items=[item], context=ctx)  # uniform batch call (one item)
     complete(run, outcome)                      # guarded CAS write
     if outcome.state == SUCCEEDED: enqueue_next(run, action)   # advance to next rank (instant: now; digest: window close)
 
@@ -196,7 +197,7 @@ app/
 - Adding a new plugin = one file + one registry entry.
 - Connector classes declare both `kind: str` and `payloads: list[type[SourcePayload]]`; the `register(...)` call references the class attrs (no string duplication).
 - App `ready()` hooks import the registry so plugins self-register at Django startup, not lazily.
-- **Action kinds have TWO registries, kept separate**: the CONFIG registry (`watches.registry`, kind -> Pydantic config class, validation) and the EXECUTION registry (`watches.actions.registry`, kind -> runnable `Action` impl). An action impl declares `kind` and implements `run(action, *, item_data)`; delivery kinds also implement `BatchAction.run_batch(action, *, items)` for digests.
+- **Action kinds have TWO registries, kept separate**: the CONFIG registry (`watches.registry`, kind -> Pydantic config class, validation) and the EXECUTION registry (`watches.actions.registry`, kind -> runnable `Action` impl). An action impl declares `kind` and implements `run(action, *, items, context)` (a uniform batch call: the instant drain passes a one-item list, the digest flush the whole slice).
 
 ### The `plugins/` app (fork / third-party extensibility)
 
@@ -205,7 +206,9 @@ extending OpenMagpie **without editing core**, so a fork stays cleanly mergeable
 with upstream. **Read `plugins/README.md` before adding to it.** In short:
 
 - `Registry[T]` (`plugins/registry.py`) is the generic `kind -> value` primitive
-  for NEW categories; the four existing registries are left as-is.
+  for NEW categories. The existing config / action / source registries gained plugin
+  `register*` entry points (a fork registers a kind end-to-end there; they reject a
+  built-in, over-long, or duplicate kind).
 - `plugins.loader.load_hooks` runs at startup (from `PluginsConfig.ready()`) and
   discovers self-registering hooks from `OPENMAGPIE_PLUGIN_HOOKS`
   (`module:function` paths) and `openmagpie.plugins` entry points (gated by

@@ -37,7 +37,7 @@ from .api import (
     WatchSvcMixin,
 )
 from .policy import PolicyError
-from .registry import KNOWN_KINDS
+from .registry import known_kinds, parse_config
 from .serializers import (
     WatchCreateSerializer,
     WatchSetActiveSerializer,
@@ -57,9 +57,10 @@ def _validate_kind(kind: object) -> Response | None:
     """400 Response if `kind` (the action's top-level discriminator on the
     sub-router request) isn't a known action kind ; None if it's valid.
     The chain-write serializer does the equivalent check per action."""
-    if kind not in KNOWN_KINDS:
+    kinds = known_kinds()
+    if kind not in kinds:
         return Response(
-            {"kind": [f"unknown action kind {kind!r}; known: {sorted(KNOWN_KINDS)}"]},
+            {"kind": [f"unknown action kind {kind!r}; known: {sorted(kinds)}"]},
             status=status.HTTP_400_BAD_REQUEST,
         )
     return None
@@ -78,8 +79,9 @@ class WatchListCreateView(WatchSvcMixin, AccountScopedAPIView):
             preview = self.watch_svc.build(name=d["name"], is_active=d["is_active"])
             body = watch_mutation(preview, feed_ids=d["feed_ids"], actions=[], dry_run=True).model_dump(mode="json")
             # Preview the chain from the validated inputs (no rows persisted).
+            known = known_kinds()  # read once for the whole chain
             body["actions"] = [
-                watch_action_input_wire(a, rank).model_dump(mode="json") for rank, a in enumerate(actions)
+                watch_action_input_wire(a, rank, known=known).model_dump(mode="json") for rank, a in enumerate(actions)
             ]
             body.pop("id", None)
             return Response(body, status=status.HTTP_200_OK)
@@ -149,8 +151,10 @@ class WatchDetailView(WatchScopedAPIView):
                 body = watch_mutation(self.watch, feed_ids=d["feed_ids"], actions=[], dry_run=True).model_dump(
                     mode="json"
                 )
+                known = known_kinds()  # read once for the whole chain
                 body["actions"] = [
-                    watch_action_input_wire(a, rank).model_dump(mode="json") for rank, a in enumerate(d["actions"])
+                    watch_action_input_wire(a, rank, known=known).model_dump(mode="json")
+                    for rank, a in enumerate(d["actions"])
                 ]
                 return Response(body, status=status.HTTP_200_OK)
             updated = self.watch_svc.update(self.watch, **edit)
@@ -198,12 +202,13 @@ class WatchActionsView(WatchScopedAPIView):
     """
 
     def get(self, request, watch_id: str):
+        known = known_kinds()  # read once for the whole chain
         return Response(
             {
                 "items": [
                     w.model_dump(mode="json")
                     for a in self.watch_svc.initial_actions(self.watch)
-                    if (w := watch_action_wire(a)) is not None
+                    if (w := watch_action_wire(a, known=known)) is not None
                 ]
             },
             status=status.HTTP_200_OK,
@@ -231,6 +236,12 @@ class WatchActionsView(WatchScopedAPIView):
         # this is the chain's path id directly ; no lazy-create.
         dry_run = wants_dry_run(request)
         try:
+            # Surface clean per-kind config errors (e.g. `config.instructions`) via the
+            # registry BEFORE build_watch_action_input, whose extensible-union validation
+            # would otherwise leak `tagged-union[...]` prefixes and a plugin-branch error
+            # into the 400 body. Same shape validation, so if this passes the build below
+            # can't fail on config; policy/merge stay the service's job (clean errors too).
+            parse_config(str(body["kind"]), config)
             created = self.action_svc.add(
                 path_id=self.watch.initial_path_id,
                 action=build_watch_action_input(kind=str(body["kind"]), config=config),
@@ -286,6 +297,10 @@ class ActionDetailView(ActionScopedAPIView):
             return kind_err
         dry_run = wants_dry_run(request)
         try:
+            # See WatchActionsView.post: parse first for clean per-kind config errors, so
+            # build_watch_action_input's union machinery can't leak into the 400 body.
+            # Shape-only (accepts a masked secret); set_config's merge_config restores it.
+            parse_config(str(body["kind"]), config)
             updated = self.action_svc.set_config(
                 self.action, spec=build_watch_action_input(kind=str(body["kind"]), config=config), dry_run=dry_run
             )

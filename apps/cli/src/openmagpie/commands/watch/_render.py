@@ -1,8 +1,9 @@
-"""Rendering for `magpie watch` reads: the `list` columns and the detail field-table.
+"""Display helpers for `magpie watch`: the `list` columns + the detail field-table.
 
 Split from `_crud` so the command module stays focused on the verbs (mirrors
-`feed/_render`). Pure display helpers (no command/IO logic), shared by `list`
-(columns) and `get`/`create`/`edit` (the detail table)."""
+`feed/_render`). The config/error normalizers that once lived here (shared by the read
+AND write paths) now live in `_config` under a truer name; this module is display-only
+(the `_print_*` helpers render to the console)."""
 
 from __future__ import annotations
 

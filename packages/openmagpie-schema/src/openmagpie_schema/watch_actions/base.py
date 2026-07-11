@@ -8,7 +8,7 @@ a silent hole (a blank preview, a secret-leaking dump).
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, ClassVar
 
 from pydantic import BaseModel
 
@@ -36,6 +36,12 @@ class WatchActionConfigBase(BaseModel):
     No `kind` field: the discriminator lives on the WatchAction row /
     write envelope, and the registry maps it to the right subclass. The
     concrete config is the pure kind-specific shape."""
+
+    # The action-kind string this config registers under (used by
+    # watches.registry.register). A ClassVar constant, NOT a model field; every
+    # concrete kind overrides it. Empty on the base so a subclass that forgets
+    # it fails loudly at register() rather than registering under "".
+    CONFIG_KIND: ClassVar[str] = ""
 
     def redacted_dump(self) -> dict[str, Any]:
         raise NotImplementedError(

@@ -42,6 +42,7 @@ from watches.services import (
 )
 
 from .advance import enqueue_next_batch
+from .result_enforce import enforce_result_schema
 from .run_inputs import build_run_inputs
 
 logger = logging.getLogger("watches")
@@ -220,6 +221,11 @@ class WatchDigestFlushOperation:
         except Exception as exc:
             logger.exception("digest flush failed action=%s: %s", self.action_id, exc)
             return self._fail_slice(batch_runs, gone_ids)
+        # Enforce the kind's registered result schema (SUCCEEDED-only) here, BEFORE the
+        # delivery row + batch complete, so a digest plugin kind carries the same
+        # result-shape guarantee as an instant one. Preserves an OutboundActionResult
+        # subtype, so a violating delivery still records its audit row below.
+        result = enforce_result_schema(str(action.kind), result, label=f"digest action {self.action_id} batch")
         # Record EVERY outbound attempt (success or transient) as a delivery row
         # for the audit. Delivery is at-least-once (a crash before complete_batch
         # re-emits next flush) ; receivers dedup per item on the in-body `key`,

@@ -10,21 +10,59 @@
 //   node scripts/generate.mjs --check  # exit non-zero if it's stale
 
 import { execSync } from "node:child_process";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, readFileSync } from "node:fs";
+import { dirname, isAbsolute, join, resolve } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { jsonSchemaToZod } from "json-schema-to-zod";
 
 // The contract lives in the OUTER monorepo (a Python workspace); this is a
 // nested pnpm workspace, so the generator reaches across the boundary. Resolve
 // the repo root via git (the pattern web/apps/marketing/scripts already use)
 // rather than counting `../` from this file: works from any cwd, survives the
-// package moving, and fails loudly outside a checkout. The artifact path
-// (packages/openmagpie-schema/schema.json) is a stable, named location.
-const ROOT = execSync("git rev-parse --show-toplevel").toString().trim();
-const CONTRACT = join(ROOT, "packages/openmagpie-schema/schema.json");
-const OUTPUT = new URL("../src/generated.ts", import.meta.url);
+// package moving. Computed LAZILY (only when a relative path needs anchoring), so an
+// absolute-path override still works outside a git checkout (e.g. a fork's CI tarball).
+const root = () => execSync("git rev-parse --show-toplevel").toString().trim();
+const anchor = (p) => (isAbsolute(p) ? p : resolve(root(), p));
+// A fork points these at its own SUPERSET contract + output (built by the reusable
+// tools/schema_sync generator over the fork's models) so its generated.ts gains
+// its typed plugin members. Unset -> the core contract + output, unchanged. A
+// relative env value anchors at ROOT (like the defaults), not the cwd, so the
+// result is invariant to where the command runs; an absolute value is used as-is.
+//
+// The two must be set together or not at all: setting only one would read a fork
+// contract while overwriting core's generated.ts (or vice versa), and later flip
+// core's `--check` result wrongly. Fail loud rather than cross the streams.
+if (!!process.env.OPENMAGPIE_SCHEMA_JSON !== !!process.env.OPENMAGPIE_SCHEMA_TS) {
+  process.stderr.write(
+    "Set BOTH OPENMAGPIE_SCHEMA_JSON and OPENMAGPIE_SCHEMA_TS (a fork override), or neither (core defaults).\n",
+  );
+  process.exit(1);
+}
+const CONTRACT = process.env.OPENMAGPIE_SCHEMA_JSON
+  ? anchor(process.env.OPENMAGPIE_SCHEMA_JSON)
+  : join(root(), "packages/openmagpie-schema/schema.json");
+// pathToFileURL (not `file://` + concat) so a `#` or `%` in the path is escaped.
+const OUTPUT = process.env.OPENMAGPIE_SCHEMA_TS
+  ? pathToFileURL(anchor(process.env.OPENMAGPIE_SCHEMA_TS))
+  : new URL("../src/generated.ts", import.meta.url);
 
-const doc = JSON.parse(readFileSync(CONTRACT, "utf8"));
+if (!existsSync(CONTRACT)) {
+  // Named error instead of a raw ENOENT stack (e.g. a fork's OPENMAGPIE_SCHEMA_JSON
+  // pointing at a not-yet-generated contract, or a bad path).
+  process.stderr.write(
+    `Contract not found: ${CONTRACT}\nGenerate it first (tools/schema_sync) or fix OPENMAGPIE_SCHEMA_JSON.\n`,
+  );
+  process.exit(1);
+}
+let doc;
+try {
+  doc = JSON.parse(readFileSync(CONTRACT, "utf8"));
+} catch (err) {
+  // Named error, not a bare SyntaxError, for a truncated / non-JSON contract (e.g. a
+  // fork's OPENMAGPIE_SCHEMA_JSON read mid-generate). Same style as the exists-guard.
+  process.stderr.write(`Contract is not valid JSON: ${CONTRACT}\n${err.message}\n`);
+  process.exit(1);
+}
 const defs = doc.$defs;
 const names = Object.keys(defs);
 
@@ -103,13 +141,37 @@ for (const name of order) {
 out = out.replace(/[ \t]+$/gm, "");
 
 if (process.argv.includes("--check")) {
-  const current = readFileSync(OUTPUT, "utf8");
+  // Missing output (a fork running --check before its first generate) reads as
+  // stale, not a raw ENOENT stack trace (mirrors the Python generator's
+  // exists-guard in write_or_check).
+  // EOL-agnostic compare (like the Python generator's read_text normalization): a
+  // CRLF working tree / Windows checkout shouldn't false-fail, since the content is
+  // what matters. `out` is authored with \n, so normalize the on-disk copy to match.
+  const current = (existsSync(OUTPUT) ? readFileSync(OUTPUT, "utf8") : "").replace(/\r\n/g, "\n");
   if (current !== out) {
-    process.stderr.write("src/generated.ts is stale. Run `pnpm --filter @magpie/schema generate` and commit.\n");
+    // The core command is LABELED as such so a core dev has it while a fork, which
+    // overrides OPENMAGPIE_SCHEMA_TS to write its OWN output, isn't misdirected.
+    process.stderr.write(
+      "Generated schema output is stale. Re-run the schema generator " +
+        "(core: `pnpm --filter @magpie/schema generate`) and commit.\n",
+    );
     process.exit(1);
   }
 } else {
   const { writeFileSync } = await import("node:fs");
-  writeFileSync(OUTPUT, out);
-  process.stderr.write(`Wrote src/generated.ts (${order.length} schemas).\n`);
+  const outPath = fileURLToPath(OUTPUT);
+  const outDir = dirname(outPath);
+  if (!existsSync(outDir)) {
+    // Named error instead of a raw ENOENT stack (e.g. a fork's OPENMAGPIE_SCHEMA_TS
+    // pointing into a not-yet-created directory). Mirrors the CONTRACT exists-guard
+    // above and the Python generator's write_or_check empty-render guard: fail loud
+    // with the cause, not a stack trace.
+    process.stderr.write(
+      `Output directory not found: ${outDir}\nCreate it or fix OPENMAGPIE_SCHEMA_TS.\n`,
+    );
+    process.exit(1);
+  }
+  writeFileSync(outPath, out);
+  // Resolved path, not a hardcoded "src/generated.ts": a fork override writes elsewhere.
+  process.stderr.write(`Wrote ${outPath} (${order.length} schemas).\n`);
 }

@@ -29,6 +29,7 @@ from ... import console
 from ...api.feed import SourceWire
 from ...context import app_ctx
 from .._shared import (
+    _abort_union_validation_error,
     _check_format,
     _columns_option,
     _emit_columns_items,
@@ -77,11 +78,10 @@ def _parse_set_payload(text: str, source_path: str) -> list[SourceInput]:
         if isinstance(parsed, list):
             return SourceSetPayload.model_validate({"sources": parsed}).sources
     except ValidationError as exc:
-        console.error(f"{source_path}: payload doesn't match the expected shape:")
-        for err in exc.errors():
-            path = ".".join(str(p) for p in err["loc"]) or "_"
-            console.error(f"  {path}: {err['msg']}")
-        raise typer.Exit(code=1) from None
+        # Shared union-error rendering: strips the source-spec union's internal noise
+        # (the `tagged-union[...]` prefix + the plugin fallback's built-in-kind line), so
+        # a malformed built-in spec reads as e.g. `sources.0.spec.rss.url: ...`.
+        _abort_union_validation_error(exc, header=f"{source_path}: payload doesn't match the expected shape:")
     console.error(f"{source_path}: top-level must be an object or array. {_SET_FILE_SHAPES}")
     raise typer.Exit(code=1)
 

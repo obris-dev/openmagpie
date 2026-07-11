@@ -1,7 +1,7 @@
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 
-from common.models import BaseModel
+from common.models import KIND_MAX_LENGTH, BaseModel
 from watches.constants import WatchActionRunState
 
 
@@ -26,10 +26,13 @@ class WatchActionRun(BaseModel):
     # Denormalized from the action (a bare CharField over WatchActionKind, no
     # `choices=`, mirroring WatchAction.kind) so the run's typed result stays
     # renderable even if the action is later deleted. Stamped at enqueue time
-    # from the action the caller already holds (no per-run DB lookup).
+    # from the action the caller already holds (no per-run DB lookup). Holds a
+    # built-in WatchActionKind OR a registered plugin kind (extensible union);
+    # help_text still names WatchActionKind and is left as-is to avoid a DB-no-op
+    # AlterField migration.
     kind = models.CharField(
         _("kind"),
-        max_length=32,
+        max_length=KIND_MAX_LENGTH,
         default="",
         help_text=_(
             "WatchActionKind value; denormalized from the action so the run's typed result is renderable "

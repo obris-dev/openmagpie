@@ -11,6 +11,8 @@ import httpx
 import typer
 from pydantic import ValidationError
 
+from openmagpie_schema.errors import clean_union_errors
+
 from ... import console
 from ...http import ApiError, AuthError
 
@@ -25,6 +27,29 @@ def _abort_contract_mismatch() -> NoReturn:
     auth identity-parse sites (status / login / device flow) that each catch a
     ValidationError from a response the CLI can't parse against its schema."""
     console.error(CONTRACT_MISMATCH_MESSAGE)
+    raise typer.Exit(code=1) from None
+
+
+def _union_error_lines(exc: ValidationError) -> list[tuple[str, str]]:
+    """The cleaned (path, message) lines of a union ValidationError.
+
+    Routes through `clean_union_errors` (the shared server + CLI filter): drops the
+    extensible kind-union's discriminator + built-in-kind noise and strips the
+    `tagged-union[...]` / plugin-member loc segments, so each path reads as the
+    operator's own field (`semantic_filter.config.instructions`, `sources.0.spec.rss.url`)
+    rather than union machinery. Kind-agnostic (handles the built-in AND plugin branches).
+    Pure, so it's unit-testable; `_abort_union_validation_error` prints these."""
+    return [(".".join(str(p) for p in err["loc"]) or "_", err["msg"]) for err in clean_union_errors(exc.errors())]
+
+
+def _abort_union_validation_error(exc: ValidationError, *, header: str) -> NoReturn:
+    """Print `header` then the cleaned per-field lines of `exc`, and exit(1). The ONE
+    CLI rendering for an extensible-union validation failure, shared by every authoring
+    surface that validates one: the watch action-input union + config envelope, and the
+    feed source-spec set. (Kept here beside `_print_api_error`, its server-side twin.)"""
+    console.error(header)
+    for path, msg in _union_error_lines(exc):
+        console.error(f"  {path}: {msg}")
     raise typer.Exit(code=1) from None
 
 

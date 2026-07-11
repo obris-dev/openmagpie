@@ -8,8 +8,9 @@ tables (see the per-model docstrings)."""
 from datetime import datetime
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, Field, TypeAdapter
+from pydantic import BaseModel, Field, TypeAdapter, field_validator
 
+from .._unions import _PLUGIN_MEMBER_LOC_NAMES, KIND_MAX_LENGTH, builtin_union_kinds, reject_builtin_kind
 from ..watch_actions import (
     ExtractResult,
     LogResult,
@@ -17,6 +18,7 @@ from ..watch_actions import (
     WebhookResult,
 )
 from ..watch_enums import (
+    BUILTIN_ACTION_KINDS,
     DeliveryCadence,
     WatchActionDeliveryState,
     WatchActionKind,
@@ -25,6 +27,10 @@ from ..watch_enums import (
     WebhookMethod,
 )
 from ._nodes import WatchActionWire
+
+# Built-in action kinds: the shared exported set (not the sibling module's private
+# copy, and not a third local re-derivation).
+_BUILTIN_KINDS = BUILTIN_ACTION_KINDS
 
 ResultBlob = dict[str, Any]
 """The raw kind-specific `result` dict as persisted on WatchActionRun.result.
@@ -81,7 +87,7 @@ class RunFeed(BaseModel):
 # produced no result yet, AND the result shapes can't fall back on an empty
 # default instance (some carry required fields, e.g. score / http_status). Hence
 # `| None`, not a default instance.
-class _WatchActionRunFields(BaseModel):
+class WatchActionRunFields(BaseModel):
     """Kind-independent fields on a WatchActionRun audit row.
 
     The stateful audit row of one action executing against one item. Pure ids +
@@ -102,33 +108,60 @@ class _WatchActionRunFields(BaseModel):
     created_at: datetime | None = None
 
 
-class SemanticFilterRunWire(_WatchActionRunFields):
+class SemanticFilterRunWire(WatchActionRunFields):
     kind: Literal[WatchActionKind.SEMANTIC_FILTER] = WatchActionKind.SEMANTIC_FILTER
     result: SemanticFilterResult | None = None
 
 
-class ExtractRunWire(_WatchActionRunFields):
+class ExtractRunWire(WatchActionRunFields):
     kind: Literal[WatchActionKind.EXTRACT] = WatchActionKind.EXTRACT
     result: ExtractResult | None = None
 
 
-class LogRunWire(_WatchActionRunFields):
+class LogRunWire(WatchActionRunFields):
     kind: Literal[WatchActionKind.LOG] = WatchActionKind.LOG
     result: LogResult | None = None
 
 
-class WebhookRunWire(_WatchActionRunFields):
+class WebhookRunWire(WatchActionRunFields):
     kind: Literal[WatchActionKind.WEBHOOK] = WatchActionKind.WEBHOOK
     result: WebhookResult | None = None
 
 
+class PluginRunWire(WatchActionRunFields):
+    """Fallback run member for a plugin (non-built-in) action kind. `result` is an
+    untyped blob (a fork's typed result schema lives in its own contract). Selected
+    only when no built-in discriminator matches (left-to-right union)."""
+
+    kind: str = Field(min_length=1, max_length=KIND_MAX_LENGTH)
+    result: dict[str, Any] | None = None
+
+    @field_validator("kind")
+    @classmethod
+    def _not_builtin(cls, v: str) -> str:
+        return reject_builtin_kind(v, _BUILTIN_KINDS)
+
+
 # One WatchActionRun on the wire (`GET /v1/actions/<action_id>/activity`), keyed
-# by `kind`. A plain type alias (like WatchActionWire) so field access needs no
-# wrapper.
-WatchActionRunWire = Annotated[
+# by `kind`: the four built-ins as a discriminated union, then a left-to-right
+# fallthrough to the plugin member (same discipline as WatchActionWire).
+_BuiltinWatchActionRunWire = Annotated[
     SemanticFilterRunWire | ExtractRunWire | LogRunWire | WebhookRunWire,
     Field(discriminator="kind"),
 ]
+WatchActionRunWire = Annotated[_BuiltinWatchActionRunWire | PluginRunWire, Field(union_mode="left_to_right")]
+
+# Import-time parity guard (see _nodes.py): the run union's built-in members must be
+# exactly the WatchActionKind enum, so _BUILTIN_KINDS can't drift from what it
+# discriminates. Loud at import for a fork; the activity-failsafe test also pins it.
+if builtin_union_kinds(_BuiltinWatchActionRunWire) != _BUILTIN_KINDS:
+    raise RuntimeError(
+        f"WatchActionRunWire built-in members {sorted(builtin_union_kinds(_BuiltinWatchActionRunWire))} != "
+        f"WatchActionKind {sorted(_BUILTIN_KINDS)}"
+    )
+# Pin the fallback member name against `_unions._PLUGIN_MEMBER_LOC_NAMES` (see _nodes).
+if PluginRunWire.__name__ not in _PLUGIN_MEMBER_LOC_NAMES:
+    raise RuntimeError(f"{PluginRunWire.__name__} missing from _unions._PLUGIN_MEMBER_LOC_NAMES")
 
 # The union is a type alias, not a class, so it has no `.model_validate`; this
 # adapter is the single validation entry (the server builder + the CLI response

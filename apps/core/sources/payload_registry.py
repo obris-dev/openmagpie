@@ -33,15 +33,16 @@ class InvalidPayloadData(UnhydrateablePayload):
     row can't be retried into compliance; it's permanently bad."""
 
 
-def register(source: str, payload_classes: list[type[SourcePayload]]) -> None:
-    """Register concrete SourcePayload classes for a source kind.
+def require_valid_payloads(payload_classes: list[type[SourcePayload]]) -> None:
+    """Raise TypeError if any class to be registered doesn't override `sample()`.
 
-    Enforces the `sample()` override here (not at class-definition time
-    via `__init_subclass__`) so connector authors can declare abstract
-    intermediate bases (e.g. a shared base for post / comment payloads)
-    without tripping the guard at import. Only classes that actually get
-    registered are required to have a real `sample()`; intermediates pass
-    through untouched.
+    A PURE check (no mutation), so a caller can validate before touching any
+    registry. It covers EVERY attribute the mutating `register` loop then reads
+    (`sample()` and `PAYLOAD_KIND`), so a class that passes here can't make the loop
+    raise mid-way and leave a half-registration. Enforced here (not at class-definition
+    time via `__init_subclass__`) so connector authors can declare abstract
+    intermediate bases (e.g. a shared base for post / comment payloads) without
+    tripping the guard at import; only classes that actually get registered are checked.
     """
     for cls in payload_classes:
         if "sample" not in cls.__dict__:
@@ -49,6 +50,24 @@ def register(source: str, payload_classes: list[type[SourcePayload]]) -> None:
                 f"{cls.__name__} is registered but does not override SourcePayload.sample() — "
                 "payload-preview would 500 on this kind. Implement sample()."
             )
+        # PAYLOAD_KIND is a ClassVar[str] with no default; a class that forgets it
+        # would raise AttributeError in the register loop below (the registry key is
+        # `(source, PAYLOAD_KIND)`), so require it here where it's still pre-mutation.
+        if not getattr(cls, "PAYLOAD_KIND", ""):
+            raise TypeError(
+                f"{cls.__name__} is registered but does not declare a non-empty PAYLOAD_KIND; "
+                "the (source, kind) registry key would be missing. Set PAYLOAD_KIND."
+            )
+
+
+def register(source: str, payload_classes: list[type[SourcePayload]]) -> None:
+    """Register concrete SourcePayload classes for a source kind.
+
+    Validate-then-mutate: every class is checked (`require_valid_payloads`) BEFORE
+    any is added, so a bad class late in the list can't leave the registry
+    half-populated."""
+    require_valid_payloads(payload_classes)
+    for cls in payload_classes:
         _REGISTRY[(source, cls.PAYLOAD_KIND)] = cls
 
 

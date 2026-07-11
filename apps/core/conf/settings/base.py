@@ -7,7 +7,7 @@ from django.core.exceptions import ImproperlyConfigured
 
 from common.env import env_bool, env_list
 from plugins.db.config import load_db_config
-from plugins.guards import resolve_entrypoint_allow, resolve_extra_apps
+from plugins.guards import resolve_entrypoint_allow, resolve_extra_apps, resolve_plugin_api_urls
 
 # Log timestamps in UTC regardless of the host clock. Python's logging
 # `asctime` uses `time.localtime` by default ; the app is TIME_ZONE="UTC",
@@ -93,6 +93,10 @@ PLUGIN_HOOKS = env_list("OPENMAGPIE_PLUGIN_HOOKS")
 PLUGIN_ENTRYPOINT_ALLOW: list[str] | None = resolve_entrypoint_allow(
     os.environ.get("OPENMAGPIE_PLUGIN_ALLOW"), default_when_unset=[] if IS_CLOUD else None
 )
+# Dotted urlconf module paths a fork mounts UNDER the API version prefix (conf.urls);
+# the module writes version-relative routes. Lets a fork add REST endpoints with zero
+# core edits; unset -> none.
+PLUGIN_API_URLS: list[str] = resolve_plugin_api_urls(os.environ.get("OPENMAGPIE_PLUGIN_API_URLS"))
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",

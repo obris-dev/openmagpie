@@ -19,6 +19,7 @@ from pydantic import BaseModel
 from pydantic import ValidationError as PydanticValidationError
 
 from ... import console
+from .errors import _abort_union_validation_error
 
 # Shared `--format yaml|json` option helpers for the template / export commands.
 # One source of truth for the accepted values and the validation message.
@@ -74,11 +75,9 @@ def _parse_yaml_or_abort[T: BaseModel](text: str, envelope_cls: type[T]) -> T:
     try:
         return envelope_cls.model_validate(parsed)
     except PydanticValidationError as e:
-        console.error("Config envelope error:")
-        for err in e.errors():
-            path = ".".join(str(p) for p in err["loc"]) or "_"
-            console.error(f"  {path}: {err['msg']}")
-        raise typer.Exit(code=1) from None
+        # Shared union-error rendering: a multi-action `watch create` (WatchInput with an
+        # actions[] extensible union) reads as per-field paths, not tagged-union noise.
+        _abort_union_validation_error(e, header="Config envelope error:")
 
 
 def _active_flip_note(*, current: bool, submitted: bool, noun: str, resource_id: str) -> str | None:

@@ -26,7 +26,6 @@ from openmagpie_schema.watch import (
 )
 from openmagpie_schema.watch_enums import WatchActionRunState
 from watches.models import WatchAction, WatchActionDelivery, WatchActionRun
-from watches.registry import KNOWN_KINDS
 
 from .serializers import watch_action_wire
 
@@ -65,11 +64,18 @@ def watch_action_run_wire(run: WatchActionRun) -> WatchActionRunWire | None:
     `state` coerces to the WatchActionRunState enum; `result` is validated into
     the kind's typed result (None until the run terminates with one).
 
+    A PLUGIN kind's run renders via the PluginRunWire fallback with NO registration
+    needed (just kind + result blob), so this deliberately does NOT gate on
+    `known_kinds()`: gating there would hide a plugin's entire activity history the
+    moment its hook isn't loaded (uninstall, or one replica missing the hooks env), and
+    make the audit surface diverge across replicas.
+
     Per-row fail-safe (a narrowed subset of the `_action_summary` catches: the
     expected raisers here are PydanticValidationError on stored shape drift and
     ValueError on a degenerate stored value; a blanket catch would bury genuine
-    bugs as "bad row"). The activity LIST must never 500 on one bad row. A bad `state` or
-    `kind` can't produce ANY member, so the row is skipped (returns None); a
+    bugs as "bad row"). The activity LIST must never 500 on one bad row. A bad `state`,
+    or a structurally-corrupt `kind` (blank/padded/over-length, which fails BOTH wire
+    branches), can't produce ANY member, so the row is skipped (returns None); a
     malformed `result` degrades to the same kind's member with `result=None` (the
     row still renders its state + ids). The caller drops the None rows."""
     # `state` + `kind` are required with no default, so validate them up front
@@ -82,9 +88,6 @@ def watch_action_run_wire(run: WatchActionRun) -> WatchActionRunWire | None:
         logger.exception("run %s has an unrenderable state=%s; skipping the row", run.id, run.state)
         return None
     run_kind = str(run.kind)  # str() for uniformity with the sibling char reads below
-    if run_kind not in KNOWN_KINDS:
-        logger.error("run %s has an unrenderable kind=%s; skipping the row", run.id, run_kind)
-        return None
     common = {
         "id": str(run.id),
         "watch_id": str(run.watch_id),
@@ -101,11 +104,20 @@ def watch_action_run_wire(run: WatchActionRun) -> WatchActionRunWire | None:
         # The builder coalesces an empty result to None, so forward the raw dict.
         return build_watch_action_run_wire(kind=run_kind, result=run.result, **common)
     except (PydanticValidationError, ValueError):
-        # kind + state are valid, so only the result is malformed: drop it but keep
-        # the row (state + ids still render). Rebuilding with result=None + a valid
-        # kind can't fail, so it is unguarded (a genuine bug surfaces, not silently).
+        # The build failed on the kind OR the result; disambiguate by rebuilding with
+        # result=None. A built-in kind, OR any structurally-valid plugin kind, renders
+        # there (PluginRunWire, no registration), so success => only the result was
+        # malformed: drop it, keep the row (state + ids still render). If this ALSO
+        # fails, the kind is structurally corrupt (blank/padded/over-length, which fails
+        # both wire branches), the original corrupt-column backstop => skip the row. Both
+        # branches log with the outer exception's traceback still in context.
+        try:
+            base = build_watch_action_run_wire(kind=run_kind, result=None, **common)
+        except (PydanticValidationError, ValueError):
+            logger.exception("run %s has an unrenderable kind=%s; skipping the row", run.id, run_kind)
+            return None
         logger.exception("run %s has a malformed result (kind=%s); dropping it", run.id, run_kind)
-    return build_watch_action_run_wire(kind=run_kind, result=None, **common)
+        return base
 
 
 def watch_action_run_view(

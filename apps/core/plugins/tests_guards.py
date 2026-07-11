@@ -57,3 +57,4 @@ class PluginSettingsTests(SimpleTestCase):
         self.assertTrue(allow is None or isinstance(allow, list))
         self.assertEqual(settings.DATABASE_ROUTERS, ["plugins.db.routers.PluginAppRouter"])
         self.assertIsInstance(settings.PLUGIN_DB_ROUTING, dict)
+        self.assertIsInstance(settings.PLUGIN_API_URLS, list)
