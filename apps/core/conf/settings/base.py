@@ -340,8 +340,10 @@ PATH_CHAIN_LOCK_TIMEOUT_SECONDS = int(os.environ.get("PATH_CHAIN_LOCK_TIMEOUT_SE
 # or worker-crashing run can't retry forever.
 WATCH_RUN_MAX_ATTEMPTS = int(os.environ.get("WATCH_RUN_MAX_ATTEMPTS", "3"))
 # STALE_SECONDS: a run stuck in RUNNING longer than this is presumed
-# crashed and reaped to FAILED. 5x the engine's 120s judge timeout, so a
-# slow-but-alive call is never false-reaped; a real crash recovers in <=10m.
+# crashed and reaped to FAILED. Comfortably above a run's worst-case wall-clock:
+# the ~120s engine judge plus (for an enrichment kind) a linked-article fetch,
+# up to ~30s direct + ~100s challenge-bypass sidecar. A slow-but-alive run is
+# never false-reaped; a real crash recovers in <=10m.
 WATCH_RUN_STALE_SECONDS = int(os.environ.get("WATCH_RUN_STALE_SECONDS", "600"))
 
 # Backfill jobs (process_due_backfills). A job is pure DB work (scan the source
@@ -445,6 +447,12 @@ SOURCE_BLOCK_PRIVATE_IPS = env_bool("SOURCE_BLOCK_PRIVATE_IPS", "false")
 # the real body. Empty default (no localhost / docker fallback baked
 # into prod settings) ; dev seeds the docker-compose service name in
 # `conf.settings.local`.
+# ALSO backs the linked-article enrichment fallback (watches.actions._external):
+# when the direct pinned-IP fetch hits a challenge wall, the article is retried
+# through this sidecar. SECURITY: the sidecar egresses via a real browser, so the
+# pinned-IP SSRF guard cannot apply; that path pre-validates the (untrusted) URL's
+# host and refuses private-resolving hosts, but still trusts the sidecar's egress
+# (a self-hosted, operator-opted-in service). Leave empty to disable both uses.
 SOURCE_CHALLENGE_BYPASS_URL = os.environ.get("SOURCE_CHALLENGE_BYPASS_URL", "")
 
 # Allow the RSS connector to retry a failing fetch with TLS chain

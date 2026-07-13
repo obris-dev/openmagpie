@@ -20,7 +20,13 @@ from openmagpie_schema.configs import RssSourceSpec
 from sources.payload_registry import register
 from sources.payloads import SourcePayload
 
-from ..base import BaseConnector, ConnectorParseError, read_response_capped, validate_request_url
+from ..base import (
+    FETCH_DEFAULT_MAX_BYTES,
+    BaseConnector,
+    ConnectorParseError,
+    read_response_capped,
+    validate_request_url,
+)
 from ..challenge_bypass import ChallengeBypassMixin
 from .payloads import RssEntryPayload
 
@@ -36,7 +42,7 @@ RSS_USER_AGENT = "openmagpie-rss/1.0 (+https://github.com/obris-dev/openmagpie)"
 # checked per chunk so we never buffer past the cap (unlike a
 # `response.content`-then-len check, which materializes the full body
 # before deciding).
-MAX_BODY_BYTES = 5 * 1024 * 1024
+MAX_BODY_BYTES = FETCH_DEFAULT_MAX_BYTES
 
 # FlareSolverr renders pages in headless Chromium. For an XML feed, Chromium
 # returns its built-in XML VIEWER -- an HTML page that pretty-prints the

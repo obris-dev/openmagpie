@@ -138,6 +138,13 @@ class RssEntryPayload(SourcePayload):
 
     model_config = {"frozen": True, "extra": "ignore"}
 
+    @property
+    def article_url(self) -> str:
+        # An RSS entry's own `url` IS the article (no separate discussion page), so the
+        # linked-article enrichment fetches it. Overrides the base (which uses
+        # external_url); derived from the stored `url`, so it applies to existing items.
+        return self.url
+
     def source_slug(self) -> str:
         return self.feed_url
 
@@ -188,6 +195,10 @@ class RssEntryPayload(SourcePayload):
             term for t in entry.get("tags", []) if isinstance(t, dict) and (term := t.get("term", "").strip())
         ]
 
+        # `url` is the entry link. `external_url` is left unset: an RSS entry has no
+        # separate off-platform link (the entry IS the article), and linked-article
+        # enrichment selects the fetch target per kind via `RssEntryPayload.article_url`
+        # (-> `url`) at evaluation time, so nothing needs to be baked into the payload.
         payload = cls(
             external_id=external_id,
             kind=cls.PAYLOAD_KIND,

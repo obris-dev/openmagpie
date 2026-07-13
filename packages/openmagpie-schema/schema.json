@@ -401,6 +401,7 @@
         "not_applicable",
         "disabled",
         "included",
+        "included_via_fallback",
         "unavailable",
         "missing"
       ],

@@ -30,11 +30,23 @@ class SourcePayload(BaseModel):
     url: str = ""
     # The off-platform link this item points to ("" when self-contained, e.g. a
     # text post or a Reddit thread). Distinct from `url` (the item's own page on
-    # its source); the relevance engine's lazy article-fetch reads THIS, not `url`.
+    # its source). Not fetched directly; the article-fetch reads `article_url`.
     external_url: str = ""
     parent_external_id: str = ""
 
     model_config = {"frozen": True}
+
+    @property
+    def article_url(self) -> str:
+        """The URL whose full article the linked-content enrichment should fetch, or ""
+        to skip. PER KIND, chosen at evaluation time (not baked into the stored dump):
+        the default is `external_url` (an aggregator like Hacker News points OFF to the
+        article, its own `url` being just the discussion page). RSS overrides to `url`
+        (the entry links straight to the article). A self/discussion item (Reddit, HN
+        comment) has an empty `external_url`, so this is "" and enrichment no-ops.
+        Because it derives from stored fields, it applies to EXISTING items with no
+        re-poll / backfill."""
+        return self.external_url
 
     @classmethod
     def __pydantic_init_subclass__(cls, **kwargs: object) -> None:

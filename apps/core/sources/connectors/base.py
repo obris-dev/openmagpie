@@ -22,6 +22,11 @@ logger = logging.getLogger("sources")
 FETCH_MAX_REDIRECTS = 3
 FETCH_TOTAL_TIMEOUT = 30.0
 
+# Default streamed-body cap for an untrusted fetch (RSS feed body, linked-article
+# enrichment, challenge-bypass sidecar). One shared value so the caps can't drift
+# apart across the callers that each fetch untrusted bytes.
+FETCH_DEFAULT_MAX_BYTES = 5 * 1024 * 1024
+
 
 class ConnectorParseError(Exception):
     """A connector failed to parse a response from its upstream source.

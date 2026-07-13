@@ -60,7 +60,14 @@ def destination_block_reason(
     - `resolve_dns`: do a DNS lookup for hostnames (send-time). When False
       (write-time) only IP-literal hosts are checked, since DNS can change
       between create and send."""
-    parts = urlsplit(url)
+    try:
+        parts = urlsplit(url)
+    except ValueError:
+        # A URL stdlib urlsplit can't parse (e.g. an unterminated IPv6 `http://[::1`).
+        # Fail SAFE (blocked) so this gate's "malformed -> blocked" contract holds for
+        # EVERY caller, not just those that pre-parse (the enrichment fallback does; the
+        # webhook write path doesn't).
+        return "malformed url"
     if require_https and parts.scheme != "https":
         return "scheme must be https"
     if not block_private_ips:
@@ -79,9 +86,15 @@ def destination_block_reason(
     if not resolve_dns:
         return None
     try:
+        # `parts.port` raises ValueError on an out-of-range / non-numeric port, and
+        # getaddrinfo can raise ValueError (IDNA UnicodeError) on a malformed host; treat
+        # a malformed URL as BLOCKED (fail safe) rather than letting it crash an untrusted
+        # caller (e.g. the enrichment fallback feeds fully item-derived URLs here).
         infos = socket.getaddrinfo(host, parts.port, proto=socket.IPPROTO_TCP)
     except socket.gaierror:
         return f"host {host!r} could not be resolved"
+    except ValueError:
+        return f"{host!r} is a malformed host or port"
     for info in infos:
         addr = info[4][0]
         try:

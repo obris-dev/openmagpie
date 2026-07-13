@@ -3,7 +3,7 @@ from unittest import mock
 
 import feedparser
 import httpx
-from django.test import SimpleTestCase
+from django.test import SimpleTestCase, override_settings
 from pydantic import BaseModel, ValidationError
 
 from openmagpie_schema.configs import RedditSubredditSourceSpec, RssSourceSpec
@@ -89,6 +89,22 @@ class ChallengeBypassRecoveryTests(SimpleTestCase):
         ):
             payloads = list(RssConnector().poll(spec, since=None))
         self.assertEqual([p.title for p in payloads], ["One", "Two"])
+
+
+@override_settings(SOURCE_CHALLENGE_BYPASS_URL="http://flare.test/v1")
+class ChallengeBypassRobustnessTests(SimpleTestCase):
+    """challenge_bypass_fetch is a best-effort helper (the enrichment fallback relies on
+    its None-on-failure contract), so a sidecar returning valid-but-non-object JSON (a
+    misconfigured SOURCE_CHALLENGE_BYPASS_URL pointing at the wrong service) must return
+    None, not raise AttributeError on the .get() and crash the run."""
+
+    def test_non_object_json_returns_none(self) -> None:
+        from sources.connectors.challenge_bypass import challenge_bypass_fetch
+
+        resp = mock.Mock(status_code=200)
+        resp.json.return_value = ["not", "an", "object"]  # valid JSON, not a dict
+        with mock.patch("sources.connectors.challenge_bypass.httpx.post", return_value=resp):
+            self.assertIsNone(challenge_bypass_fetch("https://x.test/a"))
 
 
 class RedditRateLimitBackoffTests(SimpleTestCase):

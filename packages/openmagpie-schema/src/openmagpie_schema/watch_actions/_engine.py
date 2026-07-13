@@ -39,10 +39,11 @@ class EngineActionConfigBase(WatchActionConfigBase):
     # default = EngineSpec(kind=""); the server fills the real default kind from
     # settings + validates it (policy; the pure package can't know the registry).
     engine: EngineSpec = Field(default_factory=EngineSpec)
-    # When the item has an `external_url` (an off-site link, e.g. an HN link post),
-    # fetch that page and fold its readable text into the LLM call so a bare link is
-    # judged on its substance, not just the title. ON by default; set false to skip
-    # the fetch. No-ops when the item has no external_url (Reddit, Ask HN, RSS).
+    # Fetch the item's linked article and fold its readable text into the LLM call, so
+    # the item is judged on the article's substance, not just its title/teaser. The
+    # fetch target is per kind (the connector's SourcePayload.article_url): an HN link
+    # post's off-site link, an RSS entry's own url. ON by default; set false to skip.
+    # No-ops for a kind with no article to fetch (Reddit, Ask HN, HN comments).
     fetch_external_content: bool = True
 
     def engine_label(self) -> str:
@@ -67,8 +68,11 @@ class ExternalContentStatus(StrEnum):
     it (none to fetch / disabled / the fetch yielded nothing). A run is never failed
     for missing enrichment ; this is the status of it."""
 
-    NOT_APPLICABLE = "not_applicable"  # item had no external_url (Reddit, Ask HN, RSS)
+    NOT_APPLICABLE = "not_applicable"  # item had no article to fetch (Reddit, Ask HN, HN comments)
     DISABLED = "disabled"  # fetch_external_content was off
     INCLUDED = "included"  # fetched + extracted, folded into the LLM call
+    # article WAS included + folded into the LLM call (like INCLUDED), but the direct
+    # fetch was blocked and only the headless challenge-bypass sidecar could get it
+    INCLUDED_VIA_FALLBACK = "included_via_fallback"
     UNAVAILABLE = "unavailable"  # the fetch FAILED (network / HTTP error, blocked host, timeout, oversize)
     MISSING = "missing"  # fetched OK, but no usable article text came out (paywall / JS-only / non-article)

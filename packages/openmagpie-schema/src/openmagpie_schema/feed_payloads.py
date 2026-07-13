@@ -34,7 +34,7 @@ class FeedItemPayload(BaseModel):
     title: str = ""  # the item's headline (engine input)
     content: str = ""  # the item's own body, the poster's words ("" for a bare link); engine input
     url: str = ""  # the item's canonical page on its source (Reddit comments, HN discussion); not the off-site link
-    external_url: str = ""  # off-platform link this item points to ("" if self-contained); the article fetch reads this
+    external_url: str = ""  # off-platform link this item points to ("" if self-contained)
     parent_external_id: str = ""  # external_id of the parent item (a comment's root story); "" for top-level
 
 

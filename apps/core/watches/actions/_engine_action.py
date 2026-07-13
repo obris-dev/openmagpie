@@ -86,7 +86,7 @@ class EngineActionMixin(ExternalFetchMixin):
             self.fetch_external_url,
             action_id=str(action.id),
             enabled=config.fetch_external_content,
-            external_url=payload.external_url,
+            article_url=payload.article_url,  # per-kind: external_url for aggregators, url for RSS
         )
         return _Prepared(
             config=config,
