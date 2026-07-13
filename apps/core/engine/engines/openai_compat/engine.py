@@ -28,21 +28,14 @@ import json
 import time
 from typing import Any, cast
 
-from openai import (
-    AuthenticationError,
-    BadRequestError,
-    NotFoundError,
-    OpenAI,
-    OpenAIError,
-    PermissionDeniedError,
-    UnprocessableEntityError,
-)
+from openai import OpenAI, OpenAIError
 
 from openmagpie_schema.engine import EngineStatus
 from openmagpie_schema.watch_actions import ExtractField
 from sources.payloads import SourcePayload
 
 from ..base import EngineRequestRejected, ExtractionResult, JudgmentJSON, JudgmentResult
+from .errors import raise_for_completion_error
 from .prompts import (
     CONTENT_TRUNCATE,
     EXTRACT_INSTRUCTIONS_TEMPLATE,
@@ -74,7 +67,7 @@ class OpenAICompatEngine:
 
     kind = "openai_compat"
 
-    def __init__(self, *, base_url: str, default_model: str, api_key: str = "") -> None:
+    def __init__(self, *, base_url: str, default_model: str, api_key: str = "", max_retries: int = 0) -> None:
         self.base_url = base_url.rstrip("/")
         # `default_model` is the fallback when a caller's config leaves
         # `engine.model` empty. Named "default_model" (not "model") because
@@ -82,21 +75,21 @@ class OpenAICompatEngine:
         # would read ambiguously.
         self.default_model = default_model
         self.api_key = api_key
-        self._openai: OpenAI | None = None
-
-    def _client(self) -> OpenAI:
-        """The shared client (built once). `max_retries=0`: the drain owns retry
-        semantics (a transient failure -> FAILED -> retried), so the SDK must not
-        also retry and mask/duplicate that. A blank api_key becomes a placeholder
-        because the SDK requires a non-empty one; local servers ignore it."""
-        if self._openai is None:
-            self._openai = OpenAI(
-                base_url=self.base_url,
-                api_key=self.api_key or "noauth",
-                max_retries=0,
-                timeout=_CHAT_TIMEOUT,
-            )
-        return self._openai
+        # Built once here, not lazily: the engine is constructed at registry init on the
+        # startup thread before any drain worker exists, so eager construction is race-free
+        # where a lazy check-then-set would let N worker threads each build a client (N-1
+        # orphaned). The client opens no sockets until first use. max_retries
+        # (ENGINE_MAX_RETRIES) is the SDK's own exponential backoff for transient failures
+        # and 429s, so a rate-limit burst makes a worker wait rather than fast-fail and let
+        # the drain instantly claim the next (also-doomed) run, burning attempts queue-wide.
+        # A blank api_key becomes a placeholder because the SDK requires a non-empty one;
+        # local servers ignore it.
+        self._openai = OpenAI(
+            base_url=self.base_url,
+            api_key=self.api_key or "noauth",
+            max_retries=max_retries,
+            timeout=_CHAT_TIMEOUT,
+        )
 
     def _apply_json_schema(self, params: dict[str, Any], *, name: str, schema: dict[str, Any]) -> None:
         """Force a JSON shape via the standard OpenAI `response_format`
@@ -123,30 +116,18 @@ class OpenAICompatEngine:
         return resolved_model
 
     def _complete(self, params: dict[str, Any]) -> tuple[str, int]:
-        """Run one chat completion and return (reply_text, elapsed_ms). Maps
-        permanent 4xx config defects to EngineRequestRejected (ERRORED, not
-        retried); transient errors (RateLimit/InternalServer/APITimeout/
-        APIConnection and any other OpenAIError) propagate -> the drain's
-        recoverable FAILED. A loosely-compatible backend may omit choices / the
-        message / its content; each missing piece becomes an empty string so the
-        caller's parse fails into a transient FAILED, not an AttributeError."""
+        """Run one chat completion and return (reply_text, elapsed_ms). An SDK error is
+        classified by `raise_for_completion_error`: a permanent 4xx config defect becomes
+        EngineRequestRejected (ERRORED, not retried), a transient one (RateLimit / 5xx /
+        timeout / connection) is re-raised -> the drain's recoverable FAILED. A loosely
+        compatible backend may omit choices / the message / its content; each missing
+        piece becomes an empty string so the caller's parse fails into a transient FAILED,
+        not an AttributeError."""
         started = time.perf_counter()
         try:
-            completion = self._client().chat.completions.create(**params)
-        except (AuthenticationError, PermissionDeniedError) as exc:
-            raise EngineRequestRejected(
-                f"the LLM at {self.base_url} rejected auth ({exc.status_code}); check ENGINE_API_KEY"
-            ) from exc
-        except NotFoundError as exc:
-            raise EngineRequestRejected(
-                f"the LLM at {self.base_url} has no such endpoint/model ({exc.status_code}); "
-                f"check ENGINE_BASE_URL and ENGINE_MODEL"
-            ) from exc
-        except (BadRequestError, UnprocessableEntityError) as exc:
-            raise EngineRequestRejected(
-                f"the LLM at {self.base_url} rejected the request as malformed ({exc.status_code}); "
-                f"it may not support OpenAI structured outputs (json_schema) - check ENGINE_BASE_URL/ENGINE_MODEL"
-            ) from exc
+            completion = self._openai.chat.completions.create(**params)
+        except OpenAIError as exc:
+            raise_for_completion_error(exc, base_url=self.base_url, params=params)
         elapsed_ms = int((time.perf_counter() - started) * 1000)
         choice = completion.choices[0] if completion.choices else None
         message = choice.message if choice else None
@@ -305,7 +286,7 @@ class OpenAICompatEngine:
 
         Raises an `openai.OpenAIError` subclass when unreachable / unauthorized /
         shape-drifted; status() catches it and maps it to operator-facing detail."""
-        page = self._client().with_options(timeout=_PROBE_TIMEOUT).models.list()
+        page = self._openai.with_options(timeout=_PROBE_TIMEOUT).models.list()
         return [m.id for m in page.data]
 
     def status(self) -> EngineStatus:

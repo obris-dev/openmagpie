@@ -339,12 +339,21 @@ PATH_CHAIN_LOCK_TIMEOUT_SECONDS = int(os.environ.get("PATH_CHAIN_LOCK_TIMEOUT_SE
 # claim burns one) ; past it the run stays terminally FAILED so a broken
 # or worker-crashing run can't retry forever.
 WATCH_RUN_MAX_ATTEMPTS = int(os.environ.get("WATCH_RUN_MAX_ATTEMPTS", "3"))
-# STALE_SECONDS: a run stuck in RUNNING longer than this is presumed
-# crashed and reaped to FAILED. Comfortably above a run's worst-case wall-clock:
-# the ~120s engine judge plus (for an enrichment kind) a linked-article fetch,
-# up to ~30s direct + ~100s challenge-bypass sidecar. A slow-but-alive run is
-# never false-reaped; a real crash recovers in <=10m.
+# STALE_SECONDS: a run stuck in RUNNING longer than this is presumed crashed and
+# reaped to FAILED. Sized above a run's worst-case wall-clock: the engine judge, up to
+# (ENGINE_MAX_RETRIES + 1) x ~120s when the SDK retries a timing-out / 5xx backend (so
+# ~360s at the default 2), plus (for an enrichment kind) a linked-article fetch up to
+# ~30s direct + ~100s challenge-bypass sidecar. ~490s worst case still clears 600s, but
+# raise this in step if you raise ENGINE_MAX_RETRIES. A slow-but-alive run is never
+# false-reaped; a real crash recovers in <=10m.
 WATCH_RUN_STALE_SECONDS = int(os.environ.get("WATCH_RUN_STALE_SECONDS", "600"))
+# DRAIN_CONCURRENCY: how many runs process_due_runs drains at once (default 1 =
+# serial). N>1 runs the network-bound judge in a thread pool while the CAS claim
+# stays serial, so N is the number of concurrent engine calls. The `--concurrency`
+# flag overrides this per invocation ; the env var lets the ticker (up-jobs, which
+# passes no flag) scale without a Makefile edit. Keep N at or below the engine's rate
+# limit (a 429 is retried with backoff up to ENGINE_MAX_RETRIES, then a retryable FAILED).
+WATCH_RUN_DRAIN_CONCURRENCY = int(os.environ.get("WATCH_RUN_DRAIN_CONCURRENCY", "1"))
 
 # Backfill jobs (process_due_backfills). A job is pure DB work (scan the source
 # passes, optionally delete, bulk-enqueue), chunked, no LLM calls -- so it's not
@@ -413,6 +422,13 @@ ENGINE_API_KEY = os.environ.get("ENGINE_API_KEY", "")
 # clear EngineRequestRejected. List a backend's models with:
 #   uv run --package openmagpie-core python -m engine.scripts.probe <ENGINE_BASE_URL> [key]
 ENGINE_MODEL = os.environ.get("ENGINE_MODEL", "")
+# ENGINE_MAX_RETRIES: how many times the OpenAI client itself retries a transient
+# failure (429 / 5xx / timeout) with exponential backoff + jitter, honoring
+# Retry-After, BEFORE it surfaces to the drain. This is the smoothing layer that
+# matters under WATCH_RUN_DRAIN_CONCURRENCY: without it a rate-limited judge
+# fast-fails and the drain instantly claims the next run (which also fails), burning
+# attempts across the whole queue. The drain's attempt-based retry is the outer net.
+ENGINE_MAX_RETRIES = int(os.environ.get("ENGINE_MAX_RETRIES", "2"))
 
 # Webhook-action security gates (consumed by the WebhookAction when it
 # lands). Defaults assume single-tenant self-host with possible internal

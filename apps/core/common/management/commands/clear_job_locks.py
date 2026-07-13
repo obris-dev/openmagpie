@@ -19,10 +19,9 @@ from typing import Any
 
 from django.conf import settings
 from django.core.cache import cache
-from django.core.management import get_commands, load_command_class
 from django.core.management.base import BaseCommand, CommandError, CommandParser
 
-from common.commands import SingleFlightCommand
+from common.commands import iter_single_flight_commands
 from common.locks import job_lock_key
 
 logger = logging.getLogger(__name__)
@@ -109,20 +108,15 @@ class Command(BaseCommand):
 
     @staticmethod
     def _discover_jobs() -> set[str]:
-        """Every SingleFlightCommand's lock name, found by walking the command
-        registry, so --all needs no hardcoded list and can't drift as jobs are
-        added or renamed."""
+        """Every SingleFlightCommand's lock name, via the shared registry walk, so
+        --all needs no hardcoded list and can't drift as jobs are added or renamed.
+        resolve_job_name() is guarded per command: a misconfigured one that raises
+        must not strand the whole sweep (this is the incident-response path), so we
+        skip it but log the skip so a missed lock stays traceable."""
         names: set[str] = set()
-        for command_name, app in get_commands().items():
-            # Both calls are guarded: load_command_class raises a wide range of
-            # import errors, and a misconfigured SingleFlightCommand's
-            # resolve_job_name() can raise too. One bad command must not strand
-            # the whole sweep (this is the incident-response path), so we skip
-            # it, but log the skip so a missed lock stays traceable.
+        for command_name, command in iter_single_flight_commands():
             try:
-                command = load_command_class(app, command_name)
-                if isinstance(command, SingleFlightCommand):
-                    names.add(command.resolve_job_name())
+                names.add(command.resolve_job_name())
             except Exception as exc:
                 logger.warning("clear_job_locks: skipping %r; could not resolve its job lock: %s", command_name, exc)
         return names

@@ -206,7 +206,9 @@ class ClearJobLocksTests(SimpleTestCase):
 
     def test_discover_skips_a_job_it_cannot_resolve(self) -> None:
         # A misconfigured SingleFlightCommand (resolve_job_name raises) must be
-        # skipped, not abort the whole --all sweep (the incident-response path).
+        # skipped, not abort the whole --all sweep (the incident-response path). The
+        # registry walk now lives in the shared common.commands helper, so patch there.
+        from common import commands as common_commands
         from common.management.commands import clear_job_locks
 
         class _Bad(SingleFlightCommand):
@@ -214,8 +216,8 @@ class ClearJobLocksTests(SimpleTestCase):
 
         _Bad.__module__ = "badapp.services.notacommand"  # no job_name + bad module -> raises
         with (
-            mock.patch.object(clear_job_locks, "get_commands", return_value={"bad": "badapp"}),
-            mock.patch.object(clear_job_locks, "load_command_class", return_value=_Bad()),
+            mock.patch.object(common_commands, "get_commands", return_value={"bad": "badapp"}),
+            mock.patch.object(common_commands, "load_command_class", return_value=_Bad()),
         ):
             self.assertEqual(clear_job_locks.Command._discover_jobs(), set())  # skipped, did not raise
 

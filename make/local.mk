@@ -123,13 +123,20 @@ _job-up:
 		echo "$(NAME) ($(CMD)) started (pid $$(cat $(JOBS_DIR)/$(NAME).pid)) every $(INTERVAL)s -> $(JOBS_DIR)/$(NAME).log"; \
 	fi
 
-down-jobs: ## Stop the background tickers started by up-jobs (and clear their job locks)
+down-jobs: ## Stop the background tickers started by up-jobs (signal in-flight passes, then clear locks)
 	@for n in poll trigger backfill drain digest email heartbeat; do \
 		if [ -f $(JOBS_DIR)/$$n.pid ]; then \
 			kill $$(cat $(JOBS_DIR)/$$n.pid) 2>/dev/null; rm -f $(JOBS_DIR)/$$n.pid; echo "$$n stopped"; \
 		else echo "$$n not running"; fi; \
 	done
-	@echo "best-effort clearing job locks (an in-container pass may still be finishing; jobs are single-flight over idempotent work, so a brief overlap is harmless)..."
+	@# The kill above stops the host ticker loops, but a pass already running INSIDE
+	@# the container is an orphaned docker-exec child it never reaches. Signal those so
+	@# each releases its lock and exits gracefully (the lock releases at once; the core
+	@# process then lingers until its in-flight judges finish). Otherwise stop/start
+	@# cycles pile up concurrent long-running passes. clear_job_locks covers a hard kill.
+	@echo "signaling any in-container job passes to stop gracefully..."
+	@$(MAKE) --no-print-directory local-manage CMD="stop_due_jobs" || true
+	@echo "best-effort clearing any locks a hard-killed pass left behind..."
 	@$(MAKE) --no-print-directory local-manage CMD="clear_job_locks --all" || true
 
 local-web: ## Start (or restart) the Next.js dev container (app + marketing + blog) and tail its logs

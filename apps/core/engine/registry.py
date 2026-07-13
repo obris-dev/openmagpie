@@ -21,12 +21,13 @@ def _build() -> Engine:
         base_url=settings.ENGINE_BASE_URL,
         default_model=settings.ENGINE_MODEL,
         api_key=settings.ENGINE_API_KEY,
+        max_retries=settings.ENGINE_MAX_RETRIES,
     )
 
 
-# Built eagerly at import (the constructor only stores config, no network), so
-# there's no lazy check-then-set to race under a threaded server. register()
-# swaps it for tests.
+# Built eagerly at import (the constructor stores config and a socket-less client,
+# no network), so there's no lazy check-then-set to race under a threaded server.
+# register() swaps it for tests.
 _engine: Engine = _build()
 
 

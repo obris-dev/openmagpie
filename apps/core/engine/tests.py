@@ -44,7 +44,7 @@ def _engine(**kw) -> OpenAICompatEngine:
 
 # ── openai client mocks ────────────────────────────────────────────────────
 def _patch_client(client: mock.MagicMock):
-    """Patch the engine module's `OpenAI` so `_client()` returns our mock."""
+    """Patch the engine module's `OpenAI` so the engine's eagerly-built `self._openai` is our mock."""
     return mock.patch(f"{ENGINE_MOD}.OpenAI", return_value=client)
 
 

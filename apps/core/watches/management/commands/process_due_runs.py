@@ -1,15 +1,26 @@
 import logging
 import time
+from collections.abc import Iterator
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
+from datetime import datetime
 from typing import Any
 
+from django.conf import settings
+from django.db import connections
 from django.utils import timezone
 
 from common.commands import SingleFlightCommand
 from openmagpie_schema.watch_enums import WatchActionRunState
+from watches.actions.protocol import ActionResult
+from watches.models import WatchActionRun
 from watches.operations.drain import WatchDrainOperation
 from watches.services import WatchActionRunService
 
 logger = logging.getLogger("watches")
+
+# One finished run: the drain's ActionResult (None = claim lost mid-judge) paired
+# with the exception it raised (None on success). Exactly one side is meaningful.
+_DrainOutcome = tuple[ActionResult | None, Exception | None]
 
 # Stable display order for state breakdowns: the run-state lifecycle order
 # (succeeded first), derived from the enum so it can't drift and matches
@@ -57,7 +68,8 @@ def _breakdown(tally: dict[str, int]) -> str:
 # Single-flight here is a convenience (don't stack passes on one box), NOT
 # a correctness requirement: the CAS claim already makes concurrent drains
 # safe ; they split the queue. To scale the drain horizontally across
-# machines, drop back to plain BaseCommand so N workers run at once.
+# machines, drop back to plain BaseCommand so N workers run at once. Within
+# one box, --concurrency N runs N judges at once over that same safe claim.
 class Command(SingleFlightCommand):
     help = (
         "Drain pass: reap stale runs, then claim + execute every due run, advancing the chain. Scheduler entry point."
@@ -74,10 +86,30 @@ class Command(SingleFlightCommand):
             action="store_true",
             help="One line per run (noisy) instead of the periodic checkpoint.",
         )
+        parser.add_argument(
+            "--concurrency",
+            type=int,
+            default=None,
+            help=(
+                "How many runs to drain at once (default 1 = serial). N>1 runs the "
+                "network-bound judge in a thread pool while the CAS claim stays serial, "
+                "so N is the number of concurrent engine calls. Keep N at or below your "
+                "engine's rate limit (a 429 is retried with backoff up to ENGINE_MAX_RETRIES, "
+                "then a retryable FAILED). "
+                "Unset, it reads settings.WATCH_RUN_DRAIN_CONCURRENCY "
+                "(env WATCH_RUN_DRAIN_CONCURRENCY), so the ticker scales via .env."
+            ),
+        )
 
     def handle(self, *args: Any, **options: Any) -> None:
         quiet = bool(options.get("quiet"))
         verbose = bool(options.get("verbose"))
+        # Explicit --concurrency wins ; unset (None) falls back to the env-backed
+        # setting so the ticker scales via .env without a flag. Floor at 1.
+        requested = options.get("concurrency")
+        if requested is None:
+            requested = settings.WATCH_RUN_DRAIN_CONCURRENCY
+        concurrency = max(1, int(requested))
         now = timezone.now()
 
         # Reap first so a crashed-worker run (stuck RUNNING) rejoins the
@@ -109,9 +141,10 @@ class Command(SingleFlightCommand):
         if not quiet:
             if total_due:
                 logger.info(
-                    "Draining %d due run%s… You'll see progress every ~minute.",
+                    "Draining %d due run%s%s… You'll see progress every ~minute.",
                     total_due,
                     "s" if total_due != 1 else "",
+                    f" at concurrency {concurrency}" if concurrency > 1 else "",
                 )
             else:
                 logger.info("No runs due.")
@@ -119,29 +152,35 @@ class Command(SingleFlightCommand):
         last_checkpoint = t_start
         processed = 0
 
-        for processed, run in enumerate(WatchActionRunService.Global.claim_due(now=now), start=1):
-            # Per-run try/except: an UNEXPECTED error (e.g. the commit
-            # itself) must not abort the pass. The run stays RUNNING and the
-            # next reap retries it; one bad run never starves the queue.
-            try:
-                outcome = WatchDrainOperation(run, now=now).run()
-            except Exception as exc:
+        # Serial (concurrency=1) and threaded paths feed ONE consumer loop, so the
+        # tally, progress, and checkpoint logic below is identical for both. Each
+        # yields (run, (outcome, exc)) with the drain already run by _safe_drain.
+        claimer = WatchActionRunService.Global.claim_due(now=now)
+        completions = (
+            self._concurrent_completions(claimer, now, concurrency)
+            if concurrency > 1
+            else ((run, self._safe_drain(run, now)) for run in claimer)
+        )
+        for processed, (run, (outcome, exc)) in enumerate(completions, start=1):
+            if exc is not None:
+                # An UNEXPECTED error (e.g. the commit itself) never aborts the pass:
+                # the run stays RUNNING and the next reap retries it. exc_info=exc
+                # attaches the traceback even though we're past the except block.
                 infra_failed += 1
-                logger.exception("drain failed run=%s: %s", run.id, exc)
+                logger.error("drain failed run=%s: %s", run.id, exc, exc_info=exc)
                 detail = f"failed: {type(exc).__name__}: {exc}"
+            elif outcome is None:
+                # Claim lost: this run was reaped + re-claimed by another drain
+                # mid-judge ; the fresh winner owns the result + the chain advance,
+                # so we drop ours (don't count, don't advance).
+                lost_claims += 1
+                detail = "claim lost (handled by another worker)"
             else:
-                if outcome is None:
-                    # Claim lost: this run was reaped + re-claimed by another
-                    # drain mid-judge ; the fresh winner owns the result + the
-                    # chain advance, so we drop ours (don't count, don't advance).
-                    lost_claims += 1
-                    detail = "claim lost (handled by another worker)"
-                else:
-                    executed += 1
-                    detail = outcome.state.value
-                    by_state[detail] = by_state.get(detail, 0) + 1
-                    tally = chunk.setdefault(str(run.action_id), {})
-                    tally[detail] = tally.get(detail, 0) + 1
+                executed += 1
+                detail = outcome.state.value
+                by_state[detail] = by_state.get(detail, 0) + 1
+                tally = chunk.setdefault(str(run.action_id), {})
+                tally[detail] = tally.get(detail, 0) + 1
             if quiet:
                 continue
             if verbose:
@@ -180,3 +219,66 @@ class Command(SingleFlightCommand):
         lines = [_progress(processed, total, t_start)]
         lines += [f"  action={action_id}: {_breakdown(tally)}" for action_id, tally in tallies.items()]
         logger.info("%s", "\n".join(lines))
+
+    def _safe_drain(self, run: WatchActionRun, now: datetime) -> _DrainOutcome:
+        """Execute one claimed run, returning (outcome, None) or (None, exc). Never
+        raises: one bad run must not abort the pass (serial), and a thread's escaping
+        exception would be buried in the pool (concurrent), so both get the failure as
+        a value. `outcome` is the drain's ActionResult, or None when the claim was lost
+        mid-judge. Deliberately does NOT touch connections: the serial path runs this on
+        the MAIN thread while it iterates claim_due's server-side cursor, so closing that
+        connection (CONN_MAX_AGE) would break the cursor's next fetch. Pool-thread
+        connection hygiene lives in _drain_worker instead."""
+        try:
+            return WatchDrainOperation(run, now=now).run(), None
+        except Exception as exc:  # deliberate blanket catch: isolate one run's failure
+            return None, exc
+
+    def _drain_worker(self, run: WatchActionRun, now: datetime) -> _DrainOutcome:
+        """Pool-thread entry point: run _safe_drain, then close this worker's DB
+        connections so a pooled thread never leaves one open between tasks. Only the
+        pool threads do this ; the main thread must NOT (it holds claim_due's server-side
+        cursor, see _safe_drain). `connections` is thread-local, so close_all() here
+        touches only this worker's own connections, never the main thread's cursor."""
+        try:
+            return self._safe_drain(run, now)
+        finally:
+            connections.close_all()
+
+    def _concurrent_completions(
+        self, claimer: Iterator[WatchActionRun], now: datetime, concurrency: int
+    ) -> Iterator[tuple[WatchActionRun, _DrainOutcome]]:
+        """Drain up to `concurrency` runs at once, yielding (run, (outcome, exc)) as
+        each finishes. The claim (a fast CAS UPDATE) stays serial on this thread ; only
+        the slow, network-bound judge runs in the pool, so N is effectively the number
+        of concurrent engine calls. Bounded: a new run is claimed only as a slot frees,
+        so at most N sit RUNNING at once (never the whole backlog claimed up front).
+
+        On abort (Ctrl-C, or the consumer loop raising) the finally cancels QUEUED
+        futures immediately, but a judge already running can't be interrupted: the
+        pool's non-daemon threads are joined at interpreter exit, so the process still
+        waits out the in-flight judges (up to ~a judge timeout) before exiting. Nothing
+        is lost either way: a judge that finishes writes its own terminal state, and a
+        run cut short by a hard SIGKILL stays RUNNING for the reaper to reclaim (CAS-safe)."""
+        pool = ThreadPoolExecutor(max_workers=concurrency, thread_name_prefix="drain")
+        try:
+            in_flight: dict[Any, WatchActionRun] = {}
+
+            def fill() -> None:
+                while len(in_flight) < concurrency:
+                    try:
+                        run = next(claimer)
+                    except StopIteration:
+                        return
+                    in_flight[pool.submit(self._drain_worker, run, now)] = run
+
+            fill()
+            while in_flight:
+                done, _ = wait(in_flight, return_when=FIRST_COMPLETED)
+                for fut in done:
+                    run = in_flight.pop(fut)
+                    result: _DrainOutcome = fut.result()  # _drain_worker never raises
+                    fill()  # refill the freed slot before handing this result back
+                    yield run, result
+        finally:
+            pool.shutdown(wait=False, cancel_futures=True)

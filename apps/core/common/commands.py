@@ -11,12 +11,16 @@ Built on `job_lock` (cache/DB-backed via `named_lock`), so it serializes
 across processes AND machines, and releases via the lock's finally on a
 normal exit or exception. `execute` also installs a handler that turns
 SIGTERM into a SystemExit so the finally still runs WHEN the signal
-reaches this process (a k8s pod stop, a direct `kill` of the run). When
-SIGTERM does NOT reach it (e.g. `make down-jobs` kills the host-side
-ticker wrapper, not the in-container run) or on a hard SIGKILL / power
-loss, the handler can't fire; `clear_job_locks` and the day-long TTL are
-the release path there. Opt-in: a command that WANTS to run N-wide (the
-drain is safe to, via its CAS claim) just stays on plain BaseCommand.
+reaches this process (a k8s pod stop, a direct `kill` of the run).
+`make down-jobs` now delivers that SIGTERM to the in-container runs (via
+the `stop_due_jobs` command, since killing the host-side ticker wrapper
+alone never reaches them), so the handler fires and each lock releases
+cleanly. Only a hard SIGKILL / OOM / power loss skips it; `clear_job_locks`
+and the day-long TTL are the release path there. Single-flight is a
+convenience (don't stack passes on one box), not a correctness bound: the
+drain is a SingleFlightCommand but its CAS claim makes concurrent execution
+safe, so it fans out N-wide WITHIN a pass (process_due_runs --concurrency)
+and could fan out across machines by dropping to plain BaseCommand.
 """
 
 import logging
@@ -27,6 +31,7 @@ from contextlib import contextmanager
 from typing import Any, ClassVar
 
 from django.core.exceptions import ImproperlyConfigured
+from django.core.management import get_commands, load_command_class
 from django.core.management.base import BaseCommand
 
 from common.locks import job_lock
@@ -106,3 +111,21 @@ class SingleFlightCommand(BaseCommand):
                 self.stdout.write(f"{name} already running; skipping")
                 return None
             return super().execute(*args, **options)
+
+
+def iter_single_flight_commands() -> Iterator[tuple[str, SingleFlightCommand]]:
+    """Yield (command_name, instance) for every registered SingleFlightCommand.
+
+    Walks the command registry so callers need no hardcoded job list and can't
+    drift as jobs are added or renamed. Skips (with a log) any command that fails
+    to import or resolve, so one bad command never strands the sweep. Shared by
+    `clear_job_locks` (which wants each job's lock name via resolve_job_name) and
+    `stop_due_jobs` (which matches command names against the running processes)."""
+    for command_name, app in get_commands().items():
+        try:
+            command = load_command_class(app, command_name)
+        except Exception as exc:
+            logger.warning("iter_single_flight_commands: skipping %r; could not load: %s", command_name, exc)
+            continue
+        if isinstance(command, SingleFlightCommand):
+            yield command_name, command
