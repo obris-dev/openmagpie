@@ -5,6 +5,18 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.0](https://github.com/obris-dev/openmagpie/compare/v0.7.0...v0.8.0) (2026-07-23)
+
+
+### ✨ Features
+
+* **core:** linked-article enrichment via challenge-bypass sidecar, per-kind fetch target ([#171](https://github.com/obris-dev/openmagpie/issues/171)) ([cd31f8f](https://github.com/obris-dev/openmagpie/commit/cd31f8f3cd5dbf369ab01a43115f9ce88eafe1ce))
+* **core:** make watch-action + source kinds plugin-extensible ([#170](https://github.com/obris-dev/openmagpie/issues/170)) ([c4cb1b2](https://github.com/obris-dev/openmagpie/commit/c4cb1b2cd50f582d24e7bacce9d0e9bf9e06c253))
+* **core:** plugins app, a registration + routing layer for forks & third-party plugins ([#169](https://github.com/obris-dev/openmagpie/issues/169)) ([ec76be4](https://github.com/obris-dev/openmagpie/commit/ec76be49655163fa7573fa5d1d4a629072366003))
+* **links:** URL shortener with deduplicated click analytics ([#173](https://github.com/obris-dev/openmagpie/issues/173)) ([3212e0e](https://github.com/obris-dev/openmagpie/commit/3212e0e4b79590d266c95ba96dfc9b9b8bafa0f1))
+* version visibility + self-upgrade paths ([#165](https://github.com/obris-dev/openmagpie/issues/165)) ([6d7786f](https://github.com/obris-dev/openmagpie/commit/6d7786ff999bf264437a31da7a59fdf74cac2fc0))
+* **watches:** concurrent drain + engine rate-limit backoff + graceful job shutdown ([#172](https://github.com/obris-dev/openmagpie/issues/172)) ([ac421c6](https://github.com/obris-dev/openmagpie/commit/ac421c62d60f15790bcf49fab510e536e4f74785))
+
 ## [0.7.0](https://github.com/obris-dev/openmagpie/compare/v0.6.0...v0.7.0) (2026-07-08)
 
 
