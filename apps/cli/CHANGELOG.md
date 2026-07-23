@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.8.0](https://github.com/obris-dev/openmagpie/compare/cli-v0.7.0...cli-v0.8.0) (2026-07-23)
+
+
+### ✨ Features
+
+* **core:** make watch-action + source kinds plugin-extensible ([#170](https://github.com/obris-dev/openmagpie/issues/170)) ([c4cb1b2](https://github.com/obris-dev/openmagpie/commit/c4cb1b2cd50f582d24e7bacce9d0e9bf9e06c253))
+  * **Plugin kinds work through the CLI**: custom watch-action and source kinds added by a fork or plugin are recognized as typed kinds in the shared schema, so the CLI creates, edits, and prints them like the built-ins instead of rejecting them.
+* version visibility + self-upgrade paths ([#165](https://github.com/obris-dev/openmagpie/issues/165)) ([6d7786f](https://github.com/obris-dev/openmagpie/commit/6d7786ff999bf264437a31da7a59fdf74cac2fc0))
+  * **Know and update your CLI**: `magpie version` shows your CLI and connected-server versions and flags when either is behind, `magpie upgrade` self-updates the CLI via however you installed it (uv tool / pipx / pip), and a quiet once-a-day nudge points you to it when a newer release is out (opt out with `MAGPIE_NO_UPDATE_CHECK`).
+
 ## [0.7.0](https://github.com/obris-dev/openmagpie/compare/cli-v0.6.0...cli-v0.7.0) (2026-07-08)
 
 
