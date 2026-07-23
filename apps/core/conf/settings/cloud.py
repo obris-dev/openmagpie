@@ -19,13 +19,20 @@ default (here or in base.py). (S) = secret, store in the secret manager.
     EMAIL_HOST_PASSWORD   (S)  Brevo SMTP key
 
 Defaulted to the openmagpie.ai deployment (override via env for another):
-    BASE_URL, APP_BASE_URL, MARKETING_BASE_URL, ALLOWED_HOSTS,
+    BASE_URL, APP_BASE_URL, MARKETING_BASE_URL, ALLOWED_HOSTS, SHORTLINK_HOST,
     CORS_ALLOWED_ORIGINS, CSRF_TRUSTED_ORIGINS.
 This instance's own IP is auto-added to ALLOWED_HOSTS at runtime for health checks.
 
+One-time / cold-db step: run `manage.py createcachetable` (it creates a table for
+every DatabaseCache: the default `openmagpie_cache` scheduler-lock/session/throttle
+cache AND the shortener's dedicated `openmagpie_clickdedup` table). Without it the
+click dedup fails open and every hit writes a ClickEvent row.
+
 Optional overrides: DEFAULT_FROM_EMAIL, EMAIL_HOST/PORT (non-Brevo relay),
 SECURE_SSL_REDIRECT (on by default), SECURE_HSTS_SECONDS (off; enable once TLS
-is stable), the WEBHOOK_*/SOURCE_* SSRF gates (on by default).
+is stable), SHORTLINK_IP_HASH_SALT (defaults to SECRET_KEY), SHORTLINK_TRUST_CF_HEADERS
+(ON here since the origin is CF-tunnel-fronted), the WEBHOOK_*/SOURCE_* SSRF gates
+(on by default).
 """
 
 import contextlib
@@ -38,7 +45,11 @@ import socket
 os.environ.setdefault("BASE_URL", "https://api.openmagpie.ai")
 os.environ.setdefault("APP_BASE_URL", "https://app.openmagpie.ai")
 os.environ.setdefault("MARKETING_BASE_URL", "https://openmagpie.ai")
-os.environ.setdefault("ALLOWED_HOSTS", "api.openmagpie.ai")
+# The API host + the short-link host (served by the same app behind the tunnel).
+os.environ.setdefault("ALLOWED_HOSTS", "api.openmagpie.ai,mgpie.ai")
+# The dedicated short-link domain; ShortLinkHostMiddleware activates the shortener
+# for requests on this host. Override via env for a different short domain.
+os.environ.setdefault("SHORTLINK_HOST", "mgpie.ai")
 # Browser origins that call the API: the app + both marketing hosts (apex +
 # www). www stays OUT of ALLOWED_HOSTS (that's the API host only) but IS a CORS
 # origin (the marketing waitlist form posts cross-origin from it).
@@ -96,6 +107,11 @@ SECURE_HSTS_PRELOAD = env_bool("SECURE_HSTS_PRELOAD", "false")
 WEBHOOK_REQUIRE_HTTPS = env_bool("WEBHOOK_REQUIRE_HTTPS", "true")
 WEBHOOK_BLOCK_PRIVATE_IPS = env_bool("WEBHOOK_BLOCK_PRIVATE_IPS", "true")
 SOURCE_BLOCK_PRIVATE_IPS = env_bool("SOURCE_BLOCK_PRIVATE_IPS", "true")
+
+# The origin is reachable only through the Cloudflare tunnel here, so the edge
+# overwrites any client-supplied CF-Connecting-IP / CF-IPCountry: trust them for
+# click analytics. (base.py defaults this OFF for a directly-reachable self-host.)
+SHORTLINK_TRUST_CF_HEADERS = env_bool("SHORTLINK_TRUST_CF_HEADERS", "true")
 
 # ── Transactional email ──────────────────────────────────────────────────
 # Pinned SMTP (Brevo) — public + rarely changes, so it lives here, not in env.

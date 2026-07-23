@@ -57,6 +57,7 @@ LOCAL_APPS = [
     "watches",
     "waitlist",
     "mailer",
+    "links",
     "telemetry",
     "plugins",
 ]
@@ -100,6 +101,10 @@ PLUGIN_API_URLS: list[str] = resolve_plugin_api_urls(os.environ.get("OPENMAGPIE_
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    # On the SHORTLINK_HOST, swap request.urlconf to links.urls so a bare `<code>`
+    # resolves at the root. Runs before CommonMiddleware (which resolves the URL)
+    # and no-ops on every other host, so it never touches the main API routes.
+    "links.middleware.ShortLinkHostMiddleware",
     # CORS must come before CommonMiddleware so preflight responses get the
     # right headers regardless of other middleware short-circuiting.
     "corsheaders.middleware.CorsMiddleware",
@@ -114,6 +119,26 @@ MIDDLEWARE = [
 ]
 
 ROOT_URLCONF = "conf.urls"
+
+# The dedicated short-link host (a short domain). When a request arrives on this
+# host, ShortLinkHostMiddleware swaps request.urlconf to links.urls so a bare
+# `<code>` resolves to the redirect at the host root. Empty = the shortener is off.
+SHORTLINK_HOST = os.environ.get("SHORTLINK_HOST", "").strip()
+
+# Salt for the click-dedup IP hash. Defaults to SECRET_KEY but is a separate knob
+# so rotating SECRET_KEY (a routine op) doesn't silently make historical ip_hash
+# values incomparable, which would double-count uniques across the rotation.
+SHORTLINK_IP_HASH_SALT = os.environ.get("SHORTLINK_IP_HASH_SALT") or SECRET_KEY
+
+# Trust Cloudflare's CF-Connecting-IP / CF-IPCountry headers for click analytics.
+# OFF by default: those headers are client-forgeable unless the origin is reachable
+# ONLY through the CF tunnel (where the edge overwrites any supplied value). Turn on
+# in the CF-fronted deployment (cloud.py); off-tunnel the click IP falls back to
+# REMOTE_ADDR and country is left blank. Note: off-CF, correct per-visitor analytics
+# require the origin to see the REAL client IP (direct exposure). Behind a plain
+# reverse proxy REMOTE_ADDR is the proxy's IP for everyone, so dedup collapses to one
+# bucket. There is no X-Forwarded-For knob here by design (that header is spoofable).
+SHORTLINK_TRUST_CF_HEADERS = env_bool("SHORTLINK_TRUST_CF_HEADERS", "false")
 
 TEMPLATES = [
     {
@@ -311,7 +336,20 @@ DEVICE_SESSION_COMPLETED_TTL_SECONDS = int(os.environ.get("DEVICE_SESSION_COMPLE
 # `manage.py createcachetable` once after switching backends or on cold db.
 CACHE_BACKEND = os.environ.get("CACHE_BACKEND", "django.core.cache.backends.db.DatabaseCache")
 CACHE_LOCATION = os.environ.get("CACHE_LOCATION", "openmagpie_cache")
-CACHES = {"default": {"BACKEND": CACHE_BACKEND, "LOCATION": CACHE_LOCATION}}
+# The shortener's per-visitor click dedup is a high-volume PUBLIC writer, so it gets
+# its OWN cache table. On the same DatabaseCache backend the default cache caps at
+# MAX_ENTRIES=300 and culls unexpired rows: sharing it would let click writes evict
+# live scheduler job locks (common.locks) / device sessions / throttle counters. A
+# separate LOCATION isolates that (and lets the dedup table cull independently).
+# `manage.py createcachetable` (no args) creates a table for EVERY DatabaseCache here.
+CLICK_DEDUP_CACHE_LOCATION = os.environ.get("CLICK_DEDUP_CACHE_LOCATION", "openmagpie_clickdedup")
+CACHES = {
+    "default": {"BACKEND": CACHE_BACKEND, "LOCATION": CACHE_LOCATION},
+    # Key must equal links.constants.CLICK_DEDUP_CACHE_ALIAS (settings can't import an
+    # app module at load). A missing/renamed key does NOT raise: _seen_recently fails
+    # open, silently disabling dedup, so a links test pins the alias into settings.CACHES.
+    "clickdedup": {"BACKEND": CACHE_BACKEND, "LOCATION": CLICK_DEDUP_CACHE_LOCATION},
+}
 
 # Poll-lock LIVENESS window, NOT a cap on total poll time. The poll renews
 # the lease after each source (common.locks.LockLease.renew), so a feed of

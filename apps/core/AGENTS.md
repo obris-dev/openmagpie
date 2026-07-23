@@ -14,6 +14,7 @@ core/
   engine/          Engine Protocol + OpenAICompatEngine + registry (+ probe)
   watches/         Watch + WatchFeed + WatchPath + WatchAction + WatchActionRun + WatchActionDigestWindow + WatchActionDelivery
   plugins/         extension system: Registry[T] + startup hook loader + multi-DB routing (see plugins/README.md)
+  links/           URL shortener served on SHORTLINK_HOST only (host-swap middleware -> links.urls); ClickEvent stats
   conf/            settings (base + local override), urls, wsgi
 ```
 
@@ -267,6 +268,8 @@ When list rows reference a related entity, **don't embed that entity on every ro
 
 /v1/engines                                        GET        registered engines + reachability
 /healthz                                           GET        DB + cache pings + product version (public)
+
+<code>                                             GET/HEAD   short-link redirect (302), SHORTLINK_HOST root only (not the API host)
 ```
 
 ## Cache-backed state pattern
