@@ -11,14 +11,19 @@ and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2
 ### ✨ Features
 
 * **core:** linked-article enrichment via challenge-bypass sidecar, per-kind fetch target ([#171](https://github.com/obris-dev/openmagpie/issues/171)) ([cd31f8f](https://github.com/obris-dev/openmagpie/commit/cd31f8f3cd5dbf369ab01a43115f9ce88eafe1ce))
+  * **Filters read the full article, not the teaser**: `semantic_filter` judging and `extract` now score against the whole article body, recovered even from Cloudflare-style challenge walls via the bypass sidecar, so relevance and extracted fields are far more accurate on link-out sources (HN, RSS).
 * **core:** make watch-action + source kinds plugin-extensible ([#170](https://github.com/obris-dev/openmagpie/issues/170)) ([c4cb1b2](https://github.com/obris-dev/openmagpie/commit/c4cb1b2cd50f582d24e7bacce9d0e9bf9e06c253))
+  * **Custom kinds without forking core**: a fork or downstream can add its own typed watch-action and source/connector kinds with zero `apps/core` edits, so custom kinds stay type-checked end to end and the fork stays cleanly mergeable with upstream.
 * **core:** plugins app, a registration + routing layer for forks & third-party plugins ([#169](https://github.com/obris-dev/openmagpie/issues/169)) ([ec76be4](https://github.com/obris-dev/openmagpie/commit/ec76be49655163fa7573fa5d1d4a629072366003))
+  * **Installable, self-registering plugins**: enable third-party or fork plugins that register themselves via an import path or a pip entry point, with no core registry edits, and a broken plugin is logged and skipped rather than taking the app down.
 * **links:** URL shortener with deduplicated click analytics ([#173](https://github.com/obris-dev/openmagpie/issues/173)) ([3212e0e](https://github.com/obris-dev/openmagpie/commit/3212e0e4b79590d266c95ba96dfc9b9b8bafa0f1))
   * **Short links on your own domain**: mint a compact `host/code` link to any destination (an auto-generated code, or a custom vanity slug) and hand it out anywhere a long URL is awkward.
   * **Deduplicated click analytics**: each link tracks unique visitors, with refreshes and bots collapsed so they don't inflate the count, plus a per-country breakdown, without ever storing a raw visitor IP.
   * **List and revoke**: review every link with its click stats, and delete one to take it offline when you're done with it.
 * version visibility + self-upgrade paths ([#165](https://github.com/obris-dev/openmagpie/issues/165)) ([6d7786f](https://github.com/obris-dev/openmagpie/commit/6d7786ff999bf264437a31da7a59fdf74cac2fc0))
+  * **Stay current in place**: `make upgrade` advances a self-hosted stack to the latest release and migrates with your data preserved, the server reports its version on `/healthz`, and `magpie version` flags when your CLI or server is behind its track (`magpie upgrade` self-updates the CLI).
 * **watches:** concurrent drain + engine rate-limit backoff + graceful job shutdown ([#172](https://github.com/obris-dev/openmagpie/issues/172)) ([ac421c6](https://github.com/obris-dev/openmagpie/commit/ac421c62d60f15790bcf49fab510e536e4f74785))
+  * **Backfills that finish in hours, not days**: run drains process concurrently (bounded by `WATCH_RUN_DRAIN_CONCURRENCY`), with engine rate-limit backoff so a 429 burst waits instead of failing the whole queue, and graceful job shutdown that releases locks cleanly instead of piling up passes.
 
 ## [0.7.0](https://github.com/obris-dev/openmagpie/compare/v0.6.0...v0.7.0) (2026-07-08)
 
