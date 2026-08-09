@@ -137,3 +137,21 @@ class AnthropicExtractTests(SimpleTestCase):
         with _patch_client(self._client_extract('{"person": "Pat", "org": 5, "extra": "x"}')):
             out = _engine().extract(PAYLOAD, fields=self.FIELDS)
         self.assertEqual(out.extracted, {"person": "Pat", "org": "5"})
+
+class AnthropicStatusTests(SimpleTestCase):
+    def test_reachable_lists_sorted_models(self) -> None:
+        c = mock.MagicMock()
+        c.models.list.return_value = mock.MagicMock(data=[mock.MagicMock(id="b"), mock.MagicMock(id="a")])
+        with _patch_client(c):
+            st = _engine().status()
+        self.assertTrue(st.available)
+        self.assertEqual(st.available_models, ["a", "b"])
+
+    def test_unreachable_is_not_available_with_reason(self) -> None:
+        c = mock.MagicMock()
+        c.models.list.side_effect = APIConnectionError(request=mock.MagicMock())
+        with _patch_client(c):
+            st = _engine().status()
+        self.assertFalse(st.available)
+        self.assertIn("unreachable", st.unreachable_reason or "")
+

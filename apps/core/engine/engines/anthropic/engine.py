@@ -193,11 +193,7 @@ class AnthropicEngine:
         )
 
     def status(self) -> EngineStatus:
-        """Probe the Anthropic endpoint for reachability.
-        Since Anthropic doesn't have a public models.list() endpoint, 
-        we return a static list of known models if available, or just
-        assert availability if we don't have an endpoint check.
-        """
+        """Probe the Anthropic endpoint for reachability and available models."""
         if not self.api_key or self.api_key == "noauth":
              return EngineStatus(
                 kind=self.kind,
@@ -207,10 +203,19 @@ class AnthropicEngine:
                 how_to_fix="Set ENGINE_API_KEY in the environment.",
             )
              
-        # Returning static availability for Anthropic since no model list endpoint exists
-        return EngineStatus(
-            kind=self.kind,
-            default_model=self.default_model,
-            available=True,
-            available_models=["claude-3-5-sonnet-20241022", "claude-3-5-haiku-20241022", "claude-3-opus-20240229"],
-        )
+        try:
+            page = self._client.models.list()
+            models = sorted(m.id for m in page.data)
+            return EngineStatus(
+                kind=self.kind,
+                default_model=self.default_model,
+                available=True,
+                available_models=models,
+            )
+        except Exception as exc:
+            return EngineStatus(
+                kind=self.kind,
+                default_model=self.default_model,
+                available=False,
+                unreachable_reason=f"API unreachable: {exc}",
+            )
