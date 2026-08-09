@@ -434,6 +434,8 @@ DIGEST_MAX_BATCH_ITEMS = int(os.environ.get("DIGEST_MAX_BATCH_ITEMS", "500"))
 JOB_LOCK_TIMEOUT_SECONDS = int(os.environ.get("JOB_LOCK_TIMEOUT_SECONDS", "86400"))
 
 # Relevance engine (the LLM that scores semantic-filter relevance). The engine
+# kind determines the implementation used (default 'openai_compat', also 'anthropic').
+ENGINE_KIND = os.environ.get("ENGINE_KIND", "openai_compat")
 # talks to any backend via the OpenAI `/v1` API, so all it needs is an endpoint
 # and (maybe) a key - no per-backend "kind" config. ENGINE_BASE_URL is the
 # OpenAI-compatible `/v1` base URL (Ollama, vLLM, OpenAI, llama.cpp, LM Studio,

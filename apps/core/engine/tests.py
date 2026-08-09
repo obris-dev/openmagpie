@@ -289,8 +289,8 @@ class RegistryTests(SimpleTestCase):
         # real one after any test that overrides it.
         self.addCleanup(setattr, registry, "_engine", registry._engine)
 
-    def test_only_default_kind_is_recognized(self) -> None:
-        self.assertEqual(registry.kinds(), ["openai_compat"])
+    def test_kinds_are_recognized(self) -> None:
+        self.assertEqual(registry.kinds(), ["openai_compat", "anthropic"])
 
     def test_empty_kind_resolves_to_the_engine(self) -> None:
         self.assertIsInstance(registry.get(""), OpenAICompatEngine)

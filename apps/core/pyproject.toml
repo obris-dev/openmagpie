@@ -9,6 +9,7 @@ version = "0.1.0"
 description = "OpenMagpie core — open-source semantic listener"
 requires-python = ">=3.13"
 dependencies = [
+    "anthropic>=0.30",
     "django>=6.0.5",
     "django-cors-headers>=4.6",
     "django-oauth-toolkit>=3.0",
