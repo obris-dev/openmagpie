@@ -79,6 +79,40 @@ class HackerNewsCommentPayload(FeedItemPayload):
     story_title: str = ""
 
 
+class NewTweetPayload(FeedItemPayload):
+    """`new_tweet`: one X (Twitter) tweet (TwitterSearchConnector, unofficial
+    twikit route). `content` is the tweet's full text (the engine's judgeable
+    body); `title` is empty (tweets have no headline). The listeningkit
+    SocialEvent shape is carried as typed fields: `handle` (the @screen_name,
+    also the within-kind source slug), `author` (display name), `lang`,
+    `metrics` (likes/retweets/replies/quotes/views), `refs`
+    (in_reply_to / quoted / retweet_of), `media` (list of {type,url,thumbnail})."""
+
+    kind: Literal["new_tweet"]  # required, so a non-twitter dump can't match here
+    author: str = ""
+    handle: str = ""
+    lang: str = ""
+    metrics: dict[str, int | None] = {}
+    refs: dict[str, str | None] = {}
+    media: list[dict[str, object]] = []
+
+
+class NewFacebookPostPayload(FeedItemPayload):
+    """`new_fb_post`: one Facebook group post (FacebookGroupConnector, unofficial
+    Camofox route). `content` is the post body (the engine's judgeable text);
+    `title` is empty (posts have no headline). The facebook-camofox-client
+    normalized record shape is carried as typed fields: `author` (display
+    name), `group_id` (the Facebook group ID, also the within-kind source
+    slug), `metrics` (likes/comments/shares), `matched_terms` (which search
+    terms this post matched)."""
+
+    kind: Literal["new_fb_post"]  # required, so a non-facebook dump can't match here
+    author: str = ""
+    group_id: str = ""
+    metrics: dict[str, int | None] = {}
+    matched_terms: list[str] = []
+
+
 # Tried left-to-right so a dump resolves to its concrete variant (matched on the
 # required `kind` literal) and only falls to the permissive base when no variant
 # claims it. Variants REQUIRE their `kind`, so an empty / kind-less dict can't
@@ -89,6 +123,12 @@ class HackerNewsCommentPayload(FeedItemPayload):
 # but a consumer keying on `isinstance(data, RssEntryPayload)` won't see the
 # malformed row (canonical fields like `title` still read off the base).
 FeedItemData = Annotated[
-    RssEntryPayload | NewRedditPostPayload | HackerNewsFeedPayload | HackerNewsCommentPayload | FeedItemPayload,
+    RssEntryPayload
+    | NewRedditPostPayload
+    | HackerNewsFeedPayload
+    | HackerNewsCommentPayload
+    | NewTweetPayload
+    | NewFacebookPostPayload
+    | FeedItemPayload,
     Field(union_mode="left_to_right"),
 ]

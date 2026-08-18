@@ -686,6 +686,44 @@
       "title": "ExtractStatus",
       "type": "string"
     },
+    "FacebookGroupSourceSpec": {
+      "description": "Identity of one Facebook group search stream. Bound to FacebookGroupConnector.\n\n`group_ids` is the list of Facebook group IDs to search; at least one is\nrequired. `terms` are optional search keywords to filter posts within the\ngroup. `count` caps the per-cycle fetch.",
+      "properties": {
+        "count": {
+          "default": 20,
+          "maximum": 100,
+          "minimum": 1,
+          "title": "Count",
+          "type": "integer"
+        },
+        "group_ids": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Group Ids",
+          "type": "array"
+        },
+        "kind": {
+          "const": "facebook_group",
+          "default": "facebook_group",
+          "title": "Kind",
+          "type": "string"
+        },
+        "terms": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Terms",
+          "type": "array"
+        }
+      },
+      "required": [
+        "group_ids"
+      ],
+      "title": "FacebookGroupSourceSpec",
+      "type": "object"
+    },
     "FeedConfigSummary": {
       "description": "Display-only projection of a feed config for the CLI preview.\n\nBuilt server-side from the typed config (the only place that knows\nthe schema) so the CLI prints it without parsing the `data` blob.\nCurated feeds emit an empty summary because all per-source state\nsurfaces via FeedView.sources / source_count; the class stays as\na hook for future kinds that have non-source-shaped config to\nproject for the CLI.",
       "properties": {},
@@ -834,6 +872,12 @@
             },
             {
               "$ref": "#/$defs/HackerNewsCommentPayload"
+            },
+            {
+              "$ref": "#/$defs/NewTweetPayload"
+            },
+            {
+              "$ref": "#/$defs/NewFacebookPostPayload"
             },
             {
               "$ref": "#/$defs/FeedItemPayload"
@@ -1654,6 +1698,103 @@
       "title": "LogRunWire",
       "type": "object"
     },
+    "NewFacebookPostPayload": {
+      "additionalProperties": true,
+      "description": "`new_fb_post`: one Facebook group post (FacebookGroupConnector, unofficial\nCamofox route). `content` is the post body (the engine's judgeable text);\n`title` is empty (posts have no headline). The facebook-camofox-client\nnormalized record shape is carried as typed fields: `author` (display\nname), `group_id` (the Facebook group ID, also the within-kind source\nslug), `metrics` (likes/comments/shares), `matched_terms` (which search\nterms this post matched).",
+      "properties": {
+        "author": {
+          "default": "",
+          "title": "Author",
+          "type": "string"
+        },
+        "content": {
+          "default": "",
+          "title": "Content",
+          "type": "string"
+        },
+        "external_id": {
+          "default": "",
+          "title": "External Id",
+          "type": "string"
+        },
+        "external_url": {
+          "default": "",
+          "title": "External Url",
+          "type": "string"
+        },
+        "group_id": {
+          "default": "",
+          "title": "Group Id",
+          "type": "string"
+        },
+        "kind": {
+          "const": "new_fb_post",
+          "title": "Kind",
+          "type": "string"
+        },
+        "matched_terms": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Matched Terms",
+          "type": "array"
+        },
+        "metrics": {
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "default": {},
+          "title": "Metrics",
+          "type": "object"
+        },
+        "occurred_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Occurred At"
+        },
+        "parent_external_id": {
+          "default": "",
+          "title": "Parent External Id",
+          "type": "string"
+        },
+        "source": {
+          "default": "",
+          "title": "Source",
+          "type": "string"
+        },
+        "title": {
+          "default": "",
+          "title": "Title",
+          "type": "string"
+        },
+        "url": {
+          "default": "",
+          "title": "Url",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "title": "NewFacebookPostPayload",
+      "type": "object"
+    },
     "NewRedditPostPayload": {
       "additionalProperties": true,
       "description": "`new_post`: one post off a subreddit's /new (RedditSubredditConnector).",
@@ -1731,6 +1872,124 @@
         "kind"
       ],
       "title": "NewRedditPostPayload",
+      "type": "object"
+    },
+    "NewTweetPayload": {
+      "additionalProperties": true,
+      "description": "`new_tweet`: one X (Twitter) tweet (TwitterSearchConnector, unofficial\ntwikit route). `content` is the tweet's full text (the engine's judgeable\nbody); `title` is empty (tweets have no headline). The listeningkit\nSocialEvent shape is carried as typed fields: `handle` (the @screen_name,\nalso the within-kind source slug), `author` (display name), `lang`,\n`metrics` (likes/retweets/replies/quotes/views), `refs`\n(in_reply_to / quoted / retweet_of), `media` (list of {type,url,thumbnail}).",
+      "properties": {
+        "author": {
+          "default": "",
+          "title": "Author",
+          "type": "string"
+        },
+        "content": {
+          "default": "",
+          "title": "Content",
+          "type": "string"
+        },
+        "external_id": {
+          "default": "",
+          "title": "External Id",
+          "type": "string"
+        },
+        "external_url": {
+          "default": "",
+          "title": "External Url",
+          "type": "string"
+        },
+        "handle": {
+          "default": "",
+          "title": "Handle",
+          "type": "string"
+        },
+        "kind": {
+          "const": "new_tweet",
+          "title": "Kind",
+          "type": "string"
+        },
+        "lang": {
+          "default": "",
+          "title": "Lang",
+          "type": "string"
+        },
+        "media": {
+          "default": [],
+          "items": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "title": "Media",
+          "type": "array"
+        },
+        "metrics": {
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "default": {},
+          "title": "Metrics",
+          "type": "object"
+        },
+        "occurred_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Occurred At"
+        },
+        "parent_external_id": {
+          "default": "",
+          "title": "Parent External Id",
+          "type": "string"
+        },
+        "refs": {
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "default": {},
+          "title": "Refs",
+          "type": "object"
+        },
+        "source": {
+          "default": "",
+          "title": "Source",
+          "type": "string"
+        },
+        "title": {
+          "default": "",
+          "title": "Title",
+          "type": "string"
+        },
+        "url": {
+          "default": "",
+          "title": "Url",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "title": "NewTweetPayload",
       "type": "object"
     },
     "PluginActionInput": {
@@ -2437,10 +2696,12 @@
             {
               "discriminator": {
                 "mapping": {
+                  "facebook_group": "#/$defs/FacebookGroupSourceSpec",
                   "hn_comment": "#/$defs/HackerNewsCommentSourceSpec",
                   "hn_feed": "#/$defs/HackerNewsFeedSourceSpec",
                   "reddit_subreddit": "#/$defs/RedditSubredditSourceSpec",
-                  "rss": "#/$defs/RssSourceSpec"
+                  "rss": "#/$defs/RssSourceSpec",
+                  "twitter_search": "#/$defs/TwitterSearchSourceSpec"
                 },
                 "propertyName": "kind"
               },
@@ -2456,6 +2717,12 @@
                 },
                 {
                   "$ref": "#/$defs/HackerNewsCommentSourceSpec"
+                },
+                {
+                  "$ref": "#/$defs/TwitterSearchSourceSpec"
+                },
+                {
+                  "$ref": "#/$defs/FacebookGroupSourceSpec"
                 }
               ]
             },
@@ -2579,10 +2846,12 @@
             {
               "discriminator": {
                 "mapping": {
+                  "facebook_group": "#/$defs/FacebookGroupSourceSpec",
                   "hn_comment": "#/$defs/HackerNewsCommentSourceSpec",
                   "hn_feed": "#/$defs/HackerNewsFeedSourceSpec",
                   "reddit_subreddit": "#/$defs/RedditSubredditSourceSpec",
-                  "rss": "#/$defs/RssSourceSpec"
+                  "rss": "#/$defs/RssSourceSpec",
+                  "twitter_search": "#/$defs/TwitterSearchSourceSpec"
                 },
                 "propertyName": "kind"
               },
@@ -2598,6 +2867,12 @@
                 },
                 {
                   "$ref": "#/$defs/HackerNewsCommentSourceSpec"
+                },
+                {
+                  "$ref": "#/$defs/TwitterSearchSourceSpec"
+                },
+                {
+                  "$ref": "#/$defs/FacebookGroupSourceSpec"
                 }
               ]
             },
@@ -2645,6 +2920,48 @@
         "can_set"
       ],
       "title": "TelemetryState",
+      "type": "object"
+    },
+    "TwitterSearchSourceSpec": {
+      "description": "Identity of one X (Twitter) search stream. Bound to TwitterSearchConnector.\n\n`query` is the search expression (keywords, quoted phrases, `from:`,\n`lang:`, `filter:` operators, whatever X's search syntax accepts); it is\nREQUIRED and NON-BLANK so a source always carries a server-side pre-filter\nbefore any per-item LLM cost (same discipline as hn_comment: a blank query\nwould be the unfiltered firehose). `mode` picks the result ordering twikit\nasks X for: `latest` (newest first, the listener's default) or `top`\n(ranked). `count` caps the per-cycle fetch. `lang` optionally narrows to\ntweets in one language (ISO 639-1, e.g. \"en\"); empty = no filter.",
+      "properties": {
+        "count": {
+          "default": 20,
+          "maximum": 100,
+          "minimum": 1,
+          "title": "Count",
+          "type": "integer"
+        },
+        "kind": {
+          "const": "twitter_search",
+          "default": "twitter_search",
+          "title": "Kind",
+          "type": "string"
+        },
+        "lang": {
+          "default": "",
+          "title": "Lang",
+          "type": "string"
+        },
+        "mode": {
+          "default": "latest",
+          "enum": [
+            "latest",
+            "top"
+          ],
+          "title": "Mode",
+          "type": "string"
+        },
+        "query": {
+          "minLength": 1,
+          "title": "Query",
+          "type": "string"
+        }
+      },
+      "required": [
+        "query"
+      ],
+      "title": "TwitterSearchSourceSpec",
       "type": "object"
     },
     "WatchActionBackfillState": {
@@ -3961,6 +4278,9 @@
       "$ref": "#/$defs/WebhookResult"
     },
     {
+      "$ref": "#/$defs/FacebookGroupSourceSpec"
+    },
+    {
       "$ref": "#/$defs/RedditSubredditSourceSpec"
     },
     {
@@ -3971,6 +4291,9 @@
     },
     {
       "$ref": "#/$defs/HackerNewsCommentSourceSpec"
+    },
+    {
+      "$ref": "#/$defs/TwitterSearchSourceSpec"
     },
     {
       "$ref": "#/$defs/EngineStatus"
