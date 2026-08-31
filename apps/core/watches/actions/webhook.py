@@ -179,7 +179,9 @@ def _build_payload(
         items=[
             WebhookItem(
                 key=it.key,
-                source=WebhookSource(label=it.source_label, kind=it.source_kind),
+                source=WebhookSource(
+                    label=it.source_label, kind=it.source_kind, pattern_id=it.source_meta.get("pattern_id")
+                ),
                 item=_filtered(it.data, config.include_fields),
             )
             for it in items

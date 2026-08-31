@@ -25,7 +25,7 @@ ENV PYTHONUNBUFFERED=1 \
 
 # Build deps for psycopg[c] (compiled against libpq). Builder-only.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends build-essential libpq-dev \
+    && apt-get install -y --no-install-recommends build-essential git libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

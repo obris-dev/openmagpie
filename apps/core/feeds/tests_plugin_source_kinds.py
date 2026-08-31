@@ -26,6 +26,7 @@ from openmagpie_schema.configs import (
     RedditSubredditSourceSpec,
     RssSourceSpec,
     SourceSpec,
+    TwitterSearchSourceSpec,
     _BuiltinSourceSpec,
     canonical_spec,
 )
@@ -308,7 +309,7 @@ class BuiltinSourceKindInvariantTests(SimpleTestCase):
         for m in members:
             self.assertEqual(m.model_fields["kind"].default, m.SOURCE_KIND, m.__name__)
 
-    def test_builtin_source_kinds_are_exactly_the_known_four(self) -> None:
+    def test_builtin_source_kinds_are_exactly_the_known_builtins(self) -> None:
         self.assertEqual(
             _BUILTIN_SOURCE_KINDS,
             frozenset(
@@ -317,6 +318,7 @@ class BuiltinSourceKindInvariantTests(SimpleTestCase):
                     RssSourceSpec.SOURCE_KIND,
                     HackerNewsFeedSourceSpec.SOURCE_KIND,
                     HackerNewsCommentSourceSpec.SOURCE_KIND,
+                    TwitterSearchSourceSpec.SOURCE_KIND,
                 }
             ),
         )

@@ -19,6 +19,7 @@ from openmagpie_schema.configs import (
     HackerNewsFeedSourceSpec,
     RedditSubredditSourceSpec,
     RssSourceSpec,
+    TwitterSearchSourceSpec,
 )
 from openmagpie_schema.engine import EngineListResponse, EngineStatus
 from openmagpie_schema.feed import (
@@ -107,6 +108,7 @@ CONTRACT_MODELS = [
     RssSourceSpec,
     HackerNewsFeedSourceSpec,
     HackerNewsCommentSourceSpec,
+    TwitterSearchSourceSpec,
     # Engine + telemetry status
     EngineStatus,
     EngineListResponse,

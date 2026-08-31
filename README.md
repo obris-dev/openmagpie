@@ -28,7 +28,7 @@
 
 ## What it does
 
-You scan Reddit, Hacker News, and a few RSS feeds looking for someone hitting a problem your product solves or asking a question you can answer well. Getting there while the conversation is happening is how you build a brand and a community around what you know. OpenMagpie watches the threads for you so you spend your time on engagement instead of searching.
+You scan X/Twitter, Reddit, Hacker News, and a few RSS feeds looking for someone hitting a problem your product solves or asking a question you can answer well. Getting there while the conversation is happening is how you build a brand and a community around what you know. OpenMagpie watches the threads for you so you spend your time on engagement instead of searching.
 
 You curate sources into a feed, write a natural-language description of what's relevant (for example, "someone frustrated with manual social monitoring and asking for alternatives"), and a local LLM run via any OpenAI-compatible runner (e.g. Ollama, vLLM, LM Studio) scores each new post against it. Matches go to a webhook or your logs (more integrations coming); everything else is dropped. You read the hits instead of the firehose.
 
@@ -36,8 +36,9 @@ You curate sources into a feed, write a natural-language description of what's r
 
 OpenMagpie listens wherever communities are having those conversations.
 
-- **Public discussion (today):** Reddit, Hacker News, and any RSS or Atom feed (news, blogs, Substack publications, and forums that publish feeds).
+- **Public discussion (today):** X/Twitter, Reddit, Hacker News, and any RSS or Atom feed (news, blogs, Substack publications, and forums that publish feeds).
 - **Communities you're in (roadmap):** Slack workspaces and LinkedIn you already belong to, so you catch relevant threads in the groups where you participate, no admin or app install required.
+- **Public discussion (soon to be added):** Facebook, TikTok, and Instagram.
 
 ## Quickstart
 
@@ -142,12 +143,16 @@ A `Feed` is a reusable, curated stream (a set of sources plus an item log). A `W
 ```mermaid
 graph TD
     subgraph Sources
+        TWITTER[X / Twitter]
         REDDIT[Reddit]
         RSS[RSS / Atom feeds]
         HN[Hacker News]
         SLACK[Slack]
         LINKEDIN[LinkedIn]
         GITHUB[GitHub]
+        FACEBOOK[Facebook]
+        TIKTOK[TikTok]
+        INSTAGRAM[Instagram]
     end
 
     subgraph OpenMagpie
@@ -164,12 +169,16 @@ graph TD
         FUTURE["email / Slack (planned)"]
     end
 
+    TWITTER --> FEED
     REDDIT --> FEED
     RSS --> FEED
     HN --> FEED
     SLACK -. planned .-> FEED
     LINKEDIN -. planned .-> FEED
     GITHUB -. planned .-> FEED
+    FACEBOOK -. "soon to be added" .-> FEED
+    TIKTOK -. "soon to be added" .-> FEED
+    INSTAGRAM -. "soon to be added" .-> FEED
 
     FEED -- "new items" --> WATCH
     WATCH -- "action chain" --> FILTER
@@ -222,16 +231,27 @@ Social listening is a crowded market (Brand24, Mention, Octolens, Syften, and to
 
 | Layer | Shipped |
 |---|---|
-| Connectors | Reddit (`reddit_subreddit`), Hacker News (`hn_feed`, `hn_comment`), RSS/Atom (`rss`) |
+| Connectors | X/Twitter (`twitter_search`), Reddit (`reddit_subreddit`), Hacker News (`hn_feed`, `hn_comment`), RSS/Atom (`rss`) |
 | Engines | Any OpenAI-compatible `/v1` API: Ollama, vLLM, llama.cpp, LM Studio, OpenAI, ... |
 | Action kinds | `semantic_filter` (LLM-judged), `webhook`, `log` |
 | Delivery modes | instant, digest |
 | Webhook methods | `POST`, `PUT`, `PATCH` |
 | Delivery audit | per-attempt `WatchActionDelivery` |
 
+## What we've done
+
+X/Twitter listening is the first connector added beyond the original Reddit / HN / RSS set. What shipped in this branch:
+
+- **`twitter_search` source kind** — a twikit-based connector that runs X search queries (mode Top/Latest, count) and maps results to a schema-parity `NewTweetPayload`, registered alongside the existing kinds with the same feed/watch/webhook pipeline.
+- **Live-cookie auth** — the connector authenticates with an existing X session cookie JSON (`TWITTER_COOKIES_JSON` → `auth_token`/`ct0`, a cookies file, or a login fallback), so no API key, proxy, or vendor API is required — the same live cookies the listening kit already used keep working.
+- **Reliability fixes from live polling** — a per-call twikit client (multi-source polls no longer crash with "Event loop is closed") and X's transient empty-body 404 mapped retryable instead of "tweet deleted", with a regression test. 587 tests green; all CI gates pass.
+- **Verified live end-to-end** — a real X poll through a feed → watch → webhook chain delivered 44/44 items with HTTP 200, payload matched field-for-field against the Twenty `socialEvent` intake contract (`item.handle → actorHandle`, `author → actorName`, `content → eventText`, `occurred_at → occurredAt`, `url → sourceUrl`, `key → dedupeKey`).
+
+Next up on the roadmap: **Facebook, TikTok, and Instagram connectors** (soon to be added), then Slack, LinkedIn, GitHub, Bluesky, and Mastodon.
+
 ## Roadmap
 
-- **More connectors**: Slack, LinkedIn, GitHub, Bluesky, Mastodon, and X.
+- **More connectors**: Facebook, TikTok, and Instagram (soon to be added), then Slack, LinkedIn, GitHub, Bluesky, and Mastodon.
 - **More engines**: Anthropic, OpenAI, and a keyword engine behind the same `Engine` Protocol.
 - **Learns from feedback**: thumbs up/down on past matches become few-shot examples for the next pass.
 - **Run-history in the payload**: the upstream filter score and chain provenance as an opt-in webhook field.

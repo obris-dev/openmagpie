@@ -836,6 +836,9 @@
               "$ref": "#/$defs/HackerNewsCommentPayload"
             },
             {
+              "$ref": "#/$defs/NewTweetPayload"
+            },
+            {
               "$ref": "#/$defs/FeedItemPayload"
             }
           ],
@@ -1733,6 +1736,124 @@
       "title": "NewRedditPostPayload",
       "type": "object"
     },
+    "NewTweetPayload": {
+      "additionalProperties": true,
+      "description": "`new_tweet`: one X (Twitter) tweet (TwitterSearchConnector, unofficial\ntwikit route). `content` is the tweet's full text (the engine's judgeable\nbody); `title` is empty (tweets have no headline). The listeningkit\nSocialEvent shape is carried as typed fields: `handle` (the @screen_name,\nalso the within-kind source slug), `author` (display name), `lang`,\n`metrics` (likes/retweets/replies/quotes/views), `refs`\n(in_reply_to / quoted / retweet_of), `media` (list of {type,url,thumbnail}).",
+      "properties": {
+        "author": {
+          "default": "",
+          "title": "Author",
+          "type": "string"
+        },
+        "content": {
+          "default": "",
+          "title": "Content",
+          "type": "string"
+        },
+        "external_id": {
+          "default": "",
+          "title": "External Id",
+          "type": "string"
+        },
+        "external_url": {
+          "default": "",
+          "title": "External Url",
+          "type": "string"
+        },
+        "handle": {
+          "default": "",
+          "title": "Handle",
+          "type": "string"
+        },
+        "kind": {
+          "const": "new_tweet",
+          "title": "Kind",
+          "type": "string"
+        },
+        "lang": {
+          "default": "",
+          "title": "Lang",
+          "type": "string"
+        },
+        "media": {
+          "default": [],
+          "items": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "title": "Media",
+          "type": "array"
+        },
+        "metrics": {
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "default": {},
+          "title": "Metrics",
+          "type": "object"
+        },
+        "occurred_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Occurred At"
+        },
+        "parent_external_id": {
+          "default": "",
+          "title": "Parent External Id",
+          "type": "string"
+        },
+        "refs": {
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "default": {},
+          "title": "Refs",
+          "type": "object"
+        },
+        "source": {
+          "default": "",
+          "title": "Source",
+          "type": "string"
+        },
+        "title": {
+          "default": "",
+          "title": "Title",
+          "type": "string"
+        },
+        "url": {
+          "default": "",
+          "title": "Url",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "title": "NewTweetPayload",
+      "type": "object"
+    },
     "PluginActionInput": {
       "description": "Fallback input member for a plugin (non-built-in) action kind. Mirrors\nPluginActionWire on the write path; `config` is required (you can't author an\naction without one) but open (validated server-side by the kind's registry).",
       "properties": {
@@ -2440,7 +2561,8 @@
                   "hn_comment": "#/$defs/HackerNewsCommentSourceSpec",
                   "hn_feed": "#/$defs/HackerNewsFeedSourceSpec",
                   "reddit_subreddit": "#/$defs/RedditSubredditSourceSpec",
-                  "rss": "#/$defs/RssSourceSpec"
+                  "rss": "#/$defs/RssSourceSpec",
+                  "twitter_search": "#/$defs/TwitterSearchSourceSpec"
                 },
                 "propertyName": "kind"
               },
@@ -2456,6 +2578,9 @@
                 },
                 {
                   "$ref": "#/$defs/HackerNewsCommentSourceSpec"
+                },
+                {
+                  "$ref": "#/$defs/TwitterSearchSourceSpec"
                 }
               ]
             },
@@ -2582,7 +2707,8 @@
                   "hn_comment": "#/$defs/HackerNewsCommentSourceSpec",
                   "hn_feed": "#/$defs/HackerNewsFeedSourceSpec",
                   "reddit_subreddit": "#/$defs/RedditSubredditSourceSpec",
-                  "rss": "#/$defs/RssSourceSpec"
+                  "rss": "#/$defs/RssSourceSpec",
+                  "twitter_search": "#/$defs/TwitterSearchSourceSpec"
                 },
                 "propertyName": "kind"
               },
@@ -2598,6 +2724,9 @@
                 },
                 {
                   "$ref": "#/$defs/HackerNewsCommentSourceSpec"
+                },
+                {
+                  "$ref": "#/$defs/TwitterSearchSourceSpec"
                 }
               ]
             },
@@ -2645,6 +2774,48 @@
         "can_set"
       ],
       "title": "TelemetryState",
+      "type": "object"
+    },
+    "TwitterSearchSourceSpec": {
+      "description": "Identity of one X (Twitter) search stream. Bound to TwitterSearchConnector.\n\n`query` is the search expression (keywords, quoted phrases, `from:`,\n`lang:`, `filter:` operators, whatever X's search syntax accepts); it is\nREQUIRED and NON-BLANK so a source always carries a server-side pre-filter\nbefore any per-item LLM cost (same discipline as hn_comment: a blank query\nwould be the unfiltered firehose). `mode` picks the result ordering twikit\nasks X for: `latest` (newest first, the listener's default) or `top`\n(ranked). `count` caps the per-cycle fetch. `lang` optionally narrows to\ntweets in one language (ISO 639-1, e.g. \"en\"); empty = no filter.",
+      "properties": {
+        "count": {
+          "default": 20,
+          "maximum": 100,
+          "minimum": 1,
+          "title": "Count",
+          "type": "integer"
+        },
+        "kind": {
+          "const": "twitter_search",
+          "default": "twitter_search",
+          "title": "Kind",
+          "type": "string"
+        },
+        "lang": {
+          "default": "",
+          "title": "Lang",
+          "type": "string"
+        },
+        "mode": {
+          "default": "latest",
+          "enum": [
+            "latest",
+            "top"
+          ],
+          "title": "Mode",
+          "type": "string"
+        },
+        "query": {
+          "minLength": 1,
+          "title": "Query",
+          "type": "string"
+        }
+      },
+      "required": [
+        "query"
+      ],
+      "title": "TwitterSearchSourceSpec",
       "type": "object"
     },
     "WatchActionBackfillState": {
@@ -3971,6 +4142,9 @@
     },
     {
       "$ref": "#/$defs/HackerNewsCommentSourceSpec"
+    },
+    {
+      "$ref": "#/$defs/TwitterSearchSourceSpec"
     },
     {
       "$ref": "#/$defs/EngineStatus"

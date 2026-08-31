@@ -37,6 +37,7 @@ def build_run_inputs(
             key=f"{item.source_kind}:{item.external_id}",
             source_label=item.source_label,
             source_kind=item.source_kind,
+            source_meta=item.source_meta,
         )
         for _run, item in pairs
     ]

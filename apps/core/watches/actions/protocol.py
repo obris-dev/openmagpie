@@ -38,6 +38,7 @@ class ActionItem:
     key: str
     source_label: str
     source_kind: str
+    source_meta: dict = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
