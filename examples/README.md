@@ -18,6 +18,12 @@ Available starters:
   from `hackernews` on purpose: comments are high-volume, so **read the local-
   processing warning at the top of its `feed.yaml`** and keep the keyword tight
   before applying: a broad keyword can outrun a local engine.
+- `twitter`: an X/Twitter search (`twitter_search`), for catching people talking
+  about your product or asking for a tool like it. Needs an x.com session cookie
+  (see [apps/core/credentials/README.md](../apps/core/credentials/README.md)).
+- `youtube`: a YouTube search (`youtube_search`) filtered to the last week's
+  uploads, for videos reviewing or recommending tools in your space. No
+  credentials needed for public search.
 
 Both HN starters take a `query` keyword that runs **server-side as a pre-filter**:
 it narrows which items the connector pulls into the feed at all, before any watch

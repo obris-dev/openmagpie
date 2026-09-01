@@ -87,7 +87,14 @@ class NewTweetPayload(SourcePayload):
             author = str(getattr(user, "name", None) or "")
         text = getattr(tweet, "full_text", None) or getattr(tweet, "text", None) or ""
         created = getattr(tweet, "created_at_datetime", None) or getattr(tweet, "created_at", None)
-        occurred_at = created if isinstance(created, datetime) else datetime.now(UTC)
+        if not isinstance(created, datetime):
+            # A synthetic now() here would advance the source watermark past
+            # every tweet posted before this instant and strand them (the
+            # poisoning the YouTube payload floors around). A timestamp-less
+            # tweet is malformed; refuse it so the connector skips just this
+            # one (see poll's per-tweet guard).
+            raise ValueError(f"tweet {tweet_id or '<no id>'} carries no created_at datetime")
+        occurred_at = created
         if occurred_at.tzinfo is None:
             occurred_at = occurred_at.replace(tzinfo=UTC)
         lang = str(getattr(tweet, "lang", None) or "")

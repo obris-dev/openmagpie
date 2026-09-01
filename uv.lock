@@ -791,7 +791,7 @@ requires-dist = [
     { name = "python-dotenv", specifier = ">=1.1" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "trafilatura", specifier = ">=1.7" },
-    { name = "twikit", git = "https://github.com/unclecode/twikit.git" },
+    { name = "twikit", git = "https://github.com/unclecode/twikit.git?rev=6a73ab97f4de09f79139f6308c9fb80029a9f5f7" },
     { name = "ulid", specifier = ">=1.1" },
     { name = "yt-dlp", specifier = ">=2026.7.4" },
 ]
@@ -1301,7 +1301,7 @@ wheels = [
 [[package]]
 name = "twikit"
 version = "2.3.3"
-source = { git = "https://github.com/unclecode/twikit.git#6a73ab97f4de09f79139f6308c9fb80029a9f5f7" }
+source = { git = "https://github.com/unclecode/twikit.git?rev=6a73ab97f4de09f79139f6308c9fb80029a9f5f7#6a73ab97f4de09f79139f6308c9fb80029a9f5f7" }
 dependencies = [
     { name = "beautifulsoup4" },
     { name = "filetype" },

@@ -24,7 +24,7 @@ dependencies = [
     "python-dotenv>=1.1",
     "pyyaml>=6.0",  # reads the examples/starters/*.yaml in seed_quickstart
     "trafilatura>=1.7",  # HTML -> readable article text for the engine's lazy external-link fetch
-    "twikit @ git+https://github.com/unclecode/twikit.git",  # X (Twitter) unofficial route (listeningkit-verified 2026 fork of d60/twikit)
+    "twikit @ git+https://github.com/unclecode/twikit.git@6a73ab97f4de09f79139f6308c9fb80029a9f5f7",  # X (Twitter) unofficial route (listeningkit-verified 2026 fork of d60/twikit), pinned: the fork's default branch floats and this code handles auth
     "yt-dlp>=2026.07.04",  # YouTube search connector (public API only)
     "ulid>=1.1",
 ]

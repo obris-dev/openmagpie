@@ -2,7 +2,7 @@
 
 Every call into twikit can raise a ``TwitterException`` subclass (or a
 bootstrap failure when X serves a degraded shell). This module maps those
-to a canonical ``ListenerError``; the connector translates that into
+to a canonical ``TwitterError``; the connector translates that into
 ``ConnectorParseError`` at the poll boundary so the feed poll op recovers
 per-source (one bad source must not abort the feed cycle).
 """
@@ -30,13 +30,18 @@ from twikit.errors import (
     UserUnavailable,
 )
 
+# The one error code the connector branches on (the rate-limit retry loop keys
+# off it). Named so the check and the mapping below can't drift to a typo that
+# silently disables retries (AGENTS.md: no bare state literals in status checks).
+RATE_LIMITED = "rate_limited"
+
 TWIKIT_ERROR_CODE: dict[type[TwitterException], str] = {
     BadRequest: "bad_request",
     Unauthorized: "unauthorized",
     Forbidden: "forbidden",
     NotFound: "not_found",
     RequestTimeout: "timeout",
-    TooManyRequests: "rate_limited",
+    TooManyRequests: RATE_LIMITED,
     ServerError: "upstream_error",
     AccountSuspended: "account_suspended",
     AccountLocked: "account_locked",
@@ -49,7 +54,7 @@ TWIKIT_ERROR_CODE: dict[type[TwitterException], str] = {
 
 
 @dataclass
-class ListenerError:
+class TwitterError:
     """Canonical error shape for one X fetch failure."""
 
     code: str  # stable machine code, see TWIKIT_ERROR_CODE
@@ -67,7 +72,7 @@ BOOTSTRAP_BLOCKED_MARKERS = (
 )
 
 
-def map_bootstrap_failure(exc: Exception, context: dict[str, Any] | None = None) -> ListenerError:
+def map_bootstrap_failure(exc: Exception, context: dict[str, Any] | None = None) -> TwitterError:
     """X served a degraded shell (bot wall) so twikit could not bootstrap its
     ClientTransaction. Cause is almost always egress IP reputation; fix =
     residential proxy (see listeningkit docs: proxy.md)."""
@@ -79,7 +84,7 @@ def map_bootstrap_failure(exc: Exception, context: dict[str, Any] | None = None)
         if code == "bootstrap_blocked"
         else "unknown failure; log raw and retry with backoff"
     )
-    return ListenerError(
+    return TwitterError(
         code=code,
         message=msg,
         retryable=code == "internal",
@@ -88,8 +93,8 @@ def map_bootstrap_failure(exc: Exception, context: dict[str, Any] | None = None)
     )
 
 
-def map_twikit_error(exc: TwitterException, context: dict[str, Any] | None = None) -> ListenerError:
-    """Translate a twikit exception into a canonical ListenerError."""
+def map_twikit_error(exc: TwitterException, context: dict[str, Any] | None = None) -> TwitterError:
+    """Translate a twikit exception into a canonical TwitterError."""
     code = TWIKIT_ERROR_CODE.get(type(exc), "twitter_error")
     reset = getattr(exc, "rate_limit_reset", None)
     headers = getattr(exc, "headers", None)
@@ -108,7 +113,7 @@ def map_twikit_error(exc: TwitterException, context: dict[str, Any] | None = Non
     # `message: ""`; any other rendering carried response text, so the 404
     # is real.
     if isinstance(exc, NotFound) and str(exc).rstrip().endswith('message: ""'):
-        return ListenerError(
+        return TwitterError(
             code="search_timeline_unavailable",
             message="X SearchTimeline returned an empty 404 (transient upstream flake)",
             retryable=True,
@@ -124,7 +129,7 @@ def map_twikit_error(exc: TwitterException, context: dict[str, Any] | None = Non
         "forbidden": (False, "rotate session + proxy pin; alert"),
         "not_found": (False, "tweet/user no longer exists; skip"),
         "timeout": (True, "retry with backoff"),
-        "rate_limited": (True, f"backoff until reset ({reset})"),
+        RATE_LIMITED: (True, f"backoff until reset ({reset})"),
         "upstream_error": (True, "retry with backoff; alert after 5 consecutive"),
         "account_suspended": (False, "pause account mode; rotate to a different session; alert"),
         "account_locked": (False, "Arkose challenge; pause account mode; alert"),
@@ -137,7 +142,7 @@ def map_twikit_error(exc: TwitterException, context: dict[str, Any] | None = Non
     }
     retryable, action = retryable_actions.get(code, (True, "unknown; log and retry with backoff"))
 
-    return ListenerError(
+    return TwitterError(
         code=code,
         message=str(exc),
         retryable=retryable,
