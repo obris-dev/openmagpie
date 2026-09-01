@@ -28,7 +28,7 @@
 
 ## What it does
 
-You scan X/Twitter, Reddit, Hacker News, and a few RSS feeds looking for someone hitting a problem your product solves or asking a question you can answer well. Getting there while the conversation is happening is how you build a brand and a community around what you know. OpenMagpie watches the threads for you so you spend your time on engagement instead of searching.
+You scan X/Twitter, YouTube, Reddit, Hacker News, and a few RSS feeds looking for someone talking about your product, hitting a problem it solves, or asking a question you can answer well. Getting there while the conversation is happening is how you build a brand and a community around what you know: a mention answered the day it's posted beats one found in next month's report. OpenMagpie watches the threads for you so you spend your time on engagement instead of searching.
 
 You curate sources into a feed, write a natural-language description of what's relevant (for example, "someone frustrated with manual social monitoring and asking for alternatives"), and a local LLM run via any OpenAI-compatible runner (e.g. Ollama, vLLM, LM Studio) scores each new post against it. Matches go to a webhook or your logs (more integrations coming); everything else is dropped. You read the hits instead of the firehose.
 
@@ -36,7 +36,7 @@ You curate sources into a feed, write a natural-language description of what's r
 
 OpenMagpie listens wherever communities are having those conversations.
 
-- **Public discussion (today):** X/Twitter, Reddit, Hacker News, and any RSS or Atom feed (news, blogs, Substack publications, and forums that publish feeds).
+- **Public discussion (today):** X/Twitter, YouTube, Reddit, Hacker News, and any RSS or Atom feed (news, blogs, Substack publications, and forums that publish feeds).
 - **Communities you're in (roadmap):** Slack workspaces and LinkedIn you already belong to, so you catch relevant threads in the groups where you participate, no admin or app install required.
 - **Public discussion (soon to be added):** Facebook, TikTok, and Instagram.
 
@@ -144,6 +144,7 @@ A `Feed` is a reusable, curated stream (a set of sources plus an item log). A `W
 graph TD
     subgraph Sources
         TWITTER[X / Twitter]
+        YOUTUBE[YouTube]
         REDDIT[Reddit]
         RSS[RSS / Atom feeds]
         HN[Hacker News]
@@ -170,6 +171,7 @@ graph TD
     end
 
     TWITTER --> FEED
+    YOUTUBE --> FEED
     REDDIT --> FEED
     RSS --> FEED
     HN --> FEED
