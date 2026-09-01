@@ -525,6 +525,26 @@ SOURCE_ALLOW_INSECURE_TLS = env_bool("SOURCE_ALLOW_INSECURE_TLS", "false")
 # Google account. Empty (the default) disables it.
 YOUTUBE_COOKIES_FILE = os.environ.get("YOUTUBE_COOKIES_FILE", "")
 
+# X (Twitter) connector session config. The connector authenticates with an
+# existing x.com session, resolved per poll in priority order:
+#   TWITTER_COOKIES_JSON      a full JSON dict of x.com cookies (inline env)
+#   TWITTER_COOKIE_AUTH_TOKEN + TWITTER_COOKIE_CT0   the critical pair
+#   TWITTER_COOKIES_FILE      path to one cookie export (JSON dict or a
+#                             Get-cookies.txt-LOCALLY array)
+#   TWITTER_CREDENTIALS_DIR   dir of *.json cookie exports, each with an
+#                             optional <name>.proxy pin
+# Empty values fall through to the next route; all empty = guest mode (the
+# first search fails with a mapped `unauthorized`). See
+# apps/core/credentials/README.md for the on-disk convention.
+TWITTER_COOKIES_JSON = os.environ.get("TWITTER_COOKIES_JSON", "")
+TWITTER_COOKIE_AUTH_TOKEN = os.environ.get("TWITTER_COOKIE_AUTH_TOKEN", "")
+TWITTER_COOKIE_CT0 = os.environ.get("TWITTER_COOKIE_CT0", "")
+TWITTER_COOKIES_FILE = os.environ.get("TWITTER_COOKIES_FILE", "")
+TWITTER_CREDENTIALS_DIR = os.environ.get("TWITTER_CREDENTIALS_DIR", str(BASE_DIR / "credentials" / "twitter"))
+# Egress proxy for X requests (twikit passes it to httpx); a per-credential
+# <name>.proxy pin in TWITTER_CREDENTIALS_DIR overrides it.
+TWITTER_PROXY = os.environ.get("TWITTER_PROXY", "")
+
 # Product telemetry (anonymous, opt-out; see apps/core/telemetry + TELEMETRY.md).
 # POSTHOG_API_KEY defaults to the baked-in PUBLIC, WRITE-ONLY PostHog project key
 # (OpenMagpie's anonymous self-hosted project, PostHog Cloud US) so a self-hoster

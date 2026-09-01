@@ -5,7 +5,7 @@ One file per concern:
   - `client.py` ; `TwikitClient` wrapper (cookies env/file/credentials-dir,
     proxy attachment, error translation)
   - `payloads.py` ; `NewTweetPayload` (twikit Tweet -> SourcePayload)
-  - `errors.py` ; twikit error taxonomy -> canonical ListenerError
+  - `errors.py` ; twikit error taxonomy -> canonical TwitterError
 
 Future variants (user timeline, list timeline) reuse `TwikitClient` with
 their own spec + payload.

@@ -103,6 +103,41 @@ def parse_rate_limit_wait(response: httpx.Response) -> float | None:
     return _as_positive_float(response.headers.get("X-RateLimit-Reset"))
 
 
+def rate_limit_delay(relative_wait: float | None, attempt: int, *, base: float, cap: float) -> float:
+    """Seconds to wait before retrying a rate-limited request: the caller's
+    header-derived relative wait when usable (finite, positive), else
+    exponential backoff `base * 2**attempt`. Capped at `cap` so a hostile or
+    far-future value can't stall a poll worker. Each connector converts its
+    own source shape to a relative wait first (Reddit: `parse_rate_limit_wait`'s
+    relative seconds; Twitter: an absolute `x-rate-limit-reset` epoch minus
+    now), keeping `base` / `cap` / retry-count as its own tunables."""
+    delay = relative_wait if relative_wait is not None and relative_wait > 0 else base * (2**attempt)
+    return min(delay, cap)
+
+
+# How often a backoff sleep ticks the caller's poll-lease heartbeat: long
+# enough not to thrash, short enough that a minute-scale wait renews the lease
+# several times over.
+HEARTBEAT_SLEEP_CHUNK_SECONDS = 15.0
+
+
+def sleep_with_heartbeat(total: float, heartbeat: Callable[[], bool] | None) -> None:
+    """Sleep `total` seconds, ticking `heartbeat` every chunk so the caller's
+    poll lease renews through the wait. The return value is deliberately
+    ignored (see the Connector.poll contract). No heartbeat (direct calls /
+    tests) = one plain sleep. Shared by every connector that backs off inside
+    poll() (Reddit's 429 retry, the twikit rate-limit wait)."""
+    if heartbeat is None:
+        time.sleep(total)
+        return
+    remaining = total
+    while remaining > 0:
+        chunk = min(remaining, HEARTBEAT_SLEEP_CHUNK_SECONDS)
+        time.sleep(chunk)
+        remaining -= chunk
+        heartbeat()
+
+
 # ── SSRF-safe fetch of the open web ───────────────────────────────────────
 # Two callers, one block POLICY (`common.ssrf` / `common.safe_http`):
 #   - RSS feeds (OPERATOR-chosen URLs): `validate_request_url`, an httpx request

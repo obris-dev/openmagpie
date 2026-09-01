@@ -1,0 +1,32 @@
+# OpenMagpie starter: X/Twitter brand-mention listening.
+# Uses the `twitter_search` source kind (twikit, unofficial route). Needs an
+# x.com session cookie; see apps/core/credentials/README.md for generating one
+# (and the terms-of-service caveat). Each poll runs the query and surfaces
+# tweets newer than the source's watermark.
+# Apply by hand (this starter isn't wired into the quickstart seed script):
+#   magpie feed create -f examples/starters/twitter/feed.yaml
+#   magpie watch create -f examples/starters/twitter/watch.yaml   (after the edits in examples/README.md)
+# Then set a past last_event_at on each source, or the first tick only sees
+# brand-new tweets.
+# Full walkthrough: examples/README.md
+name: "X/Twitter mentions (starter)"
+kind: curated
+poll_interval_seconds: 900
+data:
+  retention_days: 30
+sources:
+  # `query` is REQUIRED (the firehose guard): it pre-filters server-side on
+  # X's search index before any per-item LLM cost, and accepts X's own search
+  # operators (`from:`, `-word`, `filter:`, quoted phrases). Quote exact
+  # phrases inside the YAML string, e.g. query: '"social listening"'.
+  # `mode` picks the result ordering (one of two values):
+  #   latest  newest first (the default) - what a listener wants: it pairs
+  #           with the watermark so each poll picks up what's new.
+  #   top     X's engagement ranking, not time-ordered - useful for a one-off
+  #           "biggest tweets about X" pull, less so for ongoing listening.
+  # `count` caps the per-poll fetch (1-100); raise it for a busy query so a
+  # burst between polls can't overflow past the newest page.
+  # `lang` (optional): narrow to one language, ISO 639-1, e.g. lang: en.
+  - spec: {kind: twitter_search, query: '"social listening"', mode: latest, count: 20}
+  # Watch several phrasings by adding more sources:
+  #   - spec: {kind: twitter_search, query: 'brand monitoring -job', mode: latest, count: 20}

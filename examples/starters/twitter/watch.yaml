@@ -1,0 +1,22 @@
+# Companion watch for the X/Twitter mentions starter. See feed.yaml and
+# examples/README.md. Apply with `magpie watch create -f` after creating the
+# feed, and set its real id below (replacing REPLACE_WITH_FEED_ID).
+name: "X/Twitter product mentions (starter)"
+is_active: true
+feed_ids:
+  - REPLACE_WITH_FEED_ID
+actions:
+  - kind: semantic_filter
+    config:
+      instructions: "A tweet from someone talking about a social listening or brand monitoring tool: mentioning one by name, asking for a recommendation, or comparing options. The tweet text is the judged body. Not marketing spam or unrelated uses of the words."
+      threshold: 0.6
+  - kind: log
+    config:
+      prefix: "[twitter mention]"
+  # Prefer a push over a log line? Uncomment and point at your notifier (ntfy, or
+  # a relay like a Slack/Discord webhook or openclaw-style instance). A webhook also
+  # records a delivery audit you can inspect with `magpie delivery list --action <action_id>`:
+  # - kind: webhook
+  #   config:
+  #     url: "https://your-notifier.example/hook"
+  #     method: POST

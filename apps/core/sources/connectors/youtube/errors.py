@@ -1,7 +1,7 @@
 """Error taxonomy for the YouTube (yt-dlp) connector.
 
 Maps yt-dlp exceptions to canonical error shapes with retry semantics,
-following the same pattern as the Twitter connector's ListenerError.
+following the same pattern as the Twitter connector's TwitterError.
 """
 
 from __future__ import annotations

@@ -11,7 +11,14 @@ from openmagpie_schema.configs import RedditSubredditSourceSpec
 from sources.payload_registry import register
 from sources.payloads import SourcePayload
 
-from ..base import BaseConnector, ConnectorParseError, parse_rate_limit_wait, read_response_capped
+from ..base import (
+    BaseConnector,
+    ConnectorParseError,
+    parse_rate_limit_wait,
+    rate_limit_delay,
+    read_response_capped,
+    sleep_with_heartbeat,
+)
 from .payloads import NewRedditPostPayload
 
 logger = logging.getLogger("sources")
@@ -69,40 +76,6 @@ RATE_LIMIT_BACKOFF_BASE_SECONDS = (
     2.0  # 2s..60s over the 6 retries when no rate-limit header is sent (6th clamps to the cap)
 )
 RATE_LIMIT_DELAY_CAP_SECONDS = 60.0
-
-# Backoff sleeps tick the caller's `heartbeat` at this cadence so the poll
-# lease renews DURING the wait, not just between sources (the lease detects
-# dead holders; a deliberate wait is alive). Far inside the lease window
-# (POLL_LOCK_TIMEOUT_SECONDS, 600s), so even a worst-case stack of full
-# 60s waits never lets the lease lapse mid-source.
-HEARTBEAT_SLEEP_CHUNK_SECONDS = 15.0
-
-
-def _rate_limit_delay(header_wait: float | None, attempt: int) -> float:
-    """Seconds to wait before retrying a 429'd page: the wait the response's
-    rate-limit header asked for (`parse_rate_limit_wait`), else exponential in
-    the attempt number when no header was usable. Capped so a hostile / buggy
-    header can't stall a poll worker for minutes. (`parse_rate_limit_wait`
-    already screens NaN / inf / non-positive, so `header_wait` is a clean
-    positive float or None.)"""
-    delay = header_wait if header_wait is not None else RATE_LIMIT_BACKOFF_BASE_SECONDS * (2**attempt)
-    return min(delay, RATE_LIMIT_DELAY_CAP_SECONDS)
-
-
-def _sleep_with_heartbeat(total: float, heartbeat: Callable[[], bool] | None) -> None:
-    """Sleep `total` seconds, ticking `heartbeat` every chunk so the
-    caller's poll lease renews through the wait. The return value is
-    deliberately ignored (see the Connector.poll contract). No heartbeat
-    (direct calls / tests) = one plain sleep."""
-    if heartbeat is None:
-        time.sleep(total)
-        return
-    remaining = total
-    while remaining > 0:
-        chunk = min(remaining, HEARTBEAT_SLEEP_CHUNK_SECONDS)
-        time.sleep(chunk)
-        remaining -= chunk
-        heartbeat()
 
 
 def _entry_published(entry: Any) -> datetime | None:
@@ -188,7 +161,12 @@ class RedditSubRedditConnector(BaseConnector[RedditSubredditSourceSpec]):
                     if attempt > 0:
                         logger.info("%s succeeded after %d retr%s", url, attempt, "y" if attempt == 1 else "ies")
                     return body
-                delay = _rate_limit_delay(parse_rate_limit_wait(response), attempt)
+                delay = rate_limit_delay(
+                    parse_rate_limit_wait(response),
+                    attempt,
+                    base=RATE_LIMIT_BACKOFF_BASE_SECONDS,
+                    cap=RATE_LIMIT_DELAY_CAP_SECONDS,
+                )
             # Sleep AFTER the `with` closes the 429 response, so the wait
             # never pins the streamed connection open.
             logger.info(
@@ -198,7 +176,7 @@ class RedditSubRedditConnector(BaseConnector[RedditSubredditSourceSpec]):
                 attempt + 1,
                 MAX_RATE_LIMIT_RETRIES,
             )
-            _sleep_with_heartbeat(delay, heartbeat)
+            sleep_with_heartbeat(delay, heartbeat)
             attempt += 1
 
     def poll(

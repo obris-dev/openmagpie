@@ -23,7 +23,7 @@ from sources.payload_registry import register
 from sources.payloads import SourcePayload
 
 from ..base import BaseConnector, ConnectorParseError
-from .client import ListenerErrorWrapper, TwikitClient, TwikitProduct
+from .client import TwikitClient, TwikitProduct, TwitterErrorWrapper
 from .payloads import NewTweetPayload
 
 log = logging.getLogger("sources.twitter")
@@ -61,10 +61,9 @@ class TwitterSearchConnector(BaseConnector[TwitterSearchSourceSpec]):
         heartbeat: Callable[[], bool] | None = None,
     ) -> Iterator[SourcePayload]:
         del field_map
-        del heartbeat
         try:
-            results = self._client.search(spec.query, _TWIKIT_MODES[spec.mode], spec.count)
-        except ListenerErrorWrapper as exc:
+            results = self._client.search(spec.query, _TWIKIT_MODES[spec.mode], spec.count, heartbeat=heartbeat)
+        except TwitterErrorWrapper as exc:
             err = exc.error
             log.warning(
                 "twitter search failed query=%r code=%s retryable=%s: %s",
@@ -78,11 +77,23 @@ class TwitterSearchConnector(BaseConnector[TwitterSearchSourceSpec]):
             ) from exc
 
         for tweet in results:
-            payload = NewTweetPayload.from_tweet(tweet, query=spec.query)
-            # Watermark filter: only surface tweets strictly newer than the
-            # cursor (the poll op advances the source watermark to the
-            # newest seen, so a tweet at the watermark is already recorded).
-            if since is not None and payload.occurred_at <= since:
+            try:
+                payload = NewTweetPayload.from_tweet(tweet, query=spec.query)
+            except Exception:
+                # One malformed tweet must not fail the source's whole cycle
+                # (a generator error closes the poll and, since it stays in
+                # the newest page, re-fails every cycle until it ages out).
+                log.warning("skipping unmappable tweet id=%s", getattr(tweet, "id", None), exc_info=True)
+                continue
+            # Watermark filter: skip only tweets strictly OLDER than the
+            # cursor. Strict `<`, not `<=`: X `created_at` is second-
+            # resolution, so two tweets can share a second; the poll op
+            # advances the watermark to the newest seen, and dropping on tie
+            # would permanently lose a same-second sibling that arrives in a
+            # later cycle (its second is already crossed). Re-yielding the
+            # boundary tweet is idempotent via the external_id dedup (mirrors
+            # the reddit + youtube connectors).
+            if since is not None and payload.occurred_at < since:
                 continue
             if spec.lang and payload.lang and payload.lang != spec.lang:
                 continue
