@@ -25,6 +25,7 @@ dependencies = [
     "pyyaml>=6.0",  # reads the examples/starters/*.yaml in seed_quickstart
     "trafilatura>=1.7",  # HTML -> readable article text for the engine's lazy external-link fetch
     "twikit @ git+https://github.com/unclecode/twikit.git",  # X (Twitter) unofficial route (listeningkit-verified 2026 fork of d60/twikit)
+    "yt-dlp>=2026.07.04",  # YouTube search connector (public API only)
     "ulid>=1.1",
 ]
 

@@ -16,6 +16,7 @@ from sources.connectors import (
     RedditSubRedditConnector,
     RssConnector,
     TwitterSearchConnector,
+    YouTubeSearchConnector,
 )
 
 _REGISTRY: dict[str, Connector[Any]] = {
@@ -24,6 +25,7 @@ _REGISTRY: dict[str, Connector[Any]] = {
     HackerNewsFeedConnector.kind: HackerNewsFeedConnector(),
     HackerNewsCommentConnector.kind: HackerNewsCommentConnector(),
     TwitterSearchConnector.kind: TwitterSearchConnector(),
+    YouTubeSearchConnector.kind: YouTubeSearchConnector(),
 }
 
 # Core kinds captured before any plugin registers; a plugin can't replace one.

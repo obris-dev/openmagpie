@@ -518,6 +518,13 @@ SOURCE_CHALLENGE_BYPASS_URL = os.environ.get("SOURCE_CHALLENGE_BYPASS_URL", "")
 # trade-off.
 SOURCE_ALLOW_INSECURE_TLS = env_bool("SOURCE_ALLOW_INSECURE_TLS", "false")
 
+# Path to a Netscape-format cookies.txt for the YouTube connector's yt-dlp
+# extraction. Public search needs no auth; cookies only widen coverage to
+# entries whose extraction requires a signed-in session (age-gated videos,
+# occasional bot challenges), which are otherwise skipped. Use a throwaway
+# Google account. Empty (the default) disables it.
+YOUTUBE_COOKIES_FILE = os.environ.get("YOUTUBE_COOKIES_FILE", "")
+
 # Product telemetry (anonymous, opt-out; see apps/core/telemetry + TELEMETRY.md).
 # POSTHOG_API_KEY defaults to the baked-in PUBLIC, WRITE-ONLY PostHog project key
 # (OpenMagpie's anonymous self-hosted project, PostHog Cloud US) so a self-hoster

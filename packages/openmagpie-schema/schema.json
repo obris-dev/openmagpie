@@ -839,6 +839,9 @@
               "$ref": "#/$defs/NewTweetPayload"
             },
             {
+              "$ref": "#/$defs/NewVideoPayload"
+            },
+            {
               "$ref": "#/$defs/FeedItemPayload"
             }
           ],
@@ -1854,6 +1857,124 @@
       "title": "NewTweetPayload",
       "type": "object"
     },
+    "NewVideoPayload": {
+      "additionalProperties": true,
+      "description": "`new_video`: one YouTube video (YouTubeSearchConnector, yt-dlp search).\n`content` is the video description (the engine's judgeable body); `title`\nis the video title. `handle` is the channel ID (the within-kind source\nslug), `author` the channel display name, `duration` seconds, `metrics`\n(views/likes/comments), `refs` (related video IDs), `media` (thumbnails).",
+      "properties": {
+        "author": {
+          "default": "",
+          "title": "Author",
+          "type": "string"
+        },
+        "content": {
+          "default": "",
+          "title": "Content",
+          "type": "string"
+        },
+        "duration": {
+          "default": 0,
+          "title": "Duration",
+          "type": "integer"
+        },
+        "external_id": {
+          "default": "",
+          "title": "External Id",
+          "type": "string"
+        },
+        "external_url": {
+          "default": "",
+          "title": "External Url",
+          "type": "string"
+        },
+        "handle": {
+          "default": "",
+          "title": "Handle",
+          "type": "string"
+        },
+        "kind": {
+          "const": "new_video",
+          "title": "Kind",
+          "type": "string"
+        },
+        "media": {
+          "default": [],
+          "items": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "title": "Media",
+          "type": "array"
+        },
+        "metrics": {
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "default": {},
+          "title": "Metrics",
+          "type": "object"
+        },
+        "occurred_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Occurred At"
+        },
+        "parent_external_id": {
+          "default": "",
+          "title": "Parent External Id",
+          "type": "string"
+        },
+        "refs": {
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "default": {},
+          "title": "Refs",
+          "type": "object"
+        },
+        "source": {
+          "default": "",
+          "title": "Source",
+          "type": "string"
+        },
+        "title": {
+          "default": "",
+          "title": "Title",
+          "type": "string"
+        },
+        "url": {
+          "default": "",
+          "title": "Url",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "title": "NewVideoPayload",
+      "type": "object"
+    },
     "PluginActionInput": {
       "description": "Fallback input member for a plugin (non-built-in) action kind. Mirrors\nPluginActionWire on the write path; `config` is required (you can't author an\naction without one) but open (validated server-side by the kind's registry).",
       "properties": {
@@ -2562,7 +2683,8 @@
                   "hn_feed": "#/$defs/HackerNewsFeedSourceSpec",
                   "reddit_subreddit": "#/$defs/RedditSubredditSourceSpec",
                   "rss": "#/$defs/RssSourceSpec",
-                  "twitter_search": "#/$defs/TwitterSearchSourceSpec"
+                  "twitter_search": "#/$defs/TwitterSearchSourceSpec",
+                  "youtube_search": "#/$defs/YouTubeSearchSourceSpec"
                 },
                 "propertyName": "kind"
               },
@@ -2581,6 +2703,9 @@
                 },
                 {
                   "$ref": "#/$defs/TwitterSearchSourceSpec"
+                },
+                {
+                  "$ref": "#/$defs/YouTubeSearchSourceSpec"
                 }
               ]
             },
@@ -2708,7 +2833,8 @@
                   "hn_feed": "#/$defs/HackerNewsFeedSourceSpec",
                   "reddit_subreddit": "#/$defs/RedditSubredditSourceSpec",
                   "rss": "#/$defs/RssSourceSpec",
-                  "twitter_search": "#/$defs/TwitterSearchSourceSpec"
+                  "twitter_search": "#/$defs/TwitterSearchSourceSpec",
+                  "youtube_search": "#/$defs/YouTubeSearchSourceSpec"
                 },
                 "propertyName": "kind"
               },
@@ -2727,6 +2853,9 @@
                 },
                 {
                   "$ref": "#/$defs/TwitterSearchSourceSpec"
+                },
+                {
+                  "$ref": "#/$defs/YouTubeSearchSourceSpec"
                 }
               ]
             },
@@ -4032,6 +4161,34 @@
         "state"
       ],
       "title": "WebhookRunWire",
+      "type": "object"
+    },
+    "YouTubeSearchSourceSpec": {
+      "description": "Identity of one YouTube search stream. Bound to YouTubeSearchConnector.\n\n`query` is REQUIRED and NON-BLANK so a source always carries a server-side\npre-filter before any per-item LLM cost. `count` caps the per-cycle fetch\n(bounded at 50, the client's search cap).",
+      "properties": {
+        "count": {
+          "default": 20,
+          "maximum": 50,
+          "minimum": 1,
+          "title": "Count",
+          "type": "integer"
+        },
+        "kind": {
+          "const": "youtube_search",
+          "default": "youtube_search",
+          "title": "Kind",
+          "type": "string"
+        },
+        "query": {
+          "minLength": 1,
+          "title": "Query",
+          "type": "string"
+        }
+      },
+      "required": [
+        "query"
+      ],
+      "title": "YouTubeSearchSourceSpec",
       "type": "object"
     }
   },

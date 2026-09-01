@@ -57,9 +57,11 @@ ENV PYTHONUNBUFFERED=1 \
     UV_PYTHON_DOWNLOADS=never \
     UV_PYTHON_PREFERENCE=only-system
 
-# Runtime shared lib for the compiled psycopg[c].
+# Runtime shared lib for the compiled psycopg[c], plus git: the dev compose
+# flow re-syncs the venv in this image (`uv run` without --no-sync over the
+# mounted workspace), which fetches the git-pinned twikit dep.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends libpq5 \
+    && apt-get install -y --no-install-recommends git libpq5 \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

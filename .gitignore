@@ -34,6 +34,11 @@ venv/
 .env.bak
 *.bak
 
+# Connector credential material (cookie exports, session files); only the
+# README documenting the layout is tracked.
+apps/core/credentials/*
+!apps/core/credentials/README.md
+
 # Django
 *.sqlite3
 db.sqlite3-journal

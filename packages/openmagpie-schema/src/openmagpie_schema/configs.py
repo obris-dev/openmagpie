@@ -188,6 +188,32 @@ class TwitterSearchSourceSpec(BaseModel):
         return f'X search: "{self.query}"'
 
 
+class YouTubeSearchSourceSpec(BaseModel):
+    """Identity of one YouTube search stream. Bound to YouTubeSearchConnector.
+
+    `query` is REQUIRED and NON-BLANK so a source always carries a server-side
+    pre-filter before any per-item LLM cost. `count` caps the per-cycle fetch
+    (bounded at 50, the client's search cap)."""
+
+    SOURCE_KIND: ClassVar[str] = "youtube_search"
+    URL_FIELDS: ClassVar[tuple[str, ...]] = ()  # no operator-supplied URL to SSRF-check
+
+    kind: Literal["youtube_search"] = "youtube_search"
+    query: str = Field(min_length=1)
+    count: int = Field(default=20, ge=1, le=50)
+
+    @field_validator("query")
+    @classmethod
+    def _query_not_blank(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("youtube_search requires a non-blank query (the firehose guard)")
+        return v
+
+    def display(self) -> str:
+        return f'YouTube search: "{self.query}"'
+
+
 # The built-ins as a discriminated union over `kind` (defined before the plugin
 # fallback so the built-in kind set can be derived from it below). A built-in kind
 # with a malformed spec fails its typed member here and is rejected by the fallback,
@@ -197,7 +223,8 @@ _BuiltinSourceSpec = Annotated[
     | RssSourceSpec
     | HackerNewsFeedSourceSpec
     | HackerNewsCommentSourceSpec
-    | TwitterSearchSourceSpec,
+    | TwitterSearchSourceSpec
+    | YouTubeSearchSourceSpec,
     Field(discriminator="kind"),
 ]
 

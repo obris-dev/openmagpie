@@ -27,6 +27,7 @@ from openmagpie_schema.configs import (
     RssSourceSpec,
     SourceSpec,
     TwitterSearchSourceSpec,
+    YouTubeSearchSourceSpec,
     _BuiltinSourceSpec,
     canonical_spec,
 )
@@ -319,6 +320,7 @@ class BuiltinSourceKindInvariantTests(SimpleTestCase):
                     HackerNewsFeedSourceSpec.SOURCE_KIND,
                     HackerNewsCommentSourceSpec.SOURCE_KIND,
                     TwitterSearchSourceSpec.SOURCE_KIND,
+                    YouTubeSearchSourceSpec.SOURCE_KIND,
                 }
             ),
         )

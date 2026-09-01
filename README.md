@@ -28,7 +28,7 @@
 
 ## What it does
 
-You scan X/Twitter, Reddit, Hacker News, and a few RSS feeds looking for someone hitting a problem your product solves or asking a question you can answer well. Getting there while the conversation is happening is how you build a brand and a community around what you know. OpenMagpie watches the threads for you so you spend your time on engagement instead of searching.
+You scan X/Twitter, YouTube, Reddit, Hacker News, and a few RSS feeds looking for someone talking about your product, hitting a problem it solves, or asking a question you can answer well. Getting there while the conversation is happening is how you build a brand and a community around what you know: a mention answered the day it's posted beats one found in next month's report. OpenMagpie watches the threads for you so you spend your time on engagement instead of searching.
 
 You curate sources into a feed, write a natural-language description of what's relevant (for example, "someone frustrated with manual social monitoring and asking for alternatives"), and a local LLM run via any OpenAI-compatible runner (e.g. Ollama, vLLM, LM Studio) scores each new post against it. Matches go to a webhook or your logs (more integrations coming); everything else is dropped. You read the hits instead of the firehose.
 
@@ -36,7 +36,7 @@ You curate sources into a feed, write a natural-language description of what's r
 
 OpenMagpie listens wherever communities are having those conversations.
 
-- **Public discussion (today):** X/Twitter, Reddit, Hacker News, and any RSS or Atom feed (news, blogs, Substack publications, and forums that publish feeds).
+- **Public discussion (today):** X/Twitter, YouTube, Reddit, Hacker News, and any RSS or Atom feed (news, blogs, Substack publications, and forums that publish feeds).
 - **Communities you're in (roadmap):** Slack workspaces and LinkedIn you already belong to, so you catch relevant threads in the groups where you participate, no admin or app install required.
 - **Public discussion (soon to be added):** Facebook, TikTok, and Instagram.
 
@@ -144,6 +144,7 @@ A `Feed` is a reusable, curated stream (a set of sources plus an item log). A `W
 graph TD
     subgraph Sources
         TWITTER[X / Twitter]
+        YOUTUBE[YouTube]
         REDDIT[Reddit]
         RSS[RSS / Atom feeds]
         HN[Hacker News]
@@ -170,6 +171,7 @@ graph TD
     end
 
     TWITTER --> FEED
+    YOUTUBE --> FEED
     REDDIT --> FEED
     RSS --> FEED
     HN --> FEED
@@ -231,7 +233,7 @@ Social listening is a crowded market (Brand24, Mention, Octolens, Syften, and to
 
 | Layer | Shipped |
 |---|---|
-| Connectors | X/Twitter (`twitter_search`), Reddit (`reddit_subreddit`), Hacker News (`hn_feed`, `hn_comment`), RSS/Atom (`rss`) |
+| Connectors | X/Twitter (`twitter_search`), YouTube (`youtube_search`), Reddit (`reddit_subreddit`), Hacker News (`hn_feed`, `hn_comment`), RSS/Atom (`rss`) |
 | Engines | Any OpenAI-compatible `/v1` API: Ollama, vLLM, llama.cpp, LM Studio, OpenAI, ... |
 | Action kinds | `semantic_filter` (LLM-judged), `webhook`, `log` |
 | Delivery modes | instant, digest |
@@ -246,6 +248,15 @@ X/Twitter listening is the first connector added beyond the original Reddit / HN
 - **Live-cookie auth** — the connector authenticates with an existing X session cookie JSON (`TWITTER_COOKIES_JSON` → `auth_token`/`ct0`, a cookies file, or a login fallback), so no API key, proxy, or vendor API is required — the same live cookies the listening kit already used keep working.
 - **Reliability fixes from live polling** — a per-call twikit client (multi-source polls no longer crash with "Event loop is closed") and X's transient empty-body 404 mapped retryable instead of "tweet deleted", with a regression test. 587 tests green; all CI gates pass.
 - **Verified live end-to-end** — a real X poll through a feed → watch → webhook chain delivered 44/44 items with HTTP 200, payload matched field-for-field against the Twenty `socialEvent` intake contract (`item.handle → actorHandle`, `author → actorName`, `content → eventText`, `occurred_at → occurredAt`, `url → sourceUrl`, `key → dedupeKey`).
+
+YouTube listening followed via yt-dlp:
+
+- **`youtube_search` source kind** — a yt-dlp-based connector that runs YouTube search queries and maps results to a schema-parity `NewVideoPayload`, registered alongside the existing kinds with the same feed/watch/webhook pipeline.
+- **No authentication required** — public YouTube search works without credentials; optional cookie file for age-restricted content.
+- **Error taxonomy** — 5 error codes (`video_unavailable`, `rate_limited`, `js_runtime_missing`, `network_error`, `yt_dlp_error`) with retry semantics.
+- **Watermark-based deduplication** — videos newer than the source's `last_event_at` are surfaced.
+- **Metrics extraction** — views, likes, comments mapped from YouTube metadata.
+- **Thumbnail media** — full thumbnail URLs attached to payloads for rich display.
 
 Next up on the roadmap: **Facebook, TikTok, and Instagram connectors** (soon to be added), then Slack, LinkedIn, GitHub, Bluesky, and Mastodon.
 
