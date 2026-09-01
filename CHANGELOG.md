@@ -5,6 +5,19 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.0](https://github.com/obris-dev/openmagpie/compare/v0.8.0...v0.9.0) (2026-09-01)
+
+
+### ✨ Features
+
+* **sources:** add YouTube search connector (yt-dlp) ([#177](https://github.com/obris-dev/openmagpie/issues/177)) ([eba9c80](https://github.com/obris-dev/openmagpie/commit/eba9c8046a4076c04469e4d5951415d51852a578))
+* **sources:** X/Twitter social listening (twikit connector) + README update ([#175](https://github.com/obris-dev/openmagpie/issues/175)) ([8eb500a](https://github.com/obris-dev/openmagpie/commit/8eb500a2cf660153fb348fd28809ebad84034496))
+
+
+### 🐛 Bug Fixes
+
+* **sources:** twitter/youtube connector follow-ups (session config, rate limits, docs) ([#180](https://github.com/obris-dev/openmagpie/issues/180)) ([c08bcae](https://github.com/obris-dev/openmagpie/commit/c08bcae4c985fbcd57607ac838ffac0e406917e0))
+
 ## [0.8.0](https://github.com/obris-dev/openmagpie/compare/v0.7.0...v0.8.0) (2026-07-23)
 
 
