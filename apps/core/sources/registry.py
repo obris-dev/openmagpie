@@ -15,6 +15,7 @@ from sources.connectors import (
     HackerNewsFeedConnector,
     RedditSubRedditConnector,
     RssConnector,
+    TwitterSearchConnector,
     YouTubeSearchConnector,
 )
 
@@ -23,6 +24,7 @@ _REGISTRY: dict[str, Connector[Any]] = {
     RssConnector.kind: RssConnector(),
     HackerNewsFeedConnector.kind: HackerNewsFeedConnector(),
     HackerNewsCommentConnector.kind: HackerNewsCommentConnector(),
+    TwitterSearchConnector.kind: TwitterSearchConnector(),
     YouTubeSearchConnector.kind: YouTubeSearchConnector(),
 }
 

@@ -135,11 +135,16 @@ class WebhookWindow(BaseModel):
 
 
 class WebhookSource(BaseModel):
-    """Which feed source an item came from: the source's display `label` and
-    its connector `kind`."""
+    """Which feed source an item came from: the source's display `label`, its
+    connector `kind`, and the optional operator-supplied `pattern_id` tag
+    (yield attribution: which listening pattern produced this item).
+    `pattern_id` is None when the source carries no pattern tag (e.g. a
+    non-listening source) ; receivers map it to their pattern-attribution
+    field when present."""
 
     label: str
     kind: str
+    pattern_id: str | None = None
 
 
 class WebhookItem(BaseModel):

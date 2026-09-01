@@ -102,8 +102,39 @@ class WebhookRunTests(TestCase):
         self.assertIsNotNone(body["window"])
         (sent,) = body["items"]
         self.assertEqual(sent["key"], "reddit:abc")
-        self.assertEqual(sent["source"], {"label": "r/ClaudeAI", "kind": "reddit_subreddit"})
+        self.assertEqual(sent["source"], {"label": "r/ClaudeAI", "kind": "reddit_subreddit", "pattern_id": None})
         self.assertEqual(sent["item"], {"title": "T"})  # url dropped by include_fields
+
+    def test_pattern_id_flows_from_source_meta(self) -> None:
+        # The contract extension: operator-supplied pattern_id on the source
+        # (FeedItem.source_meta, copied from Source.meta at record time) rides
+        # through to the wire body's per-item source so receivers can attribute
+        # yield by listening pattern. Absent meta -> pattern_id None, never a
+        # missing key (the shape stays self-describing).
+        action = WatchAction(id=ulid.ulid(), kind="webhook", config={"url": "https://h.example.com/hook"})
+        tagged = ActionItem(
+            data={"source": "twitter_search", "external_id": "t1"},
+            key="twitter_search:t1",
+            source_label="automation.manually",
+            source_kind="twitter_search",
+            source_meta={"pattern_id": "automation.manually", "lane": "AUTOMATION_BUILD"},
+        )
+        untagged = ActionItem(
+            data={"source": "twitter_search", "external_id": "t2"},
+            key="twitter_search:t2",
+            source_label="general-listener",
+            source_kind="twitter_search",
+        )
+        context = ActionContext(watch_id="w", watch_name="n", delivery=DeliveryCadence.INSTANT)
+        body = self._capture_request(action, tagged, context)["json"]
+        (tagged_sent,) = body["items"]
+        self.assertEqual(tagged_sent["source"]["pattern_id"], "automation.manually")
+        body = self._capture_request(action, untagged, context)["json"]
+        (untagged_sent,) = body["items"]
+        self.assertEqual(untagged_sent["source"]["pattern_id"], None)
+        self.assertEqual(
+            untagged_sent["source"], {"label": "general-listener", "kind": "twitter_search", "pattern_id": None}
+        )
 
     def test_method_is_dispatched(self) -> None:
         # A configured PUT is the verb actually sent (not hard-coded POST).
