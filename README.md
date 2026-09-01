@@ -251,7 +251,7 @@ YouTube listening followed via yt-dlp:
 
 - **`youtube_search` source kind** — a yt-dlp-based connector that runs YouTube search queries and maps results to a schema-parity `NewVideoPayload`, registered alongside the existing kinds with the same feed/watch/webhook pipeline.
 - **No authentication required** — public YouTube search works without credentials; optional cookie file for age-restricted content.
-- **Error taxonomy** — 6 error codes (`video_unavailable`, `rate_limited`, `js_runtime_missing`, `network_error`, `date_parse_error`, `yt_dlp_error`) with retry semantics.
+- **Error taxonomy** — 5 error codes (`video_unavailable`, `rate_limited`, `js_runtime_missing`, `network_error`, `yt_dlp_error`) with retry semantics.
 - **Watermark-based deduplication** — videos newer than the source's `last_event_at` are surfaced.
 - **Metrics extraction** — views, likes, comments mapped from YouTube metadata.
 - **Thumbnail media** — full thumbnail URLs attached to payloads for rich display.

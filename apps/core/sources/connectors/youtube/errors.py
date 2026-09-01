@@ -6,26 +6,27 @@ following the same pattern as the Twitter connector's ListenerError.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 from typing import Any
 
 
-@dataclass
-class YouTubeError:
+class YouTubeError(Exception):
     """Canonical error shape for one YouTube fetch failure."""
 
-    code: str  # stable machine code
-    message: str  # human-readable
-    retryable: bool  # safe to retry with backoff?
-    action: str  # what the ops layer should do
-    context: dict[str, Any] = field(default_factory=dict)
-
-
-# Error codes for YouTube-specific failures.
-YT_DLP_ERROR_CODES: dict[type[Exception], str] = {
-    # yt-dlp DownloadError subclasses
-    Exception: "yt_dlp_error",  # catch-all
-}
+    def __init__(
+        self,
+        *,
+        code: str,  # stable machine code
+        message: str,  # human-readable
+        retryable: bool,  # safe to retry with backoff?
+        action: str,  # what the ops layer should do
+        context: dict[str, Any] | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.code = code
+        self.message = message
+        self.retryable = retryable
+        self.action = action
+        self.context = context or {}
 
 
 def map_ytdlp_error(exc: Exception, context: dict[str, Any] | None = None) -> YouTubeError:
@@ -69,16 +70,6 @@ def map_ytdlp_error(exc: Exception, context: dict[str, Any] | None = None) -> Yo
             message=msg,
             retryable=True,
             action="retry with backoff",
-            context=context or {},
-        )
-
-    # Upload date parsing failures
-    if "upload_date" in msg.lower() or "date" in msg.lower():
-        return YouTubeError(
-            code="date_parse_error",
-            message=msg,
-            retryable=False,
-            action="use current timestamp as fallback",
             context=context or {},
         )
 

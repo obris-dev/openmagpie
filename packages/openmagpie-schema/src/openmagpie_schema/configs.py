@@ -191,11 +191,9 @@ class TwitterSearchSourceSpec(BaseModel):
 class YouTubeSearchSourceSpec(BaseModel):
     """Identity of one YouTube search stream. Bound to YouTubeSearchConnector.
 
-    `query` is the search expression (keywords, phrases, operators like
-    `from:`, `channel:`); it is REQUIRED and NON-BLANK so a source always
-    carries a server-side pre-filter before any per-item LLM cost.
-    `count` caps the per-cycle fetch (capped at 50 by yt-dlp for search).
-    """
+    `query` is REQUIRED and NON-BLANK so a source always carries a server-side
+    pre-filter before any per-item LLM cost. `count` caps the per-cycle fetch
+    (bounded at 50, the client's search cap)."""
 
     SOURCE_KIND: ClassVar[str] = "youtube_search"
     URL_FIELDS: ClassVar[tuple[str, ...]] = ()  # no operator-supplied URL to SSRF-check

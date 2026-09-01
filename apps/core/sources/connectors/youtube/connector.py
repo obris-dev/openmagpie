@@ -36,9 +36,11 @@ class YouTubeSearchConnector(BaseConnector[YouTubeSearchSourceSpec]):
     Live-mode semantics mirror the other connectors: every cycle yields
     videos newer than `since` (the Source row's `last_event_at`). There
     is no pagination in phase 1: a search returns up to `spec.count`
-    videos and the connector filters them by the watermark (YouTube's
-    search ordering is newest-first; a quiet stream needs no backfill
-    walk).
+    videos from the client's last-7-days window (YouTube search has no
+    date SORT any more, only the upload-window filter; see client.search)
+    and the connector filters them by the watermark. The window is the
+    recency guarantee; ordering within it is relevance, which the dedup
+    downstream absorbs.
     """
 
     kind = YouTubeSearchSourceSpec.SOURCE_KIND
@@ -72,10 +74,14 @@ class YouTubeSearchConnector(BaseConnector[YouTubeSearchSourceSpec]):
 
         for video in results:
             payload = NewVideoPayload.from_video(video)
-            # Watermark filter: only surface videos strictly newer than the
-            # cursor (the poll op advances the source watermark to the
-            # newest seen, so a video at the watermark is already recorded).
-            if since is not None and payload.occurred_at <= since:
+            # Watermark filter: skip only videos strictly OLDER than the
+            # cursor. YouTube timestamps can be day-granular (upload_date
+            # floors to midnight UTC), so the `<= since` rule the
+            # full-resolution connectors use would drop every later video
+            # from the same day once the watermark reaches that midnight.
+            # Yielding the boundary (`== since`) instead re-offers already
+            # recorded same-day videos, which the external_id dedup absorbs.
+            if since is not None and payload.occurred_at < since:
                 continue
             yield payload
 

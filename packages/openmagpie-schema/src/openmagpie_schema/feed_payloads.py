@@ -97,6 +97,22 @@ class NewTweetPayload(FeedItemPayload):
     media: list[dict[str, object]] = []
 
 
+class NewVideoPayload(FeedItemPayload):
+    """`new_video`: one YouTube video (YouTubeSearchConnector, yt-dlp search).
+    `content` is the video description (the engine's judgeable body); `title`
+    is the video title. `handle` is the channel ID (the within-kind source
+    slug), `author` the channel display name, `duration` seconds, `metrics`
+    (views/likes/comments), `refs` (related video IDs), `media` (thumbnails)."""
+
+    kind: Literal["new_video"]  # required, so a non-youtube dump can't match here
+    author: str = ""
+    handle: str = ""
+    duration: int = 0
+    metrics: dict[str, int | None] = {}
+    refs: dict[str, str | None] = {}
+    media: list[dict[str, object]] = []
+
+
 # Tried left-to-right so a dump resolves to its concrete variant (matched on the
 # required `kind` literal) and only falls to the permissive base when no variant
 # claims it. Variants REQUIRE their `kind`, so an empty / kind-less dict can't
@@ -112,6 +128,7 @@ FeedItemData = Annotated[
     | HackerNewsFeedPayload
     | HackerNewsCommentPayload
     | NewTweetPayload
+    | NewVideoPayload
     | FeedItemPayload,
     Field(union_mode="left_to_right"),
 ]

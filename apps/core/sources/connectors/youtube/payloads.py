@@ -8,6 +8,7 @@ Metrics / refs / media stay on the payload as source-specific fields.
 
 from __future__ import annotations
 
+from contextlib import suppress
 from datetime import UTC, datetime
 from typing import Any, ClassVar
 
@@ -78,13 +79,22 @@ class NewVideoPayload(SourcePayload):
         description = str(video.get("description") or "")
         upload_date = str(video.get("upload_date") or "")
 
-        # Parse upload_date (format: YYYYMMDD) to datetime.
-        occurred_at = datetime.now(UTC)
-        if upload_date and len(upload_date) == 8:
-            try:
+        # Timestamp resolution, best first: `timestamp`/`release_timestamp`
+        # (epoch seconds, full resolution) -> `upload_date` (YYYYMMDD, floors
+        # to midnight UTC) -> today's midnight UTC. The last fallback must
+        # stay a midnight floor, not now(): a wall-clock value advances the
+        # source watermark past every same-day midnight-floored video and
+        # strands them (see the watermark filter in connector.poll).
+        occurred_at: datetime | None = None
+        epoch = video.get("timestamp") or video.get("release_timestamp")
+        if epoch is not None:
+            with suppress(ValueError, TypeError, OSError, OverflowError):
+                occurred_at = datetime.fromtimestamp(float(epoch), tz=UTC)
+        if occurred_at is None and upload_date and len(upload_date) == 8:
+            with suppress(ValueError):
                 occurred_at = datetime.strptime(upload_date, "%Y%m%d").replace(tzinfo=UTC)
-            except ValueError:
-                pass
+        if occurred_at is None:
+            occurred_at = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
 
         # Duration in seconds.
         duration = int(video.get("duration") or 0)
@@ -101,12 +111,14 @@ class NewVideoPayload(SourcePayload):
         for thumb in video.get("thumbnails") or []:
             url = thumb.get("url")
             if url:
-                media.append({
-                    "type": "thumbnail",
-                    "url": url,
-                    "width": int_or_none(thumb.get("width")),
-                    "height": int_or_none(thumb.get("height")),
-                })
+                media.append(
+                    {
+                        "type": "thumbnail",
+                        "url": url,
+                        "width": int_or_none(thumb.get("width")),
+                        "height": int_or_none(thumb.get("height")),
+                    }
+                )
         # Fallback to thumbnail field if thumbnails list is empty.
         if not media:
             thumb_url = video.get("thumbnail")
