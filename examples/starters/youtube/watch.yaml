@@ -1,0 +1,22 @@
+# Companion watch for the YouTube mentions starter. See feed.yaml and
+# examples/README.md. Apply with `magpie watch create -f` after creating the
+# feed, and set its real id below (replacing REPLACE_WITH_FEED_ID).
+name: "YouTube tool mentions (starter)"
+is_active: true
+feed_ids:
+  - REPLACE_WITH_FEED_ID
+actions:
+  - kind: semantic_filter
+    config:
+      instructions: "A YouTube video that reviews, demos, or recommends social listening or brand monitoring tools: tutorials, tool roundups, or hands-on walkthroughs. The video description is the judged text. Not general marketing talk that only mentions listening in passing."
+      threshold: 0.6
+  - kind: log
+    config:
+      prefix: "[youtube mention]"
+  # Prefer a push over a log line? Uncomment and point at your notifier (ntfy, or
+  # a relay like a Slack/Discord webhook or openclaw-style instance). A webhook also
+  # records a delivery audit you can inspect with `magpie delivery list --action <action_id>`:
+  # - kind: webhook
+  #   config:
+  #     url: "https://your-notifier.example/hook"
+  #     method: POST

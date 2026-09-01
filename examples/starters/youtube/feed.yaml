@@ -1,0 +1,29 @@
+# OpenMagpie starter: YouTube brand-mention listening.
+# Uses the `youtube_search` source kind (yt-dlp, public search; no API key or
+# credentials needed). Each poll runs the query filtered to the last week's
+# uploads and surfaces videos newer than the source's watermark.
+# Apply by hand (this starter isn't wired into the quickstart seed script):
+#   magpie feed create -f examples/starters/youtube/feed.yaml
+#   magpie watch create -f examples/starters/youtube/watch.yaml   (after the edits in examples/README.md)
+# Then set a past last_event_at on each source, or the first tick only sees
+# brand-new videos. NOTE: YouTube timestamps can be day-granular, so a
+# same-day item may appear once more across ticks; the item store dedups it.
+# Full walkthrough: examples/README.md
+name: "YouTube mentions (starter)"
+kind: curated
+poll_interval_seconds: 900
+data:
+  retention_days: 30
+sources:
+  # `query` is REQUIRED (the firehose guard): it pre-filters server-side on
+  # YouTube's search index before any per-item LLM cost. Quote exact phrases
+  # inside the YAML string, e.g. query: '"open source social listening"'.
+  # `count` caps the per-poll fetch (1-50). Each result costs one full
+  # YouTube page fetch per poll (metadata extraction), so the default 20 at
+  # this cadence is already ~2k fetches/day for the source. Raise it only
+  # when a query matches more than `count` videos in a week: results are
+  # relevance-ranked within the week window, so a busy query can squeeze
+  # fresh low-view mentions out of the visible slots.
+  - spec: {kind: youtube_search, query: '"social listening"', count: 20}
+  # Watch several phrasings by adding more sources:
+  #   - spec: {kind: youtube_search, query: '"brand monitoring" open source', count: 20}
