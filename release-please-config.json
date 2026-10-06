@@ -7,7 +7,7 @@
     { "type": "fix", "section": "🐛 Bug Fixes" },
     { "type": "perf", "section": "⚡ Performance" },
     { "type": "revert", "section": "⏪ Reverts" },
-    { "type": "docs", "section": "📝 Documentation" },
+    { "type": "docs", "section": "📝 Documentation", "hidden": true },
     { "type": "refactor", "section": "♻️ Refactoring", "hidden": true },
     { "type": "chore", "section": "Chores", "hidden": true },
     { "type": "ci", "section": "CI", "hidden": true },
@@ -20,7 +20,7 @@
       "release-type": "simple",
       "include-component-in-tag": false,
       "changelog-path": "CHANGELOG.md",
-      "exclude-paths": ["apps/cli", "web"],
+      "exclude-paths": ["apps/cli", "web/apps/marketing", "web/apps/blog"],
       "extra-files": ["pyproject.toml"],
       "initial-version": "0.1.0"
     },

@@ -77,6 +77,15 @@ product. release-please keeps an open "release PR" per track with the pending
 version + changelog; merging that PR cuts the release (tag + GitHub Release). You
 don't tag by hand.
 
+Changes exclusive to `web/apps/marketing` or `web/apps/blog` do not trigger new
+releases or changelog updates (both deploy on their own), and `docs` commits
+never appear in the changelog. A release PR carries a second commit the
+automation adds, `chore: lock the release versions`: the bump moves the
+manifests and `uv.lock` records their versions, and CI's `uv lock --check`
+holds the two together (run `uv lock` after editing a manifest by hand).
+Merging the product release PR also tags the images built from that commit
+`v<x.y.z>` and `v<x.y>`.
+
 ## Running the checks
 
 ```bash

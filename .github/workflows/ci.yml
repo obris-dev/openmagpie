@@ -5,6 +5,12 @@ on:
   push:
     branches: [main]
 
+# A new push to a PR cancels the run in flight for the previous commit,
+# so only the newest commit is checked.
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 # Shared by every job. POSTGRES_PASSWORD is required at settings import
 # (no default), so even the non-DB jobs need the block to load Django.
 env:
@@ -39,12 +45,20 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # Pinned to the line the core image builds with, so one uv owns
+      # the lock.
       - name: Install uv
         uses: astral-sh/setup-uv@v5
         with:
+          version: "0.12.x"
           enable-cache: true
-      # --frozen: fail if uv.lock drifts. --all-packages: every workspace
-      # member (core + cli + schema) incl. dev tools (ruff, ty).
+      # Before the sync, which --frozen would run against a stale lock
+      # without complaint: a release bump that missed its re-lock, or a
+      # hand-edited manifest, fails here instead.
+      - name: uv.lock matches the manifests
+        run: uv lock --check
+      # --all-packages: every workspace member (core + cli + schema)
+      # incl. dev tools (ruff, ty).
       - name: Sync workspace
         run: uv sync --all-packages --frozen
       - name: ruff
@@ -106,6 +120,7 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v5
         with:
+          version: "0.12.x"
           enable-cache: true
       - name: Sync workspace
         run: uv sync --all-packages --frozen
