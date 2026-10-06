@@ -1,3 +1,22 @@
+# Build + push the deployable images to GHCR. ONLY on a merge to main (which is
+# PR-gated) or a manual run, never on tags. Each build publishes an immutable
+# `sha-<short>` (+ a moving `latest`); deploys pin a specific sha via a PR in
+# the deployments repo, so the release gate is a review, not a tag.
+#
+# Each image only rebuilds when its build context actually changed (see the
+# `changes` job): a web-only merge skips the core build and vice versa. A manual
+# `workflow_dispatch` forces BOTH, the force-rebuild escape hatch.
+#
+# A RELEASE commit (a push to main that changes version.txt against its
+# parent, which only release-please's product bump does) builds both images
+# and tags them with the version as well: v<x.y.z>, and the rolling v<x.y>
+# alias when the version is clean semver. The version tags ride on the build
+# of the commit that carries that version, so the tagged image is the one
+# whose baked-in version reports it and it is the same digest as its
+# sha-<short>. Tagging from a separate workflow on the Release event would
+# copy whatever :latest is at that moment, the previous build. A CLI release
+# (cli-v<x.y.z>) changes apps/cli only, never version.txt, so it tags no
+# image; a manual run never is a release.
 name: images
 
 # Build + push the deployable images to GHCR. ONLY on a merge to main (which is
@@ -37,8 +56,23 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.set.outputs.matrix }}
+      release: ${{ steps.release.outputs.release }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          # The parent commit, to read the version it carried.
+          fetch-depth: 2
+      - id: release
+        env:
+          EVENT: ${{ github.event_name }}
+        run: |
+          prev=$(git show HEAD^:version.txt 2>/dev/null | tr -d '[:space:]' || true)
+          cur=$(tr -d '[:space:]' < version.txt)
+          if [ "$EVENT" = "push" ] && [ -n "$prev" ] && [ "$prev" != "$cur" ]; then
+            echo "release=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "release=false" >> "$GITHUB_OUTPUT"
+          fi
       - uses: dorny/paths-filter@v3
         id: filter
         with:
@@ -49,27 +83,30 @@ jobs:
               - 'pyproject.toml'
               - 'uv.lock'
               - '.python-version'
+              - 'version.txt'
               - '.github/workflows/images.yml'
             email:
               - 'web/apps/email-render/**'
               - 'web/pnpm-lock.yaml'
               - 'web/pnpm-workspace.yaml'
               - 'web/package.json'
+              - 'version.txt'
               - '.github/workflows/images.yml'
       - id: set
-        # Assemble the matrix include[] as JSON. A manual run forces both;
-        # otherwise include only the images whose filter matched. `[]` (nothing
-        # relevant changed) skips the build job via its `if` guard below.
+        # Assemble the matrix include[] as JSON. A manual run or a release
+        # commit forces both; otherwise include only the images whose filter
+        # matched. `[]` (nothing relevant changed) skips the build job via its
+        # `if` guard below.
         env:
-          DISPATCH: ${{ github.event_name == 'workflow_dispatch' }}
+          BOTH: ${{ github.event_name == 'workflow_dispatch' || steps.release.outputs.release == 'true' }}
           CORE: ${{ steps.filter.outputs.core }}
           EMAIL: ${{ steps.filter.outputs.email }}
         run: |
           core='{"image":"openmagpie-core","context":".","dockerfile":"apps/core/Dockerfile"}'
           email='{"image":"openmagpie-email-render","context":"web","dockerfile":"web/apps/email-render/Dockerfile"}'
           items=()
-          if [ "$DISPATCH" = "true" ] || [ "$CORE" = "true" ]; then items+=("$core"); fi
-          if [ "$DISPATCH" = "true" ] || [ "$EMAIL" = "true" ]; then items+=("$email"); fi
+          if [ "$BOTH" = "true" ] || [ "$CORE" = "true" ]; then items+=("$core"); fi
+          if [ "$BOTH" = "true" ] || [ "$EMAIL" = "true" ]; then items+=("$email"); fi
           printf 'matrix=[%s]\n' "$(IFS=,; echo "${items[*]}")" >> "$GITHUB_OUTPUT"
 
   build:
@@ -93,6 +130,19 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # The version this commit carries, for the release tags below. The
+      # rolling alias exists only for clean semver: a pre-release such as
+      # 0.10.0-rc.1 must never move v0.10.
+      - id: version
+        run: |
+          ver="v$(tr -d '[:space:]' < version.txt)"
+          echo "tag=${ver}" >> "$GITHUB_OUTPUT"
+          if printf '%s' "$ver" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "alias=${ver%.*}" >> "$GITHUB_OUTPUT"
+          else
+            echo "alias=" >> "$GITHUB_OUTPUT"
+          fi
+
       - id: meta
         uses: docker/metadata-action@v5
         with:
@@ -100,6 +150,8 @@ jobs:
           tags: |
             type=sha
             type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=${{ steps.version.outputs.tag }},enable=${{ needs.changes.outputs.release == 'true' }}
+            type=raw,value=${{ steps.version.outputs.alias }},enable=${{ needs.changes.outputs.release == 'true' && steps.version.outputs.alias != '' }}
 
       - uses: docker/build-push-action@v6
         with:

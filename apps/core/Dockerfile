@@ -10,7 +10,8 @@
 # ---------- builder ----------
 FROM python:3.14-slim AS builder
 
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+# Pinned to the line CI and the release re-lock run, so one uv owns the lock.
+COPY --from=ghcr.io/astral-sh/uv:0.12 /uv /uvx /bin/
 
 # PYTHONUNBUFFERED: real-time management-command output when piped.
 # UV_LINK_MODE=copy: avoid hardlink warnings across the cache mount.
@@ -50,7 +51,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 # ---------- runtime ----------
 FROM python:3.14-slim
 
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+COPY --from=ghcr.io/astral-sh/uv:0.12 /uv /uvx /bin/
 
 ENV PYTHONUNBUFFERED=1 \
     UV_LINK_MODE=copy \

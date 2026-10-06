@@ -1,48 +1,71 @@
 name: release-images
 
-# On a published PRODUCT release (tag v<x.y.z>), give the current main image a
-# version tag. The release tag points at release-please's version-bump-only
-# merge commit (version.txt + CHANGELOG + pyproject) - it changes no code, so
-# images.yml (which builds only on code/dep/workflow changes) builds NOTHING for
-# that commit and sha-<release-commit> never exists. So we promote :latest - the
-# newest image images.yml built+pushed on a main merge, which IS the release's
-# code since the bump added none. NO rebuild: imagetools copies the existing
-# manifest list (multi-arch preserved). The build still only happens on a main
-# merge; a release just gives that tested image a named version.
-#
-# Fires for product releases only (tag starts with `v`), never CLI releases
-# (`cli-v*`) - both emit `release: published`, so the job guards on the prefix.
-#
-# workflow_dispatch is the manual escape hatch: pass the version `tag`, and
-# optionally a `sha` to promote a specific build instead of :latest.
+# The MANUAL escape hatch for image version tags. The normal path is
+# images.yml: the release commit's own build pushes v<x.y.z> and the
+# v<x.y> alias alongside sha-<short> and latest, so a release never
+# waits on this file. This exists for the cases that path cannot serve:
+# re-tagging a specific earlier build as a version, or repairing a tag
+# by hand. It copies existing manifests (no rebuild), and only after
+# both images' sources are confirmed to exist, so a version is
+# never applied to one image and not the other.
 
 on:
-  release:
-    types: [published]
   workflow_dispatch:
     inputs:
       tag:
-        description: "Product version tag to apply, e.g. v0.1.0"
+        description: "Version tag to apply, e.g. v0.0.1 (clean semver also moves the v<x.y> alias)"
         required: true
       sha:
-        description: "Commit sha whose sha-<short> image to promote instead of :latest (optional)"
-        required: false
+        description: "Commit sha whose sha-<short> images to tag (both images must have one)"
+        required: true
 
 permissions:
   contents: read
   packages: write
 
 jobs:
+  verify:
+    runs-on: ubuntu-latest
+    outputs:
+      short: ${{ steps.check.outputs.short }}
+    steps:
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: check
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+          SRC_SHA: ${{ inputs.sha }}
+        run: |
+          set -euo pipefail
+          # Only a version may be applied here: a stray name would retag
+          # latest or move an alias by accident.
+          if ! printf '%s' "$RELEASE_TAG" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$'; then
+            echo "refusing: '$RELEASE_TAG' is not a version tag (v<x.y.z>, optional pre-release suffix)" >&2
+            exit 1
+          fi
+          if ! printf '%s' "$SRC_SHA" | grep -Eq '^[0-9a-f]{7,40}$'; then
+            echo "refusing: sha must be 7 to 40 lowercase hex characters" >&2
+            exit 1
+          fi
+          short=$(printf '%s' "$SRC_SHA" | cut -c1-7)
+          for image in openmagpie-core openmagpie-email-render; do
+            docker buildx imagetools inspect "ghcr.io/obris-dev/${image}:sha-${short}" >/dev/null \
+              || { echo "refusing: ghcr.io/obris-dev/${image}:sha-${short} does not exist" >&2; exit 1; }
+          done
+          echo "short=${short}" >> "$GITHUB_OUTPUT"
+
   promote:
-    # Product releases only; manual dispatch always runs.
-    if: github.event_name == 'workflow_dispatch' || startsWith(github.event.release.tag_name, 'v')
+    needs: verify
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        # Both deployables get the version tag so a release is coherent. Only
-        # openmagpie-core is needed by self-hosters; openmagpie-email-render is a
-        # hosted-only sidecar, tagged for parity.
         image: [openmagpie-core, openmagpie-email-render]
     steps:
       - uses: docker/setup-buildx-action@v3
@@ -53,32 +76,21 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Promote the current main image to the release version
+      - name: Tag the named build with the version
         env:
           IMAGE: ghcr.io/obris-dev/${{ matrix.image }}
-          RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
-          SRC_SHA: ${{ inputs.sha }}
+          RELEASE_TAG: ${{ inputs.tag }}
+          SHORT: ${{ needs.verify.outputs.short }}
         run: |
           set -euo pipefail
           ver="$RELEASE_TAG"
-          # A release promotes :latest (newest main image == this release's code,
-          # since the version bump added none). A manual run can pin a sha instead.
-          # imagetools resolves the source once and copies its manifest list, so
-          # multi-arch is preserved, nothing rebuilds, and a later :latest move
-          # can't affect this tag (a fresh build takes minutes; we read :latest
-          # seconds after the release).
-          if [ -n "$SRC_SHA" ]; then
-            src="${IMAGE}:sha-$(printf '%s' "$SRC_SHA" | cut -c1-7)"
-          else
-            src="${IMAGE}:latest"
-          fi
-          # Always tag the exact version. Add the rolling :vMAJOR.MINOR alias only
-          # for clean stable semver - a pre-release (e.g. v0.1.0-rc1) must not move
-          # the rolling alias, and ${ver%.*} on it would derive a misleading one.
+          src="${IMAGE}:sha-${SHORT}"
+          # The rolling alias only for clean semver: a pre-release must not
+          # move it.
           tags=(--tag "${IMAGE}:${ver}")
           if printf '%s' "$ver" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
             tags+=(--tag "${IMAGE}:${ver%.*}")
           fi
-          echo "Promoting ${src} -> ${tags[*]}"
+          echo "Tagging ${src} -> ${tags[*]}"
           docker buildx imagetools create "${tags[@]}" "${src}"
           echo "Tagged: ${tags[*]}"

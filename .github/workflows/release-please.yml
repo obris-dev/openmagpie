@@ -1,21 +1,18 @@
 name: release-please
 
-# Runs on EVERY push to main, but "running" only means: recompute the pending
-# release and open/update the per-track release PR(s). No release happens until
-# a human MERGES a release PR - that's the deliberate ship action, and merging
-# is what creates the tag (v<x.y.z> for the product, cli-v<x.y.z> for the CLI)
-# and the GitHub Release. Config lives in release-please-config.json +
-# .release-please-manifest.json (two tracks: the product stack at the repo root,
-# and the openmagpie CLI under apps/cli).
+# Runs on every push to main, and "running" only means: recompute the
+# pending release and open or update the per-track release PRs. Nothing
+# is released until a human MERGES a release PR; that merge creates the
+# tag (v<x.y.z> for the product, cli-v<x.y.z> for the CLI) and the
+# GitHub Release. The config lives in release-please-config.json and the
+# current versions in .release-please-manifest.json.
 #
-# TOKEN: with the default GITHUB_TOKEN, the tag/Release that release-please
-# creates will NOT trigger other workflows (GitHub's loop-prevention), so the
-# image-promotion and PyPI-publish workflows (which key off `release: published`)
-# would never fire. To make the release -> publish chain work, provision a PAT
-# or GitHub App token as the RELEASE_PLEASE_TOKEN secret (repo contents + PRs,
-# and `workflow`); the expression below falls back to GITHUB_TOKEN when it's
-# absent, which still maintains the release PRs - it just won't fan out to the
-# publishers until the token is set.
+# TOKEN: a PR opened or updated with the default GITHUB_TOKEN gets its
+# pull_request workflow runs only in an approval-required state, and the
+# Release it publishes does not trigger other workflows (the PyPI
+# publish keys off it). RELEASE_PLEASE_TOKEN (a PAT or a GitHub App
+# token with contents, pull requests and workflow) runs them outright;
+# the expression falls back to GITHUB_TOKEN when it is absent.
 
 on:
   push:
@@ -25,10 +22,66 @@ permissions:
   contents: write
   pull-requests: write
 
+concurrency:
+  group: release-please
+  cancel-in-progress: false
+
 jobs:
   release-please:
     runs-on: ubuntu-latest
     steps:
-      - uses: googleapis/release-please-action@v4
+      - id: release
+        uses: googleapis/release-please-action@v4
         with:
           token: ${{ secrets.RELEASE_PLEASE_TOKEN || secrets.GITHUB_TOKEN }}
+
+      # A bump edits a pyproject version but nothing can edit uv.lock for
+      # it (the lock is generated, so it carries no marker), and a lock
+      # that disagrees with the manifests fails `uv lock --check` in CI
+      # and dirties every developer's next sync. So every open release
+      # PR, one per track, is re-locked here. The action names the PRs
+      # only on a run that changed them, and the label search is
+      # eventually consistent (it misses a PR created seconds earlier),
+      # so the branches come from the action when it names them and from
+      # the search otherwise: a re-lock that failed once is retried on
+      # the next run. release-please rewrites a branch on each main push,
+      # so the re-lock recurs; the one change it ever makes is the
+      # version lines. The uv is pinned to the line the core image builds
+      # with, so one uv owns the lock. Expect the first CI run after each
+      # rewrite to fail the lock check and the re-locked commit's run to
+      # pass; the PR's state is the newest commit's.
+      - id: release_prs
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN || secrets.GITHUB_TOKEN }}
+          ACTION_PRS: ${{ steps.release.outputs.prs }}
+        run: |
+          branches=$(printf '%s' "$ACTION_PRS" | jq -r '.[]?.headBranchName // empty' | sort -u)
+          if [ -z "$branches" ]; then
+            branches=$(gh pr list --repo "$GITHUB_REPOSITORY" --state open --label "autorelease: pending" --json headRefName -q '.[].headRefName' | sort -u)
+          fi
+          printf 'branches=%s\n' "$(printf '%s' "$branches" | tr '\n' ' ')" >> "$GITHUB_OUTPUT"
+      - if: ${{ steps.release_prs.outputs.branches != '' }}
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN || secrets.GITHUB_TOKEN }}
+      - if: ${{ steps.release_prs.outputs.branches != '' }}
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.12.x"
+      - if: ${{ steps.release_prs.outputs.branches != '' }}
+        env:
+          BRANCHES: ${{ steps.release_prs.outputs.branches }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          for branch in $BRANCHES; do
+            git fetch -q origin "$branch"
+            git checkout -q "$branch"
+            uv lock
+            if git diff --quiet -- uv.lock; then
+              echo "${branch}: uv.lock already matches the release versions"
+              continue
+            fi
+            git commit -q -m "chore: lock the release versions" -- uv.lock
+            git push -q origin "HEAD:${branch}"
+          done
