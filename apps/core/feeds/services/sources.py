@@ -8,7 +8,10 @@ The mutation surface is intentionally narrow:
 
   set_sources(feed, items, dry_run) replace-mode reconcile;
       additive + drops missing + preserves watermarks on persisted
-  remove(feed, source_id)            by row id; idempotent
+  remove_by_id(source_id)            by row id; 404 on miss
+  seek(feed, to, dry_run) /          move the polling watermark (either
+  seek_by_id(source_id, to, dry_run)   direction) on a feed's set / one row ;
+                                     on `SourceSeekMixin` (_sources_seek.py)
 
 There is no single-row `add` ; the create-time path (FeedService.create
 with starter sources) and `set_sources` already cover what an add
@@ -28,14 +31,17 @@ from datetime import datetime
 
 import ulid
 from django.db import transaction
-from django.db.models import Count, Q
+from django.db.models import Count, Q, QuerySet
 
 from common.locks import feed_set_lock
+from feeds.configs import CuratedFeedConfig
 from feeds.models import Feed, Source
 from feeds.policy import PolicyError, default_and_enforce_source_watermark, enforce_source_spec_safety
 from openmagpie_schema.configs import SourceSpec, canonical_spec
 from openmagpie_schema.feed import SourceInput, SourceSetResult
 from sources import registry as source_registry
+
+from ._sources_seek import SourceSeekMixin
 
 
 class ConcurrentSetSourcesError(Exception):
@@ -91,8 +97,9 @@ class SourceGlobal:
         return {row["kind"]: row["n"] for row in rows}
 
 
-class SourceService:
-    """Account-scoped service for Source CRUD bound to a Feed."""
+class SourceService(SourceSeekMixin):
+    """Account-scoped service for Source CRUD bound to a Feed. The watermark
+    seek (`seek` / `seek_by_id`) lives on `SourceSeekMixin` (`_sources_seek.py`)."""
 
     Global = SourceGlobal
 
@@ -107,10 +114,12 @@ class SourceService:
 
     def _assert_curated(self, feed: Feed) -> None:
         self._assert_scope(str(feed.account_id), "feed")
-        if feed.kind != "curated":
-            raise PolicyError(f"sources are only supported on curated feeds (got kind={feed.kind!r})")
+        if feed.kind != CuratedFeedConfig.FEED_KIND:
+            raise PolicyError(
+                f"sources are only supported on {CuratedFeedConfig.FEED_KIND} feeds (got kind={feed.kind!r})"
+            )
 
-    def _scoped(self, feed: Feed):
+    def _scoped(self, feed: Feed) -> QuerySet[Source]:
         return Source.objects.filter(account_id=self.account_id, feed_id=str(feed.id))
 
     def list(self, feed: Feed) -> list[Source]:
@@ -153,29 +162,30 @@ class SourceService:
         return self._scoped(feed).filter(kind=kind).order_by("?").iterator()
 
     def advance_watermark(self, source: Source, value: datetime) -> int:
-        """Move `last_event_at` strictly forward on one Source row.
+        """Compare-and-set: move `last_event_at` forward to `value` ONLY if the
+        row still holds the watermark this poll was cut from
+        (`source.last_event_at`, read at cycle start).
 
-        The `last_event_at__lt=value` guard makes the UPDATE monotonic
-        at the DB so a stale poll (out-of-order completion under
-        concurrent pollers, or any future caller outside `poll_lock`)
-        can't clobber a newer watermark. A NULL watermark also matches
-        (`isnull=True`): the feeds.policy invariant says a row can't be
-        NULL, but if one ever is this BOOTSTRAPS it to `value` (its
-        first-seen newest) so it self-heals instead of staying stuck
-        re-fetching every cycle - a NULL has no "newer", so bootstrapping
-        can't break monotonicity. Equivalent guard for an
-        operator-initiated backfill: it's a different code path
-        (`rewind_watermark`, future) and would bypass this method.
+        The poller reads a row, fetches since its mark, then advances. An
+        operator `seek` (either direction, see `_sources_seek.py`) can land in
+        between; a plain "current < value" guard would let the stale advance
+        jump the row forward again and silently undo a rewind. Keying the
+        UPDATE on the read value makes the stale write match no row: the seek
+        survives, the items this cycle already recorded stay (dedup on
+        external id), and the next cycle re-polls from the seeked mark. The
+        `< value` term keeps the advance monotonic as a belt (callers only
+        advance past their mark, so it is normally implied).
 
-        Scoped by `(account_id, id)` so a stale Source pointer can't
-        update across tenants. Returns the row count affected
-        (0 = no-op: already past `value`, or not in scope). Pure
-        column UPDATE, no JSONB rewrite."""
-        return (
-            Source.objects.filter(account_id=self.account_id, id=source.id)
-            .filter(Q(last_event_at__lt=value) | Q(last_event_at__isnull=True))
-            .update(last_event_at=value)
-        )
+        A NULL watermark (the feeds.policy invariant says a row can't be NULL,
+        but if one ever is) BOOTSTRAPS to `value`, its first-seen newest, so it
+        self-heals instead of re-fetching every cycle. Scoped by
+        `(account_id, id)` so a stale Source pointer can't update across
+        tenants. Returns the row count affected: 0 = lost the race (the row
+        changed under this poll), the row is gone, or it is already past
+        `value`. Pure column UPDATE, no JSONB rewrite."""
+        read_at = source.last_event_at
+        guard = Q(last_event_at__isnull=True) if read_at is None else Q(last_event_at=read_at, last_event_at__lt=value)
+        return Source.objects.filter(account_id=self.account_id, id=source.id).filter(guard).update(last_event_at=value)
 
     def delete_for_feed(self, feed: Feed) -> int:
         """Drop every Source row attached to a feed; used by
@@ -192,22 +202,15 @@ class SourceService:
         return Source.objects.get(id=source_id, account_id=self.account_id)
 
     def remove_by_id(self, source_id: str, /) -> int:
-        """Delete one source by its OWN id (account-scoped). Resolves the source,
-        verifies its owning feed is curated, then deletes. Raises
+        """Delete one source by its OWN id (account-scoped). Resolves the source
+        + verifies its owning feed is curated (`_resolve_owned_source`), then
+        deletes. Raises
         `Source.DoesNotExist` if absent / another account's (HTTP -> 404) and
         `PolicyError` if the feed isn't curated (HTTP -> 400), the same guard the
         feed-scoped set path runs, checked here rather than assumed. Returns the
         delete count (1 ; 0 only if a concurrent delete won the race). Backs
         `DELETE /v1/feed-sources/<id>`."""
-        source = self.get_by_id(source_id)
-        try:
-            feed = Feed.objects.get(id=source.feed_id, account_id=self.account_id)
-        except Feed.DoesNotExist as exc:
-            # Race: the feed (and its sources, via FeedService.delete's atomic
-            # cleanup) was deleted between resolving the source and here. The
-            # source is gone too, so 404 is the truthful answer.
-            raise Source.DoesNotExist from exc
-        self._assert_curated(feed)
+        source, _feed = self._resolve_owned_source(source_id)
         deleted, _ = source.delete()
         return deleted
 

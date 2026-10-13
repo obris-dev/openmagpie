@@ -33,6 +33,8 @@ from .. import console
 from ..context import app_ctx
 from ._shared import (
     _DEFAULT_WINDOW,
+    WINDOW_DAY_HINT,
+    WINDOW_VALUE_GRAMMAR,
     _as_enum,
     _build_windows,
     _check_choice,
@@ -195,14 +197,20 @@ def export(
         ..., "--action", "-a", help="Action id whose runs to export (e.g. an extract action)."
     ),
     occurred_since: str | None = typer.Option(
-        None, "--occurred-since", help="Lower bound on the item's source time (duration like 7d, or an ISO datetime)."
+        None,
+        "--occurred-since",
+        help=f"Lower bound on the item's source time: {WINDOW_VALUE_GRAMMAR}. {WINDOW_DAY_HINT}.",
     ),
-    occurred_until: str | None = typer.Option(None, "--occurred-until", help="Upper bound on the item's source time."),
+    occurred_until: str | None = typer.Option(
+        None, "--occurred-until", help="Upper bound on the item's source time (same grammar as --occurred-since)."
+    ),
     completed_since: str | None = typer.Option(
-        None, "--completed-since", help="Lower bound on when the run completed (duration like 7d, or an ISO datetime)."
+        None,
+        "--completed-since",
+        help=f"Lower bound on when the run completed: {WINDOW_VALUE_GRAMMAR}. {WINDOW_DAY_HINT}.",
     ),
     completed_until: str | None = typer.Option(
-        None, "--completed-until", help="Upper bound on when the run completed."
+        None, "--completed-until", help="Upper bound on when the run completed (same grammar as --completed-since)."
     ),
     state: str | None = typer.Option(
         None, "--state", "-s", help=f"Filter by run state ({choices(WatchActionRunState)})."
@@ -236,7 +244,7 @@ def export(
     if defaulted:
         console.warn(
             f"No time window given; defaulting to runs completed in the last {_DEFAULT_WINDOW}. "
-            "Pass --completed-since / --occurred-since (a duration like 30d or an ISO date) to widen or shift it."
+            f"Pass --completed-since / --occurred-since ({WINDOW_VALUE_GRAMMAR}) to widen or shift it."
         )
 
     # --print-columns: sample one page to list the available dot-paths, then exit

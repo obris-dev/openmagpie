@@ -24,6 +24,8 @@ from openmagpie_schema.backfill import BackfillJob, BackfillPreview
 from .. import console
 from ..context import app_ctx
 from ._shared import (
+    WINDOW_DAY_HINT,
+    WINDOW_VALUE_GRAMMAR,
     _abort_unexpected,
     _columns_option,
     _emit_columns_paginated,
@@ -66,14 +68,20 @@ def backfill_submit(
     occurred_since: str | None = typer.Option(
         None,
         "--occurred-since",
-        help="Lower bound on the item's source time (a duration like 30d, or an ISO datetime).",
+        help=f"Lower bound on the item's source time: {WINDOW_VALUE_GRAMMAR}. {WINDOW_DAY_HINT}.",
     ),
-    occurred_until: str | None = typer.Option(None, "--occurred-until", help="Upper bound on the item's source time."),
+    occurred_until: str | None = typer.Option(
+        None, "--occurred-until", help="Upper bound on the item's source time (same grammar as --occurred-since)."
+    ),
     completed_since: str | None = typer.Option(
-        None, "--completed-since", help="Lower bound on the source run's completion (a duration like 30d, or ISO)."
+        None,
+        "--completed-since",
+        help=f"Lower bound on the source run's completion: {WINDOW_VALUE_GRAMMAR}. {WINDOW_DAY_HINT}.",
     ),
     completed_until: str | None = typer.Option(
-        None, "--completed-until", help="Upper bound on the source run's completion."
+        None,
+        "--completed-until",
+        help="Upper bound on the source run's completion (same grammar as --completed-since).",
     ),
     replace: bool = typer.Option(
         False,
@@ -114,7 +122,7 @@ def backfill_submit(
     )
     if not raw:
         raise typer.BadParameter(
-            "a time window is required: pass --occurred-since / --completed-since (a duration like 30d or an ISO date)."
+            f"a time window is required: pass --occurred-since / --completed-since ({WINDOW_VALUE_GRAMMAR})."
         )
 
     api = app_ctx().api.watch

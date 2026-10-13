@@ -232,7 +232,10 @@ class FeedPollOperation(RedditBatchMixin):
         else:
             # Plain retention prune. The subscriber-cursor floor (so a
             # lagging Watch can't lose items pruned from under it) returns
-            # with WatchCursor.
+            # with WatchCursor. Fetch-BEFORE-prune and the cycle-start cutoff
+            # are load-bearing for the seek floor (`enforce_seek_floor`): a
+            # source seeked to the floor dedups its re-fetch only if it fetches
+            # before this prune moves the line past its mark.
             pruned = self.feed_item_svc.prune_items(
                 self.feed,
                 retention_days=self.config.retention_days,
@@ -270,7 +273,17 @@ class FeedPollOperation(RedditBatchMixin):
             payloads=payload_iter,
         )
         if payload_iter.newest != source.last_event_at:
-            self.source_svc.advance_watermark(source, payload_iter.newest)
+            # Compare-and-set on the mark this poll was cut from; 0 = the row
+            # changed under us (an operator seek, a poller that took over a lost
+            # lease) or was removed (set_sources / delete), so the other writer
+            # wins and the next cycle re-polls from whatever it left. The items
+            # recorded above stay (dedup).
+            if self.source_svc.advance_watermark(source, payload_iter.newest) == 0:
+                logger.info(
+                    "poll feed=%s source=%s: row changed or removed since this poll read it; not advanced",
+                    self.feed.id,
+                    source.id,
+                )
         self.on_progress(SourcePolled(self.feed, spec.display(), payload_iter.observed, recorded))
         return payload_iter.observed, recorded
 

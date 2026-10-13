@@ -54,11 +54,20 @@ from .output import (
     _print_detail,
     _print_next_page,
 )
-from .timeflags import _DEFAULT_WINDOW, _build_windows, validated_window_params
+from .timeflags import (
+    _DEFAULT_WINDOW,
+    WINDOW_DAY_HINT,
+    WINDOW_VALUE_GRAMMAR,
+    _build_windows,
+    validated_window_params,
+    window_value_grammar,
+)
 
 __all__ = [
     "CONTRACT_MISMATCH_MESSAGE",
     "FORMAT_CHOICES",
+    "WINDOW_DAY_HINT",
+    "WINDOW_VALUE_GRAMMAR",
     "_DEFAULT_WINDOW",
     "_Col",
     "_Page",
@@ -95,4 +104,5 @@ __all__ = [
     "_unreachable_message",
     "col",
     "validated_window_params",
+    "window_value_grammar",
 ]

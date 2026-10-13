@@ -143,7 +143,7 @@ class FeedInput(BaseModel):
     ignored so an edit seed's read-only fields drop on round-trip."""
 
     name: str
-    kind: str = "curated"
+    kind: str = CuratedFeedConfig.FEED_KIND
     poll_interval_seconds: int = 300
     is_active: bool = True  # False creates/leaves the feed paused (server stops polling)
     data: CuratedFeedConfig = Field(default_factory=CuratedFeedConfig)
@@ -254,6 +254,33 @@ class SourceSetResult(BaseModel):
     removed: int
     persisted: int
     source_count: int
+
+
+class SourceSeekResult(BaseModel):
+    """`POST /v1/feeds/{id}/sources/seek` / `POST /v1/feed-sources/{id}/seek` result
+    (`magpie feed source seek`): the per-direction tally of a watermark seek over
+    the rows in scope (one source by own id, or a feed's whole set).
+
+    `advanced` rows moved FORWARD to `to` (the next poll starts there; a poll
+    already in flight may record the skipped window once; a NULL watermark
+    bootstraps here). `rewound` rows moved BACKWARD (the next poll re-fetches from
+    `to`; items still in the log dedup on external id, unseen ones record as new;
+    `to` may not predate the feed's retention window). `unchanged` is the remainder
+    of `source_count` (rows already at `to`); it is only stable for a FIXED target
+    (an ISO instant, a day keyword): `oldest`, `now` and a duration resolve to a
+    fresh instant on every call, so a repeat seek reports those rows `advanced`
+    (by the time between the two calls) rather than `unchanged`.
+    `source_count` is the rows IN SCOPE
+    (1 on the by-own-id route). `to` is the resolved absolute target (server
+    clock); `dry_run` echoes the request so a preview can't be mistaken for an
+    apply."""
+
+    advanced: int
+    rewound: int
+    unchanged: int
+    source_count: int
+    to: datetime
+    dry_run: bool
 
 
 class SourceSetPayload(BaseModel):

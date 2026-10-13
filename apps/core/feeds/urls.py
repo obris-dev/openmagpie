@@ -1,6 +1,6 @@
 from common.urls import api_path
 
-from . import views
+from . import views, views_seek
 
 urlpatterns = [
     api_path(
@@ -17,6 +17,11 @@ urlpatterns = [
         "<str:feed_id>/sources",
         views.FeedSourcesView.as_view(),
         name="feed_sources",
+    ),
+    api_path(
+        "<str:feed_id>/sources/seek",
+        views_seek.FeedSourcesSeekView.as_view(),
+        name="feed_sources_seek",
     ),
     api_path(
         "<str:feed_id>/items",

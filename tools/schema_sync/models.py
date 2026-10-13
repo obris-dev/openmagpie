@@ -31,6 +31,7 @@ from openmagpie_schema.feed import (
     FeedMutationResponse,
     FeedView,
     SourceInput,
+    SourceSeekResult,
     SourceSetPayload,
     SourceSetResult,
     SourceWire,
@@ -79,6 +80,7 @@ CONTRACT_MODELS = [
     SourceWire,
     SourceSetPayload,
     SourceSetResult,
+    SourceSeekResult,
     # Watch read + write
     WatchView,
     WatchMutationResponse,

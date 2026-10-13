@@ -251,8 +251,10 @@ When list rows reference a related entity, **don't embed that entity on every ro
 /v1/feeds                                          GET/POST   feeds in account
 /v1/feeds/<id>                                     GET/PUT/DELETE
 /v1/feeds/<id>/sources                             GET/PUT    source set (list / replace)
+/v1/feeds/<id>/sources/seek                        POST       move every source watermark on the feed (body {to, dry_run?})
 /v1/feeds/<id>/items                               GET        item log (cursor)
 /v1/feed-sources/<id>                              GET/DELETE one source by own id
+/v1/feed-sources/<id>/seek                         POST       move one source's watermark (body {to, dry_run?})
 /v1/feed-items/<id>                                GET        one item by own id
 
 /v1/watches                                        GET/POST   watches in account

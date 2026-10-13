@@ -3,8 +3,9 @@
 `FeedListCreateView` handles POST (create) + GET (list). `FeedDetailView`
 handles GET / PUT / DELETE on `/v1/feeds/<id>`; its GET is the "sort
 by new and go" reader (returns the feed + its recent items, with
-optional ?limit). `FeedSourcesView` + `FeedSourceDetailView` cover the
-`/sources` sub-router.
+optional ?limit). `FeedSourcesView` + `SourceDetailView` cover the
+`/sources` sub-router. The watermark seek views (`POST .../seek`) live in
+`views_seek.py`.
 
 The `/v1/feeds/<id>/...` views inherit `FeedScopedAPIView` and read
 `self.feed` directly ; a missing feed raises `FeedNotFound`, DRF
@@ -184,7 +185,7 @@ class FeedSourcesView(SourceSvcMixin, FeedScopedAPIView):
       GET  list the feed's sources
       PUT  set/replace the whole list (body = {sources: [SourceInput], dry_run?})
 
-    Per-row DELETE lives on `FeedSourceDetailView` so the URL keys the
+    Per-row DELETE lives on `SourceDetailView` so the URL keys the
     target row directly. Single-row add is intentionally absent ; the
     create-time path is the inline `sources:` block on `feed create`,
     and ongoing mutation is `feed source export -> edit -> feed source set`."""
