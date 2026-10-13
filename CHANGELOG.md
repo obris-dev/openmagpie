@@ -5,6 +5,13 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.0](https://github.com/obris-dev/openmagpie/compare/v0.9.0...v0.10.0) (2026-10-13)
+
+
+### ✨ Features
+
+* **cli:** seek a source's or feed's polling watermark ([#182](https://github.com/obris-dev/openmagpie/issues/182)) ([9038a01](https://github.com/obris-dev/openmagpie/commit/9038a019a67ddc1069ffb5a3c7d1dfded029edd1))
+
 ## [0.9.0](https://github.com/obris-dev/openmagpie/compare/v0.8.0...v0.9.0) (2026-09-01)
 
 
