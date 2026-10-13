@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.0](https://github.com/obris-dev/openmagpie/compare/cli-v0.8.0...cli-v0.9.0) (2026-10-13)
+
+
+### ✨ Features
+
+* **cli:** seek a source's or feed's polling watermark ([#182](https://github.com/obris-dev/openmagpie/issues/182)) ([9038a01](https://github.com/obris-dev/openmagpie/commit/9038a019a67ddc1069ffb5a3c7d1dfded029edd1))
+
 ## [0.8.0](https://github.com/obris-dev/openmagpie/compare/cli-v0.7.0...cli-v0.8.0) (2026-07-23)
 
 
