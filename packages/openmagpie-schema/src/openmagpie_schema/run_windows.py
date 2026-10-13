@@ -6,9 +6,10 @@ the CLI (`api/activity`) and the server (`ActionRunsView`): the names live here
 ONCE so a rename can't silently desync the two processes. Kept out of `watch.py`
 (the wire models) so neither file outgrows the length cap.
 
-A window VALUE is a relative duration (`7d`, `24h`, `30m`, `2w`) or an absolute
-ISO datetime; `resolve_window_value` / `resolve_run_windows` turn those into
-absolute datetimes. Resolution lives here (shared, pure) and runs SERVER-side
+A window VALUE is a keyword (`now`, `today`, `yesterday`, `this-week`; UTC
+midnights), a relative duration (`7d`, `24h`, `30m`, `2w`, measured BACK from now)
+or an absolute ISO datetime; `resolve_window_value` / `resolve_run_windows` turn
+those into absolute datetimes. Resolution lives here (shared, pure) and runs SERVER-side
 against the server clock -- the one source of truth -- so the CLI forwards the raw
 value rather than pre-resolving on its own (possibly skewed) clock, and a non-Python
 client (a web UI) doesn't reimplement the grammar. `now` is passed in (zero-Django).
@@ -18,7 +19,8 @@ from __future__ import annotations
 
 import re
 from datetime import UTC, datetime, timedelta
-from typing import TypedDict, cast
+from enum import StrEnum
+from typing import TypedDict, assert_never, cast
 
 # `*_since`/`*_until` are `[since, until)` bounds; `completed_*` filters the run's
 # completion, `occurred_*` the feed item's source time.
@@ -38,6 +40,36 @@ class RunWindows(TypedDict, total=False):
 
 _REL_DURATION = re.compile(r"(\d+)([smhdw])")  # used with fullmatch, so no ^/$ anchors
 _REL_UNIT = {"s": "seconds", "m": "minutes", "h": "hours", "d": "days", "w": "weeks"}
+
+
+class WindowKeyword(StrEnum):
+    """Named window anchors, resolved against `now` in UTC (the one clock every
+    window value shares): the day keywords are 00:00 UTC of that day (Monday for
+    the week), NOT the caller's local midnight. A keyword is an INSTANT, not a
+    span (unlike the `activity summary --window yesterday` preset, which is the
+    whole day): "all of yesterday" is `--since yesterday --until today`, and
+    since == until is an empty window, rejected. `oldest` is the one keyword
+    whose referent the CALLER supplies (`resolve_window_value(..., floor=)`): on
+    a seek it is the feed's retention floor, re-resolved on every call; where no
+    floor is given (the run-window filters) it is rejected as not valid there.
+    Case-insensitive on input. An enum (not bare strings) so the resolver's
+    `match` is checked exhaustive (`assert_never`) and help text / error
+    messages derive the list via `keyword_choices()` instead of hand-copying it."""
+
+    NOW = "now"
+    TODAY = "today"
+    YESTERDAY = "yesterday"
+    THIS_WEEK = "this-week"
+    OLDEST = "oldest"
+
+
+def keyword_choices(*, with_floor: bool) -> str:
+    """Pipe-joined keyword values for help / error text, derived from the enum.
+    `oldest` only exists where the caller supplies a floor, so it is listed only
+    for that surface (a seek target), not for the run-window filters."""
+    members = [k for k in WindowKeyword if with_floor or k is not WindowKeyword.OLDEST]
+    return " | ".join(k.value for k in members)
+
 
 # A lone `*_until` (no paired `*_since`) would scan unbounded-below; bound the
 # `*_since` this far before the `*_until` instead.
@@ -67,13 +99,47 @@ def run_window_params(
     return {name: value for name, value in by_name.items() if value}
 
 
-def resolve_window_value(raw: str, *, now: datetime) -> datetime:
-    """A `*_since`/`*_until` value -> an absolute aware datetime, anchored at `now`.
+def _resolve_keyword(text: str, *, now: datetime, floor: datetime | None) -> datetime | None:
+    """A lowercased `WindowKeyword` value -> its absolute datetime, else None.
+    `oldest` -> the caller's `floor`, or `ValueError` when none was supplied.
+    Midnights are UTC: `now` is normalised to UTC first so a non-UTC aware clock
+    still yields the same instant as every other caller. The `match` is
+    exhaustive over the enum: its `case _` is `assert_never`, so a member added
+    without an arm is a type error (and an AssertionError at runtime), not a
+    silent None that reads as "not a keyword"."""
+    try:
+        keyword = WindowKeyword(text)
+    except ValueError:
+        return None
+    start_of_today = now.astimezone(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
+    match keyword:
+        case WindowKeyword.NOW:
+            return now
+        case WindowKeyword.TODAY:
+            return start_of_today
+        case WindowKeyword.YESTERDAY:
+            return start_of_today - timedelta(days=1)
+        case WindowKeyword.THIS_WEEK:
+            return start_of_today - timedelta(days=start_of_today.weekday())  # Monday 00:00 UTC
+        case WindowKeyword.OLDEST:
+            if floor is None:
+                raise ValueError(f"{text!r} is only valid as a seek target (where a retention floor is defined)")
+            return floor
+        case _:
+            # A member added above without an arm would otherwise fall through
+            # as "not a keyword" (returning None); ty flags it here instead.
+            assert_never(keyword)
 
-    Accepts a relative duration (`7d`, `24h`, `30m`, `2w`) measured back from `now`,
-    or an absolute ISO datetime/date (a naive one is read as UTC). Raises `ValueError`
-    on anything else (incl. a well-formed-but-out-of-range value like Feb 30); the
-    caller maps that to its surface's error (a server 400, a CLI BadParameter).
+
+def resolve_window_value(raw: str, *, now: datetime, floor: datetime | None = None) -> datetime:
+    """A window value / seek target -> an absolute aware datetime, anchored at `now`.
+
+    Accepts a keyword (`now`, `today`, `yesterday`, `this-week`; UTC midnights, plus
+    `oldest` = `floor` when the caller supplies one), a relative duration (`7d`,
+    `24h`, `30m`, `2w`) measured back from `now`, or an absolute ISO datetime/date
+    (a naive one is read as UTC). Raises `ValueError` on anything else (incl. a
+    well-formed-but-out-of-range value like Feb 30, and `oldest` with no floor);
+    the caller maps that to its surface's error (a server 400, a CLI BadParameter).
 
     PRECONDITION: `now` is timezone-aware (callers pass `timezone.now()` /
     `datetime.now(UTC)`). A naive `now` yields naive relative results, which would
@@ -84,6 +150,9 @@ def resolve_window_value(raw: str, *, now: datetime) -> datetime:
     if now.tzinfo is None:
         raise TypeError("now must be timezone-aware")
     text = raw.strip()
+    anchored = _resolve_keyword(text.lower(), now=now, floor=floor)
+    if anchored is not None:
+        return anchored
     rel = _REL_DURATION.fullmatch(text)
     if rel:
         amount, unit = int(rel.group(1)), rel.group(2)
@@ -97,7 +166,10 @@ def resolve_window_value(raw: str, *, now: datetime) -> datetime:
     try:
         parsed = datetime.fromisoformat(text)
     except ValueError:
-        raise ValueError(f"{raw!r} is neither a duration (e.g. 7d, 24h) nor an ISO datetime") from None
+        raise ValueError(
+            f"{raw!r} is not a keyword ({keyword_choices(with_floor=floor is not None)}), "
+            "a duration (e.g. 7d, 24h) or an ISO datetime"
+        ) from None
     return parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=UTC)
 
 

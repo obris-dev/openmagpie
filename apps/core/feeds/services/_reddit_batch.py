@@ -175,7 +175,15 @@ class RedditBatchMixin:
             # isnull branch, so it self-heals rather than re-fetching forever.
             sub_newest = max((_ensure_aware(p.occurred_at) for p in items), default=None)
             if sub_newest is not None and (source.last_event_at is None or sub_newest > source.last_event_at):
-                self.source_svc.advance_watermark(source, sub_newest)
+                # Compare-and-set on the mark this batch was cut from (see
+                # advance_watermark); 0 = the row changed (a seek, a lease takeover)
+                # or was removed mid-cycle, and the other writer wins.
+                if self.source_svc.advance_watermark(source, sub_newest) == 0:
+                    logger.info(
+                        "reddit batch feed=%s source=%s: row changed or removed since this poll read it; not advanced",
+                        self.feed.id,
+                        source.id,
+                    )
 
         # sources_succeeded credit = len(chunk): one successful combined request
         # polled EVERY sub in it, so all count as polled-without-error (the

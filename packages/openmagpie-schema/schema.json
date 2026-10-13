@@ -2722,6 +2722,46 @@
       "title": "SourceInput",
       "type": "object"
     },
+    "SourceSeekResult": {
+      "description": "`POST /v1/feeds/{id}/sources/seek` / `POST /v1/feed-sources/{id}/seek` result\n(`magpie feed source seek`): the per-direction tally of a watermark seek over\nthe rows in scope (one source by own id, or a feed's whole set).\n\n`advanced` rows moved FORWARD to `to` (the next poll starts there; a poll\nalready in flight may record the skipped window once; a NULL watermark\nbootstraps here). `rewound` rows moved BACKWARD (the next poll re-fetches from\n`to`; items still in the log dedup on external id, unseen ones record as new;\n`to` may not predate the feed's retention window). `unchanged` is the remainder\nof `source_count` (rows already at `to`); it is only stable for a FIXED target\n(an ISO instant, a day keyword): `oldest`, `now` and a duration resolve to a\nfresh instant on every call, so a repeat seek reports those rows `advanced`\n(by the time between the two calls) rather than `unchanged`.\n`source_count` is the rows IN SCOPE\n(1 on the by-own-id route). `to` is the resolved absolute target (server\nclock); `dry_run` echoes the request so a preview can't be mistaken for an\napply.",
+      "properties": {
+        "advanced": {
+          "title": "Advanced",
+          "type": "integer"
+        },
+        "dry_run": {
+          "title": "Dry Run",
+          "type": "boolean"
+        },
+        "rewound": {
+          "title": "Rewound",
+          "type": "integer"
+        },
+        "source_count": {
+          "title": "Source Count",
+          "type": "integer"
+        },
+        "to": {
+          "format": "date-time",
+          "title": "To",
+          "type": "string"
+        },
+        "unchanged": {
+          "title": "Unchanged",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "advanced",
+        "rewound",
+        "unchanged",
+        "source_count",
+        "to",
+        "dry_run"
+      ],
+      "title": "SourceSeekResult",
+      "type": "object"
+    },
     "SourceSetPayload": {
       "description": "Round-trip file format for `magpie feed source export` /\n`magpie feed source set`. Operators or their scrape scripts can\nconstruct this directly; the bare `list[SourceInput]` shape is\nalso accepted on input for hand-rolled cases.",
       "properties": {
@@ -4227,6 +4267,9 @@
     },
     {
       "$ref": "#/$defs/SourceSetResult"
+    },
+    {
+      "$ref": "#/$defs/SourceSeekResult"
     },
     {
       "$ref": "#/$defs/WatchView"

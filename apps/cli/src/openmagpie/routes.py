@@ -65,6 +65,12 @@ class feeds:
         return f"{_FEEDS}/{feed_id}/sources"
 
     @staticmethod
+    def sources_seek(feed_id: str) -> str:
+        # Move EVERY source watermark on the feed (the by-own-id form is
+        # `feed_sources.seek` below).
+        return f"{_FEEDS}/{feed_id}/sources/seek"
+
+    @staticmethod
     def items(feed_id: str) -> str:
         # The feed-scoped item log (newest-first, cursor-paginated); the by-own-id
         # detail of one item is parent-qualified (see `feed_items` below).
@@ -78,6 +84,10 @@ class feed_sources:
     @staticmethod
     def detail(source_id: str) -> str:
         return f"{_FEED_SOURCES}/{source_id}"
+
+    @staticmethod
+    def seek(source_id: str) -> str:
+        return f"{_FEED_SOURCES}/{source_id}/seek"
 
 
 class feed_items:

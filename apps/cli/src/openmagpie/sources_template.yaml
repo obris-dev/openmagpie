@@ -36,7 +36,9 @@ sources:
 
     # `last_event_at` (optional): pin the starting watermark to a
     # past datetime to backfill from that point. Omit to default to
-    # wall-clock now (live mode from this moment).
+    # wall-clock now (live mode from this moment). To move an EXISTING
+    # source's watermark later, use `magpie feed source seek` (`set`
+    # never touches a persisted row's watermark).
     # last_event_at: "2026-05-28T00:00:00Z"
 
   # Reddit subreddit source: the `/new` feed of one subreddit.

@@ -3,9 +3,11 @@
 A source is operator-authored config and a dependent component of exactly one
 feed, so it nests under `feed source` (containment), addressed by its OWN id for
 single-row ops (`get` / `delete`) and by `--feed` for collection ops (`list` /
-`set` / `export`). `delete` is the single destructive verb (there is no
-`remove`): a source belongs to one feed and isn't detachable, so dropping it
-from the set IS deleting its row.
+`set` / `export`). `seek` (move the polling watermark; its own module,
+`_source_seek.py`) is meaningful on both one row and the whole set, so it takes
+EITHER the own id OR `--feed`, exactly one.
+`delete` is the single destructive verb (there is no `remove`): a source belongs
+to one feed and isn't detachable, so dropping it from the set IS deleting its row.
 
 Bulk write is `set` (the shape a scrape script naturally emits); `template`
 emits a starter file. `add` was dropped: per-kind flag UX (`--kind`/`--url`/
@@ -321,7 +323,8 @@ def export(
     scripted consumer. Includes each source's `last_event_at` so a downstream
     `feed source set` round-trip preserves watermarks (without it the new rows on
     a spec-changed re-import would cold-start to wall-clock now and lose the
-    operator's backfill history)."""
+    operator's backfill history). To MOVE a persisted row's watermark use
+    `magpie feed source seek`; `set` never touches it."""
     fmt = _check_format(format)
     sources = app_ctx().api.feed.list_sources(feed_id)
     payload = SourceSetPayload(

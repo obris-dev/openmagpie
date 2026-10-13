@@ -8,18 +8,26 @@ Guards on the feed config:
   - retention_days in [1, 365] (0/negative would prune everything;
     unbounded would grow the item log forever).
 
-Per-source `last_event_at` defaulting + future-watermark rejection
-moved to `default_and_enforce_source_watermark`, called from the
-Source create / set paths (rows on a different model than the config).
+Per-source watermark guards (rows on a different model than the config):
+  - `enforce_source_watermark` rejects a future `last_event_at` ; run by
+    every operator-supplied write (create / set / seek). The poll path's
+    `advance_watermark` never runs it: it is a compare-and-set that only
+    moves a mark to an item time the connector actually returned.
+  - `default_and_enforce_source_watermark` fills a missing value with now,
+    then runs the check ; the Source create / set paths only.
+  - `enforce_seek_floor` rejects a seek target older than the feed's
+    retention window ; the seek path only.
 
-Raises `PolicyError` (ValueError); callers map it to a 400.
+Raises `PolicyError` (ValueError); callers map it to a 400. The watermark
+guards raise `SourceWatermarkError`, a subclass, so the HTTP layer can key
+a rejected target at `to` and a feed-level refusal at `detail`.
 """
 
 from __future__ import annotations
 
 import ipaddress
 from collections.abc import Iterator
-from datetime import datetime
+from datetime import datetime, timedelta
 from urllib.parse import urlparse
 
 from django.conf import settings
@@ -37,22 +45,87 @@ class PolicyError(ValueError):
     boundary; the message is operator-facing."""
 
 
-def default_and_enforce_source_watermark(value: datetime | None) -> datetime:
-    """Fill a missing per-source `last_event_at` with wall-clock now;
-    reject a future watermark. Returned value is used as-is on the new
-    Source row, making `last_event_at is None` impossible post-validation
-    so the poller can treat it as a hard invariant. Operators who want
-    a backfill window pass an explicit past datetime."""
+class SourceWatermarkError(PolicyError):
+    """A watermark target that policy rejects: in the future, or (on a seek)
+    older than the feed's retention window. About the `to` / `last_event_at`
+    VALUE itself, so the HTTP layer keys it there; a plain `PolicyError` from
+    the same seam is about the feed (e.g. a kind that has no sources)."""
+
+
+def enforce_source_watermark(value: datetime, *, field: str = "last_event_at") -> datetime:
+    """Reject a future per-source watermark (a future `last_event_at` silently
+    disables the source until then). The one future check, shared by the
+    create / set path (via `default_and_enforce_source_watermark`) and the
+    operator seek, which passes an always-present target: a seek never
+    defaults, so it must NOT route through the defaulting wrapper. `field` is
+    the wire name the message cites (`last_event_at` on create / set, `to` on
+    a seek), so the copy matches the key the HTTP layer reports it under.
+    Returns the value unchanged (a naive datetime is read as UTC,
+    `timezone.now()`'s zone, the same reading the shared window resolver gives
+    a naive ISO value)."""
     now = timezone.now()
-    if value is None:
-        return now
     v = value if value.tzinfo else value.replace(tzinfo=now.tzinfo)
     if v > now:
-        raise PolicyError(
-            f"last_event_at is in the future ({value.isoformat()}); "
-            "a future watermark silently disables the source until then"
+        raise SourceWatermarkError(
+            f"{field} is in the future ({value.isoformat()}); a future watermark silently disables the source until then"
         )
     return value
+
+
+def seek_floor(*, retention_days: int, now: datetime | None = None) -> datetime:
+    """The deepest seek target the feed allows: `now - retention_days`. One
+    definition, used by `enforce_seek_floor` (the check) and as the `oldest`
+    keyword's referent (the target, via `resolve_window_value(floor=)`), so the
+    two can't disagree."""
+    return (now or timezone.now()) - timedelta(days=retention_days)
+
+
+def enforce_seek_floor(to: datetime, *, retention_days: int, now: datetime | None = None) -> datetime:
+    """Reject a seek target older than the feed's retention window.
+
+    The item log forgets on one clock (prune deletes rows recorded more than
+    `retention_days` ago) and the watermark could otherwise point past it. Dedup
+    lives on the item log, so an item whose row was pruned comes back from a
+    re-poll as brand new: a fresh ULID that every watch then processes again
+    (paid judge calls, duplicate deliveries). An item is always recorded AFTER
+    it occurred, so anything with `occurred_at` later than `now - retention`
+    still has its row and dedups; `now - retention` is where a rewind starts
+    resurrecting, assuming retention has been constant for at least that window.
+    It has NOT been if `retention_days` was just raised: rows pruned under the
+    old window stay gone while the floor moves out to the new one, so a seek
+    into that gap resurrects them. Enforced on the seek path only today. The
+    create / set path can hit the same hazard (dedup is keyed on the item's
+    external id, not the source row, so a dropped-then-re-added source with a
+    backdated `last_event_at` re-fetches pruned items too) and is not guarded.
+    And the check is made when the seek WRITES the mark but relied on when the
+    next poll READS it: prune runs every cycle (after the fetches, see
+    `FeedPollOperation.run`), so if that source's first fetch after the seek
+    fails, the prune line passes its mark and the next successful fetch
+    re-records that slice. `oldest` sits exactly on the floor, so it has no
+    slack against this. All three limits share one follow-up: have prune record
+    a per-feed `pruned_through` mark and clamp the poller's fetch cursor to
+    `max(last_event_at, pruned_through)`, one guard at the single reader."""
+    floor = seek_floor(retention_days=retention_days, now=now)
+    if to < floor:
+        raise SourceWatermarkError(
+            f"to is older than this feed's retention window ({retention_days} day(s), before "
+            f"{floor.isoformat(timespec='seconds')}); items that far back were pruned and a re-poll "
+            "would record them as new and re-run every watch on them. Pick a later target, or `oldest` for the "
+            "deepest this feed allows."
+        )
+    return to
+
+
+def default_and_enforce_source_watermark(value: datetime | None) -> datetime:
+    """Fill a missing per-source `last_event_at` with wall-clock now, then
+    `enforce_source_watermark`. Returned value is used as-is on the new
+    Source row, making `last_event_at is None` impossible post-validation
+    so the poller can treat it as a hard invariant. Operators who want
+    a backfill window pass an explicit past datetime. Create / set ONLY ;
+    the seek path calls `enforce_source_watermark` directly."""
+    if value is None:
+        return timezone.now()
+    return enforce_source_watermark(value)
 
 
 def _check_url_ip(candidate: str) -> None:

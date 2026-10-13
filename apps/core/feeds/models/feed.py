@@ -3,6 +3,7 @@ from django.db import models
 from django.utils.translation import gettext_lazy as _
 
 from common.models import BaseModel
+from feeds.configs import CuratedFeedConfig
 
 # Floor for Feed.poll_interval_seconds. Reddit's anonymous JSON endpoint
 # rate-limits below ~60s/req; tighter cadences also burn fetch budget for no
@@ -26,7 +27,7 @@ class Feed(BaseModel):
     kind = models.CharField(
         _("kind"),
         max_length=32,
-        default="curated",
+        default=CuratedFeedConfig.FEED_KIND,
         help_text=_("Feed kind, identifies the Pydantic config class in feeds.registry"),
     )
     name = models.CharField(_("name"), max_length=255, help_text=_("Short label"))

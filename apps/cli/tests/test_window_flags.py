@@ -8,13 +8,14 @@ client-side, applies the no-window default). Stdlib unittest; run:
 from __future__ import annotations
 
 import unittest
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, timedelta, timezone
 
 import typer
 
 from openmagpie.commands._shared import _build_windows
 from openmagpie_schema.run_windows import (
     RUN_WINDOW_PARAMS,
+    WindowKeyword,
     resolve_run_windows,
     resolve_window_value,
     run_window_params,
@@ -27,6 +28,38 @@ class ResolveWindowValueTests(unittest.TestCase):
     def test_relative_duration_resolves_back_from_now(self) -> None:
         now = datetime(2026, 6, 25, tzinfo=UTC)
         self.assertEqual(resolve_window_value("7d", now=now), now - timedelta(days=7))
+
+    def test_keywords_resolve_to_utc_midnights(self) -> None:
+        now = datetime(2026, 10, 14, 15, 30, tzinfo=UTC)  # a Wednesday
+        start_of_day = datetime(2026, 10, 14, tzinfo=UTC)
+        self.assertEqual(resolve_window_value("now", now=now), now)
+        self.assertEqual(resolve_window_value("today", now=now), start_of_day)
+        self.assertEqual(resolve_window_value("yesterday", now=now), start_of_day - timedelta(days=1))
+        self.assertEqual(resolve_window_value("this-week", now=now), datetime(2026, 10, 12, tzinfo=UTC))  # Monday
+        self.assertEqual(resolve_window_value(" Yesterday ", now=now), start_of_day - timedelta(days=1))  # case/space
+
+    def test_keyword_midnight_is_utc_even_for_a_non_utc_clock(self) -> None:
+        # 20:00 on the 14th at UTC-5 is 01:00 UTC on the 15th: "today" is the UTC day.
+        now = datetime(2026, 10, 14, 20, tzinfo=timezone(timedelta(hours=-5)))
+        self.assertEqual(resolve_window_value("today", now=now), datetime(2026, 10, 15, tzinfo=UTC))
+
+    def test_keyword_set_is_pinned(self) -> None:
+        self.assertEqual([k.value for k in WindowKeyword], ["now", "today", "yesterday", "this-week", "oldest"])
+        # Every member resolves given a floor (the match is exhaustive, so none
+        # falls through to None; a fall-through would surface as ValueError).
+        now = datetime(2026, 10, 14, 15, 30, tzinfo=UTC)
+        for keyword in WindowKeyword:
+            with self.subTest(keyword=keyword):
+                self.assertIsInstance(resolve_window_value(keyword.value, now=now, floor=now), datetime)
+
+    def test_oldest_is_the_callers_floor_and_invalid_without_one(self) -> None:
+        now = datetime(2026, 10, 14, 15, 30, tzinfo=UTC)
+        floor = now - timedelta(days=30)
+        self.assertEqual(resolve_window_value(" Oldest ", now=now, floor=floor), floor)
+        with self.assertRaises(ValueError):
+            resolve_window_value("oldest", now=now)  # no floor: not a run-window value
+        with self.assertRaises(ValueError):
+            resolve_run_windows({"occurred_since": "oldest"}, now=now)  # the filters never pass a floor
 
     def test_absolute_iso_naive_becomes_utc(self) -> None:
         parsed = resolve_window_value("2026-06-25", now=datetime.now(UTC))

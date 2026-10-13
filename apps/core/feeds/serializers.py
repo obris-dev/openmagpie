@@ -51,7 +51,7 @@ class FeedCreateSerializer(serializers.Serializer):
     mutate after create)."""
 
     name = serializers.CharField(max_length=255, trim_whitespace=True)
-    kind = serializers.CharField(max_length=32, default="curated")
+    kind = serializers.CharField(max_length=32, default=CuratedFeedConfig.FEED_KIND)
     poll_interval_seconds = serializers.IntegerField(min_value=MIN_POLL_INTERVAL_SECONDS, default=300)
     # False creates/leaves the feed paused: the poll pass skips inactive feeds. Default
     # True so an existing client (or a create that omits it) keeps today's behavior.
@@ -93,6 +93,20 @@ class FeedSetActiveSerializer(serializers.Serializer):
     config / sources are untouched (a full PUT would re-validate + merge)."""
 
     is_active = serializers.BooleanField()
+
+
+class SourceSeekSerializer(serializers.Serializer):
+    """POST /v1/feeds/<id>/sources/seek + /v1/feed-sources/<id>/seek body. `to`
+    is REQUIRED (no "now" default: a seek must say where it is going, so an empty
+    body can't silently move a whole feed to the present) and stays a RAW string
+    (a keyword like `now` / `yesterday`, a duration like `2h`, or ISO); the view
+    resolves it server-side against the server clock, the one source of truth.
+    `dry_run` is a real `BooleanField` so its spelling is coerced
+    parser-agnostically (JSON bool, form "false", JSON string); `bool("false")` is
+    truthy, which would silently turn an apply into a preview (or the reverse)."""
+
+    to = serializers.CharField(allow_blank=False)
+    dry_run = serializers.BooleanField(required=False, default=False)
 
 
 # ── Output ─────────────────────────────────────────────────────────────

@@ -18,6 +18,7 @@ from openmagpie_schema.feed import (
     FeedMutationResponse,
     FeedView,
     FeedWire,
+    SourceSeekResult,
     SourceSetResult,
     SourceWire,
 )
@@ -34,6 +35,7 @@ __all__ = [
     "FeedMutationResponse",
     "FeedView",
     "FeedWire",
+    "SourceSeekResult",
     "SourceSetResult",
     "SourceWire",
 ]
@@ -129,6 +131,19 @@ class FeedApi:
             json_body={"sources": sources, "dry_run": dry_run},
         )
         return SourceSetResult.model_validate(raw)
+
+    def seek_sources(self, feed_id: str, *, to: str, dry_run: bool) -> SourceSeekResult:
+        """Move EVERY source watermark on the feed to `to` (a RAW window value the
+        server resolves on its clock: a keyword like `now`, a duration, or ISO;
+        required, no default). `dry_run` previews the per-direction tally without
+        writing."""
+        raw = self._http.post(routes.feeds.sources_seek(feed_id), json_body={"to": to, "dry_run": dry_run})
+        return SourceSeekResult.model_validate(raw)
+
+    def seek_source(self, source_id: str, *, to: str, dry_run: bool) -> SourceSeekResult:
+        """`seek_sources` for ONE source by its own id (the server resolves its feed)."""
+        raw = self._http.post(routes.feed_sources.seek(source_id), json_body={"to": to, "dry_run": dry_run})
+        return SourceSeekResult.model_validate(raw)
 
     def delete_source(self, source_id: str) -> None:
         # By the source's own id; the server resolves its feed (sources address
