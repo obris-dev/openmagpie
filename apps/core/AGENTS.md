@@ -6,7 +6,7 @@ Conventions for the Django backend. Cross-cutting rules live in [../AGENTS.md](.
 
 ```
 core/
-  common/          BaseModel (ULID PK + timestamps), ULIDField, locks, db ceilings, /healthz view
+  common/          BaseModel (ULID PK + timestamps), ULIDField, locks + lease renewer, db ceilings, /healthz view
   accounts/        User (email login), Account, UserProfile + services/
   auth_api/        DRF auth surface: signup / login / logout / me + tokens/* + device-sessions/*
   sources/         Connectors (RedditSubRedditConnector, ...) + SourcePayload hierarchy + per-(source,kind) registry
@@ -288,8 +288,10 @@ When persisting structured state in `django.core.cache`:
 
 - **`common.locks.named_lock`** is the cache-backed try-lock primitive; it yields a `LockLease` (truthy iff acquired). A lock's `timeout` is a LIVENESS lease, not a total-work budget: a holder expecting to run long calls `lease.renew()` as it makes progress to re-stamp the TTL, so the lock survives a long-but-live run while a crashed holder frees after one window (etcd/k8s-Lease pattern). No fencing tokens — on these paths a brief overlap only costs redundant idempotent work, never corruption.
 - **`common.locks.poll_lock`** uses that: `poll_feed` renews per source, so a feed of ANY size polls under one held lock (`POLL_LOCK_TIMEOUT_SECONDS` is the per-source liveness window). The poll loop stops early if a renew reports the lease was lost (another worker took over); per-source watermarks make that non-destructive.
-- **`common.locks.job_lock`** (app-qualified key `<app>.<command>`, day-long TTL as a crash failsafe) backs `common.commands.SingleFlightCommand`: a scheduled command self-skips (logs) when a prior pass is still running, so plain cron is penalty-free.
+- **`common.locks.job_lock`** (app-qualified key `<app>.<command>`) backs `common.commands.SingleFlightCommand`: a scheduled command self-skips (logs) when a prior pass is still running, so plain cron is penalty-free. The lock is a short lease (`JOB_LOCK_LEASE_SECONDS`, minutes) that `execute` keeps alive with a `common.lease_renewer.LeaseRenewer` (a daemon thread re-stamping the lease every third of its window) for the life of the pass, so a pass killed without unwinding (SIGKILL, OOM, its container recreated) frees within one window on its own; the renewer gives up after `JOB_LOCK_MAX_HOLD_SECONDS` so a hung-but-alive pass can't strand the job; `clear_job_locks` is the immediate manual release. A lost job lease is logged and the pass CONTINUES (the opposite of the poll lease's yield): single-flight is a convenience, and every job tolerates an overlapping pass through its own data-level fence (CAS claims, `poll_lock`, `digest_flush_lock`). A job that could not tolerate one gets its own lock, never a reliance on single-flight.
+- **Lock setting names state the renewal model.** `*_LEASE_SECONDS` is a liveness window a holder renews while it runs (the job lock); `*_TIMEOUT_SECONDS` is a fixed TTL nobody renews, sized above the critical section (`FEED_SET`, `PATH_CHAIN`, `REFRESH_TOKEN`, `DIGEST_FLUSH`). `POLL_LOCK_TIMEOUT_SECONDS` is renewed and misnamed; it is renamed with the feed-lease migration (see `common.lease_renewer`).
 - **`common.locks.path_chain_lock` / `feed_set_lock`** serialize chain / source-set mutations on one entity. Acquire OUTSIDE the transaction.
+- **`common.locks.digest_flush_lock`** serializes one digest window's flush (`process_due_digests` skips a held window): the gather has no claim fence, so this, not the job lock, is what keeps an overlapping flush pass from emitting a batch twice.
 - **`select_for_update`** (not a cache lock) is used where the lock must compose with the caller's transaction (the digest window row).
 - `make up-jobs` / `down-jobs` run the background tickers (poll, trigger, drain, flush) with pid+log under `.jobs/` (gitignored). `make local-tick` runs one pass of each stage now.
 

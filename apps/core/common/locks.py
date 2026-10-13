@@ -14,8 +14,9 @@ tokens: on these paths the only cost of a brief overlap is redundant,
 idempotent work (re-polling a source, re-pruning), never corruption.
 
 The feed poll wrapper (`poll_lock`), the feed set-sources wrapper
-(`feed_set_lock`), and the refresh-rotation wrapper (`refresh_token_lock`)
-are thin shims that just pick the cache key and timeout for their scope.
+(`feed_set_lock`), the digest flush wrapper (`digest_flush_lock`) and the
+refresh-rotation wrapper (`refresh_token_lock`) are thin shims that just pick
+the cache key and timeout for their scope.
 """
 
 import hashlib
@@ -46,10 +47,13 @@ class LockLease:
 
     def renew(self) -> bool:
         """Re-stamp the lease TTL iff we still hold it. Returns whether the
-        lease is still ours: False means it expired and another holder took
-        over (the caller should stop). Same owner-token TOCTOU tolerance as
-        release: a momentary overlap is possible but harmless where overlap
-        only costs redundant idempotent work."""
+        lease is still ours: False means it expired and another holder may
+        have taken over. What to do about that is the caller's call: a holder
+        whose correctness rides on exclusivity stops (the poll loop yields at
+        its next source); one whose overlap is fenced elsewhere logs and goes
+        on (the job renewer). Same owner-token TOCTOU tolerance as release: a
+        momentary overlap is possible but harmless where overlap only costs
+        redundant idempotent work."""
         if not self.acquired:
             return False
         if cache.get(self._name) != self._token:
@@ -120,6 +124,24 @@ def path_chain_lock(path_id: str) -> AbstractContextManager[LockLease]:
     )
 
 
+def digest_flush_lock(action_id: str) -> AbstractContextManager[LockLease]:
+    """Serialize the flush of one digest action's window.
+
+    The flush gathers the window's PENDING runs with no claim fence (the
+    gather is a plain read; see `watches.operations.digest_flush`), so two
+    flushes of the same window would both emit the batch (a duplicate webhook
+    POST, two delivery rows) and both burn an attempt on a transient failure.
+    The job lock used to rule that out by itself; now that it is a short lease
+    that can lapse under a live pass, this is the fence that keeps the digest
+    on the same footing as the drain's CAS claim and the poll's per-feed lock:
+    an overlapping pass skips a held window and the next tick picks it up.
+    Acquire OUTSIDE the operation's transactions (the emit is a network call)."""
+    return named_lock(
+        name=f"digest_flush_lock:{action_id}",
+        timeout=settings.DIGEST_FLUSH_LOCK_TIMEOUT_SECONDS,
+    )
+
+
 # Cache-key prefix for `job_lock`. Shared with `clear_job_locks` so the ops
 # command deletes the exact key `job_lock` writes (one source of truth).
 JOB_LOCK_KEY_PREFIX = "job_lock:"
@@ -133,19 +155,21 @@ def job_lock_key(name: str) -> str:
 def job_lock(name: str) -> AbstractContextManager[LockLease]:
     """Single-flight a scheduled job (a management command) by name.
 
-    Skip-if-held: yields True iff acquired ; a run that finds a prior pass
+    Skip-if-held: yields a `LockLease`, truthy iff acquired; a run that finds a prior pass
     still going gets False and should log + skip rather than pile up behind
     it. Built on `named_lock`, so release rides the finally on a normal exit
     or a handled exception, and on SIGTERM too WHEN it reaches the process
-    that installed the handler (SingleFlightCommand does). When SIGTERM
-    never reaches that process (a supervisor kills a wrapper, e.g. `make
-    down-jobs`) or on a raw SIGKILL / power loss, the finally can't run;
-    `clear_job_locks` is the manual release for those, and
-    `JOB_LOCK_TIMEOUT_SECONDS` (deliberately a full day, so a legitimately
-    hours-long pass never expires) is the eventual failsafe."""
+    that installed the handler (SingleFlightCommand does). The holder renews
+    the lease while it runs (a `common.lease_renewer.LeaseRenewer`, started by
+    SingleFlightCommand), so
+    `JOB_LOCK_LEASE_SECONDS` is a short liveness window: a pass killed
+    without unwinding (SIGKILL / OOM / its container recreated) frees after
+    one window on its own; `clear_job_locks` is the immediate manual release.
+    `JOB_LOCK_MAX_HOLD_SECONDS` caps one pass's total hold (the renewer stops
+    past it), so a hung-but-alive pass cannot strand the job forever."""
     return named_lock(
         name=job_lock_key(name),
-        timeout=settings.JOB_LOCK_TIMEOUT_SECONDS,
+        timeout=settings.JOB_LOCK_LEASE_SECONDS,
     )
 
 

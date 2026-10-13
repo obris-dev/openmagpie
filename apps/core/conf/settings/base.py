@@ -359,6 +359,15 @@ CACHES = {
 # single-source fetch (not above the whole cycle).
 POLL_LOCK_TIMEOUT_SECONDS = int(os.environ.get("POLL_LOCK_TIMEOUT_SECONDS", "600"))
 
+# Digest flush lock: one window's gather + emit + complete, so an overlapping
+# flush pass (a lapsed job lease, a manual clear_job_locks) skips the window
+# instead of emitting its batch twice. A flush is bounded by its cap-sized
+# slices, each one webhook POST (WEBHOOK_TIMEOUT_SECONDS); 600s is well above
+# a full DIGEST_MAX_BATCH_ITEMS window and still frees a crashed flush within
+# minutes. A lapse costs one duplicate emit, the at-least-once mode receivers
+# already dedup on the item key.
+DIGEST_FLUSH_LOCK_TIMEOUT_SECONDS = int(os.environ.get("DIGEST_FLUSH_LOCK_TIMEOUT_SECONDS", "600"))
+
 # Feed set-sources serialization lock. The critical section is the
 # diff + bulk insert/delete + per-row meta updates ; bounded by the
 # count of sources but not by network. 60s is well above a 1k-row
@@ -421,17 +430,44 @@ DIGEST_MAX_INTERVAL_SECONDS = int(os.environ.get("DIGEST_MAX_INTERVAL_SECONDS", 
 DIGEST_MAX_BATCH_ITEMS = int(os.environ.get("DIGEST_MAX_BATCH_ITEMS", "500"))
 
 # Single-flight lock for scheduled jobs (SingleFlightCommand): a second
-# run of the same command skips while one is in flight. TTL is purely a
-# CRASH failsafe, set deliberately LONG. A drain pass judges items
-# synchronously and sequentially (each ~120s, no internal queue), so a
-# backlog makes ONE legit pass run for hours; a short TTL would expire
-# mid-pass and let a second drain in. A full day stays well past any real
-# pass. A normal exit, an exception, and a SIGTERM that REACHES the run all
-# release via the finally (SingleFlightCommand turns SIGTERM into a
-# SystemExit). A SIGTERM that doesn't reach it (a supervisor killing a
-# wrapper, e.g. `make down-jobs`) or a hard SIGKILL orphans the lock until
-# the TTL; `manage.py clear_job_locks` is the manual release for those.
-JOB_LOCK_TIMEOUT_SECONDS = int(os.environ.get("JOB_LOCK_TIMEOUT_SECONDS", "86400"))
+# run of the same command skips while one is in flight. Two knobs:
+#
+# LEASE: the liveness window, NOT a cap on pass length. SingleFlightCommand
+# renews the lease from a background thread (every third of this value) for
+# as long as the pass runs, so an hours-long pass stays locked while it is
+# alive, and a pass that dies without releasing (a hard SIGKILL / OOM, or the
+# core container being recreated under an exec'd pass, as `make upgrade`
+# does) frees within one window instead of stranding every later pass. A
+# normal exit, an exception, and a SIGTERM that reaches the run still release
+# at once via the finally; `manage.py clear_job_locks` is the immediate manual
+# release. Set it comfortably above the longest cache stall you would accept
+# before a presumed-dead pass may be overlapped by the next one.
+JOB_LOCK_LEASE_SECONDS = int(os.environ.get("JOB_LOCK_LEASE_SECONDS", "300"))
+#
+# MAX HOLD: the ceiling on one pass's total hold, the backstop for a pass that
+# is alive but hung (renewing forever would otherwise strand the job exactly
+# like an orphan used to). Past it the renewer stops renewing, logs, and the
+# lease lapses, so the next pass may overlap the stuck one. Must sit well
+# above the longest LEGITIMATE pass: measured on a real instance, poll passes
+# run up to ~46 minutes and a drain pass with a deep backlog up to ~4 hours
+# (each item judged synchronously, ~120s). A day keeps that margin.
+JOB_LOCK_MAX_HOLD_SECONDS = int(os.environ.get("JOB_LOCK_MAX_HOLD_SECONDS", "86400"))
+if JOB_LOCK_LEASE_SECONDS < 3 or JOB_LOCK_MAX_HOLD_SECONDS < JOB_LOCK_LEASE_SECONDS:
+    # The renewer ticks every third of the lease, floored at 1s: a lease under 3s
+    # ticks at or past its own window and flaps, and a ceiling below the lease
+    # can never be reached before the lease itself lapses.
+    raise ImproperlyConfigured(
+        f"JOB_LOCK_LEASE_SECONDS must be >= 3 and JOB_LOCK_MAX_HOLD_SECONDS >= JOB_LOCK_LEASE_SECONDS "
+        f"(got {JOB_LOCK_LEASE_SECONDS} and {JOB_LOCK_MAX_HOLD_SECONDS})."
+    )
+if "JOB_LOCK_TIMEOUT_SECONDS" in os.environ:
+    # Named explicitly, like the OLLAMA_URL rename below: an operator who set
+    # the old knob gets the fix, not a silent fall-through to the defaults.
+    raise ImproperlyConfigured(
+        "JOB_LOCK_TIMEOUT_SECONDS is no longer read. The job lock is a renewed lease: set "
+        "JOB_LOCK_LEASE_SECONDS (the liveness window, default 300) and/or "
+        "JOB_LOCK_MAX_HOLD_SECONDS (the per-pass ceiling, default 86400) instead, and unset the old variable."
+    )
 
 # Relevance engine (the LLM that scores semantic-filter relevance). The engine
 # talks to any backend via the OpenAI `/v1` API, so all it needs is an endpoint

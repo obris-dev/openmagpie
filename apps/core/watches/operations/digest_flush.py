@@ -7,11 +7,13 @@ window and emits its accumulated batch through the action impl's
 `WatchDrainOperation`: a one-shot operation with account-scoped services,
 `.run()` once.
 
-Single-flight (the command is a SingleFlightCommand), so no concurrent
-flush ; the drain never touches digest runs (it excludes digest actions).
-So the batch can be gathered without a lock. Only the window close takes
-the row lock (select_for_update), to serialize against an arrival opening
-a fresh window.
+The gather is a plain read with no claim fence, so two flushes of one
+window would both emit its batch. The per-window `digest_flush_lock` taken
+by `process_due_digests` is what rules that out (the job lock alone no
+longer does: it is a short lease that can lapse under a live pass); the
+drain never touches digest runs (it excludes digest actions). Only the
+window close takes the row lock (select_for_update), to serialize against
+an arrival opening a fresh window.
 """
 
 from __future__ import annotations
