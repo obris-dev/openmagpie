@@ -5,6 +5,17 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.11.0](https://github.com/obris-dev/openmagpie/compare/v0.10.0...v0.11.0) (2026-10-13)
+
+
+### ⚠ BREAKING CHANGES
+
+* **jobs:** `JOB_LOCK_TIMEOUT_SECONDS` is replaced by `JOB_LOCK_LEASE_SECONDS` (default 300) and `JOB_LOCK_MAX_HOLD_SECONDS` (default 86400); leaving the old variable set now fails startup with a message naming the new ones. Upgrading from v0.10.0 or earlier: the running `make upgrade` is the OLD script (the shell keeps reading the file it already opened), which recreates the core container under any in-flight job pass, and a pass killed that way holds its lock for a day under the old code. If you run `make up-jobs`, run `make down-jobs` before upgrading and `make up-jobs` after. If `make up-jobs` afterwards reports a lock HELD with nothing running, clear it once: `make local-manage CMD="clear_job_locks --all"`.
+
+### 🐛 Bug Fixes
+
+* **jobs:** job locks are renewed leases that lapse when a pass dies; upgrade stops passes before the rebuild ([#185](https://github.com/obris-dev/openmagpie/issues/185)) ([d6c1b97](https://github.com/obris-dev/openmagpie/commit/d6c1b97f97331bbcb9afd854d1b10028e85f9073))
+
 ## [0.10.0](https://github.com/obris-dev/openmagpie/compare/v0.9.0...v0.10.0) (2026-10-13)
 
 
