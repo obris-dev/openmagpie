@@ -15,7 +15,7 @@ install-local-cli: ## Install the local magpie CLI on your PATH (snapshot of thi
 	# script needs uv (and prints how to get it if missing).
 	@./scripts/install-local-cli.sh --force
 
-upgrade: ## Upgrade this install to the latest release (advance tag, rebuild, migrate, refresh CLI); data preserved
+upgrade: ## Upgrade this install to the latest release (stop in-flight job passes, advance tag, rebuild, migrate, refresh CLI); data preserved
 	@sh ./scripts/upgrade.sh
 
 up: ## Start local Docker dev environment
@@ -79,9 +79,10 @@ local-tick: ## Run one pipeline pass: poll feeds -> trigger watches -> run backf
 	$(MAKE) local-manage CMD="emit_telemetry_heartbeat"
 
 # Background tickers: each stage on its OWN cadence (they're decoupled ;
-# poll writes items, trigger enqueues runs, drain executes them). Each
-# command is a SingleFlightCommand, so a pass that outlasts its interval
-# just self-skips the next tick; loops never stack. pid+log per stage live
+# poll writes items, trigger enqueues runs, drain executes them). Every
+# command but the heartbeat (which self-throttles on its own row) is a
+# SingleFlightCommand, so a pass that outlasts its interval just self-skips
+# the next tick; loops never stack. pid+log per stage live
 # under .jobs/ (gitignored). Override any cadence: make up-jobs DRAIN_INTERVAL=30
 # (Prod scheduling = plain cron per command on these cadences; no flock /
 # singleton infra needed, since the command self-skips overlaps.)
@@ -100,7 +101,8 @@ up-jobs: ## Start poll/trigger/backfill/drain/digest/email as independent backgr
 	@mkdir -p $(JOBS_DIR)
 	@# Pre-flight: a lock held BEFORE we start anything is suspicious (a prior
 	@# run's orphan or another machine), and the new tickers would skip every
-	@# pass until it clears. Warn, don't block (|| true), but DON'T hide stderr:
+	@# pass until it clears or its lease lapses (JOB_LOCK_LEASE_SECONDS). Warn,
+	@# don't block (|| true), but DON'T hide stderr:
 	@# a failed check (container down, cache unreachable) should be visible.
 	@$(MAKE) --no-print-directory local-manage CMD="clear_job_locks --all --dry-run" || true
 	@$(MAKE) --no-print-directory _job-up NAME=poll    CMD=poll_due_feeds      INTERVAL=$(POLL_INTERVAL)

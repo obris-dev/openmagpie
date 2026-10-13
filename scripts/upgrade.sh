@@ -70,6 +70,25 @@ if [ -n "$target_sha" ] && [ "$(git rev-parse HEAD)" = "$target_sha" ]; then
     exit 0
 fi
 
+# A scheduled-job pass may be running INSIDE the core container right now
+# (however the operator schedules jobs: the `up-jobs` tickers, `local-tick`, or
+# their own cron all exec into it). Recreating the container below SIGKILLs
+# such a pass, which strands its job lock for one lease window. Signal those
+# passes first so each releases its lock at once and unwinds cleanly (the run
+# it was in the middle of is reclaimed by the reaper either way). BEFORE the
+# checkout on purpose: the source is bind-mounted into the container, so after
+# the checkout `manage` would run the NEW version's code against the OLD venv
+# (and `uv run` would first re-sync that venv under the live passes). A
+# scheduler can still launch a fresh pass into the old container during the
+# build below and that one is killed; the lease bounds that to one window, and
+# `make down-jobs` before upgrading (then `up-jobs` after) avoids it entirely.
+# Best-effort: a stack that is down, or a version without the command, has
+# nothing to stop. No lock clearing after the rebuild on purpose: a scheduler
+# may already have started a fresh pass in the new container by then, and a
+# blanket clear would free a live lock and let the next tick run alongside it.
+info "Stopping in-flight job passes..."
+manage stop_due_jobs || info "stop_due_jobs did not run (core not running, or this version lacks it); any pass still in flight is killed by the rebuild and its lock lapses within one lease window. Continuing."
+
 info "Upgrading v${current_version} -> ${target} ..."
 git checkout --quiet "$target" || fail "git checkout ${target} failed."
 # A tag is an exact commit (nothing to fast-forward); a branch (e.g. main) needs

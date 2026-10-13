@@ -134,7 +134,7 @@ The quickstart pins your checkout to the latest release. When a newer one ships,
 make upgrade                  # or: ./scripts/upgrade.sh
 ```
 
-It advances the checkout to the latest release tag, rebuilds the stack, applies migrations, and refreshes the `magpie` CLI. **Your data is preserved** (the database volume persists, migrations are additive, and it never re-seeds). For the bleeding edge instead of a release, `OPENMAGPIE_BRANCH=main make upgrade`.
+It stops any in-flight job pass, advances the checkout to the latest release tag, rebuilds the stack, applies migrations, and refreshes the `magpie` CLI. If you run the background tickers (`make up-jobs`), run `make down-jobs` first and `make up-jobs` after: a ticker can otherwise start a pass into the old container mid-rebuild, and that pass is killed with it. **Your data is preserved** (the database volume persists, migrations are additive, and it never re-seeds). For the bleeding edge instead of a release, `OPENMAGPIE_BRANCH=main make upgrade`.
 
 ## How it works
 
@@ -264,7 +264,7 @@ uv workspace; one root `uv.lock` for everything Python.
 ```
 apps/
   core/                       Django backend (deployable)
-    common/                   BaseModel (ULID PK + timestamps), ULIDField, locks, db ceilings, /healthz
+    common/                   BaseModel (ULID PK + timestamps), ULIDField, locks + lease renewer, db ceilings, /healthz
     accounts/                 User / Account / UserProfile + services + AccountScopedAPIView mixin
     auth_api/                 signup / login / logout / me + tokens/* + device-flow handshake (DRF)
     sources/                  Connectors (Reddit, Hacker News, RSS/Atom) + SourcePayload classes + registry

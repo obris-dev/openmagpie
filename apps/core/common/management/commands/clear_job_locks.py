@@ -1,12 +1,17 @@
 """Clear orphaned single-flight job locks.
 
 A `job_lock` is freed by its owner on any graceful exit, including SIGTERM
-WHEN it reaches the run (SingleFlightCommand turns it into a SystemExit). It
-is NOT freed when SIGTERM never reaches the run (e.g. `make down-jobs` kills
-the host-side ticker wrapper, not the in-container manage.py) or on a hard
-SIGKILL / OOM / power loss; those orphan the lock until its day-long TTL.
-This command is the manual release for those cases: delete the `job_lock:*`
-cache key so the next pass can acquire immediately.
+WHEN it reaches the run (SingleFlightCommand turns it into a SystemExit; `make
+down-jobs` and `make upgrade` deliver it via `stop_due_jobs`). Two cases are
+left. A pass killed without unwinding (SIGKILL / OOM / its container
+recreated) orphans the lock until its lease lapses: the holder's renewals
+stop with it, so one `JOB_LOCK_LEASE_SECONDS` window (minutes). A pass that is
+alive but never got the signal keeps renewing, so its lock lives as long as
+it does (up to `JOB_LOCK_MAX_HOLD_SECONDS`). This command is the immediate
+manual release for either: delete the `job_lock:*` cache key so the next pass
+can acquire now. A live holder whose key is cleared logs "lease lost" on its
+next tick and carries on, so the next pass overlaps it; every job tolerates
+that (CAS claims, per-feed and per-window locks).
 
 WARNING: the lock lives in the SHARED cache, so it is cluster-wide. Clearing
 a key here frees it for every machine, including one where a job is still
@@ -91,7 +96,7 @@ class Command(BaseCommand):
                     "If a run is genuinely in flight this is expected. If nothing is running, "
                     "they are orphaned (a hard kill skips the release) and every pass will skip "
                     "until you clear them (`make down-jobs`, or `clear_job_locks --all`) or the "
-                    "TTL expires."
+                    "lease lapses (JOB_LOCK_LEASE_SECONDS)."
                 )
             else:
                 self.stdout.write("no job locks currently held")

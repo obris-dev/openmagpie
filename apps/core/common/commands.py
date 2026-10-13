@@ -15,8 +15,14 @@ reaches this process (a k8s pod stop, a direct `kill` of the run).
 `make down-jobs` now delivers that SIGTERM to the in-container runs (via
 the `stop_due_jobs` command, since killing the host-side ticker wrapper
 alone never reaches them), so the handler fires and each lock releases
-cleanly. Only a hard SIGKILL / OOM / power loss skips it; `clear_job_locks`
-and the day-long TTL are the release path there. Single-flight is a
+cleanly. Only a hard SIGKILL / OOM / power loss skips it; there the lock
+LAPSES on its own: the job lock is a short liveness lease
+(`JOB_LOCK_LEASE_SECONDS`, minutes) that `execute` renews from a
+background thread for as long as the pass runs, so a dead holder's lock
+expires within one window however the pass was launched or killed
+(`clear_job_locks` remains the immediate manual release). The renewer gives
+up after `JOB_LOCK_MAX_HOLD_SECONDS` (a day, well past the longest measured
+pass) so a hung-but-alive pass cannot hold the job forever. Single-flight is a
 convenience (don't stack passes on one box), not a correctness bound: the
 drain is a SingleFlightCommand but its CAS claim makes concurrent execution
 safe, so it fans out N-wide WITHIN a pass (process_due_runs --concurrency)
@@ -30,10 +36,12 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from typing import Any, ClassVar
 
+from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
 from django.core.management import get_commands, load_command_class
 from django.core.management.base import BaseCommand
 
+from common.lease_renewer import LeaseRenewer
 from common.locks import job_lock
 
 logger = logging.getLogger(__name__)
@@ -105,12 +113,21 @@ class SingleFlightCommand(BaseCommand):
         # SIGTERM handler OUTSIDE the lock: on a graceful stop the SystemExit
         # unwinds through job_lock's finally (release) first, then restores
         # the prior handler.
-        with _sigterm_as_systemexit(), job_lock(name) as acquired:
-            if not acquired:
+        with _sigterm_as_systemexit(), job_lock(name) as lease:
+            if not lease:
                 logger.info("job %s already running; skipping this pass", name)
                 self.stdout.write(f"{name} already running; skipping")
                 return None
-            return super().execute(*args, **options)
+            # Renew for the whole pass (inside the lock, outside the body) so
+            # the short TTL is a liveness window, not a cap on pass length.
+            renewer = LeaseRenewer(
+                lease,
+                label=name,
+                lease_seconds=settings.JOB_LOCK_LEASE_SECONDS,
+                max_hold=settings.JOB_LOCK_MAX_HOLD_SECONDS,
+            )
+            with renewer:
+                return super().execute(*args, **options)
 
 
 def iter_single_flight_commands() -> Iterator[tuple[str, SingleFlightCommand]]:
