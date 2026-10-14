@@ -141,56 +141,21 @@ It stops any in-flight job pass, advances the checkout to the latest release tag
 A `Feed` is a reusable, curated stream (a set of sources plus an item log). A `Watch` subscribes to one or more feeds and runs an ordered **action chain** over each new item: a `semantic_filter` gates the chain (a score below threshold stops it), and downstream `webhook` / `log` actions deliver what passes. One feed can back many watches, so you pay for source polling once.
 
 ```mermaid
-graph TD
-    subgraph Sources
-        TWITTER[X / Twitter]
-        YOUTUBE[YouTube]
-        REDDIT[Reddit]
-        RSS[RSS / Atom feeds]
-        HN[Hacker News]
-        SLACK[Slack]
-        LINKEDIN[LinkedIn]
-        GITHUB[GitHub]
-        FACEBOOK[Facebook]
-        TIKTOK[TikTok]
-        INSTAGRAM[Instagram]
-    end
+flowchart TD
+    SOURCES["Sources<br/>X/Twitter, YouTube, Reddit,<br/>Hacker News, RSS/Atom"]
+    FEED["Feed<br/>curated sources + item log"]
+    WATCH["Watch<br/>subscribes to one or more feeds"]
+    FILTER["semantic_filter<br/>scores each item against your description"]
+    LLM["Your LLM<br/>any OpenAI-compatible /v1 API<br/>Ollama, vLLM, llama.cpp, LM Studio, OpenAI"]
+    DELIVER["webhook / log<br/>instant or digest"]
+    DROPPED["dropped"]
 
-    subgraph OpenMagpie
-        FEED[Feed<br/>curated streams + item log]
-        WATCH[Watch<br/>subscribes to feeds]
-        FILTER[semantic_filter<br/>action]
-        ENGINE[Relevance engine<br/>BYO LLM]
-        DELIVER[webhook / log<br/>delivery action]
-    end
-
-    subgraph Out
-        WEBHOOK[Webhook]
-        LOG[Log]
-        FUTURE["email / Slack (planned)"]
-    end
-
-    TWITTER --> FEED
-    YOUTUBE --> FEED
-    REDDIT --> FEED
-    RSS --> FEED
-    HN --> FEED
-    SLACK -. planned .-> FEED
-    LINKEDIN -. planned .-> FEED
-    GITHUB -. planned .-> FEED
-    FACEBOOK -. "soon to be added" .-> FEED
-    TIKTOK -. "soon to be added" .-> FEED
-    INSTAGRAM -. "soon to be added" .-> FEED
-
+    SOURCES -- "poll" --> FEED
     FEED -- "new items" --> WATCH
     WATCH -- "action chain" --> FILTER
-    FILTER --> ENGINE
-    ENGINE -. "your LLM" .-> LLM["any OpenAI-compatible /v1 API<br/>Ollama | vLLM | llama.cpp | LM Studio | OpenAI"]
-    FILTER -- "passes -> next action" --> DELIVER
-
-    DELIVER --> WEBHOOK
-    DELIVER --> LOG
-    DELIVER -. planned .-> FUTURE
+    FILTER -. "judged by" .-> LLM
+    FILTER -- "at or above threshold" --> DELIVER
+    FILTER -- "below threshold" --> DROPPED
 ```
 
 Delivery is **instant** (per item) or **digest** (a window of items batched into one emission). A `webhook` action POSTs (or PUTs / PATCHes) one self-describing body; instant and digest use the same shape (instant is a one-item batch):
