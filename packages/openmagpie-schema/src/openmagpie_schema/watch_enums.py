@@ -44,8 +44,20 @@ class WatchActionKind(StrEnum):
 BUILTIN_ACTION_KINDS = frozenset(k.value for k in WatchActionKind)
 
 
+class BowerColumnType(StrEnum):
+    """OpenBower column types a bower connect derives and matches against
+    (OpenBower's own vocabulary). A signal can hold others; a column of a
+    type not listed here takes no item field."""
+
+    TEXT = "text"
+    NUMBER = "number"
+    URL = "url"
+    DATETIME = "datetime"
+    DATE = "date"
+
+
 class DeliveryCadence(StrEnum):
-    """Cadence of a DELIVERY action (webhook / log): emit per item, or
+    """Cadence of a DELIVERY action (webhook / bower / log): emit per item, or
     batch a window into one emission. A field in the action's config, not
     a separate kind."""
 

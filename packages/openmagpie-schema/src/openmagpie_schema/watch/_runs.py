@@ -149,7 +149,7 @@ class PluginRunWire(WatchActionRunFields):
 
 
 # One WatchActionRun on the wire (`GET /v1/actions/<action_id>/activity`), keyed
-# by `kind`: the four built-ins as a discriminated union, then a left-to-right
+# by `kind`: the built-ins as a discriminated union, then a left-to-right
 # fallthrough to the plugin member (same discipline as WatchActionWire).
 _BuiltinWatchActionRunWire = Annotated[
     SemanticFilterRunWire | ExtractRunWire | LogRunWire | WebhookRunWire | BowerRunWire,

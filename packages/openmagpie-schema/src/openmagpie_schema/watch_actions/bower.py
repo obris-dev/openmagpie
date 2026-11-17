@@ -2,7 +2,7 @@
 
 An HTTP delivery like the webhook, with OpenBower's push body instead of the
 generic one: each item becomes a row whose cells are the item fields its
-`fields` map names. The URL carries the signal's token, so it is the one
+`columns` map names. The URL carries the signal's token, so it is the one
 secret, masked and restored as the webhook's is.
 """
 
@@ -21,8 +21,17 @@ from ._url import check_delivery_url, restore_masked_url
 from .base import WatchActionConfigBase, WatchActionConfigSummary
 
 # OpenBower takes at most this many rows in one push; a delivery never sends
-# more (a digest slice is capped below it, checked where the body is built).
+# more (a digest slice is capped at it, checked where the body is built).
 BOWER_MAX_ROWS_PER_PUSH = 1000
+# OpenBower refuses a push past its bus message size (4 MiB by default) with
+# a 413 no retry fixes, so a digest slice keeps its items' data under this,
+# leaving room for the envelope and OpenBower's own overhead.
+BOWER_MAX_PUSH_BYTES = 3 * 1024 * 1024
+# OpenBower's answers for a webhook URL that no longer works (unauthorized,
+# forbidden, not found): rotated, so its token is unknown, or the signal gone.
+BOWER_URL_GONE_STATUSES = frozenset({401, 403, 404})
+# The most of OpenBower's refusal a run keeps (its error code, its detail).
+BOWER_REFUSAL_MAX_LENGTH = 500
 # Its field keys and Magpie's item field names alike are short identifiers.
 BOWER_FIELD_NAME_MAX_LENGTH = 64
 
@@ -30,9 +39,9 @@ BOWER_FIELD_NAME_MAX_LENGTH = 64
 class BowerConfig(DeliveryConfigBase):
     """Config for a WatchAction with kind == 'bower'.
 
-    POSTs items to `url`, a custom signal's webhook URL, as rows. `fields`
-    maps each of the signal's field keys to the item field that fills it
-    (`{"subreddit": "subreddit"}`); an item lacking a field, or holding a list
+    POSTs items to `url`, a custom signal's webhook URL, as rows. `columns`
+    maps each of the signal's column keys to the item field that fills it
+    (`{"c_subreddit": "subreddit"}`); an item lacking a field, or holding a list
     or object there, leaves that cell out. `delivery` /
     `digest_interval_seconds` (from the base) pick instant vs batched.
 
@@ -43,7 +52,7 @@ class BowerConfig(DeliveryConfigBase):
     CONFIG_KIND: ClassVar[str] = WatchActionKind.BOWER.value
 
     url: str
-    fields: dict[str, str] = Field(min_length=1)
+    columns: dict[str, str] = Field(min_length=1)
 
     model_config = {"extra": "ignore"}
 
@@ -52,14 +61,16 @@ class BowerConfig(DeliveryConfigBase):
     def _validate_url(cls, v: str) -> str:
         return check_delivery_url(v)
 
-    @field_validator("fields")
+    @field_validator("columns")
     @classmethod
-    def _validate_fields(cls, v: dict[str, str]) -> dict[str, str]:
+    def _validate_columns(cls, v: dict[str, str]) -> dict[str, str]:
         for key, item_field in v.items():
             if not key or not item_field:
-                raise ValueError("fields maps a field key to an item field name; neither may be blank")
+                raise ValueError("columns maps a column key to an item field name; neither may be blank")
             if len(key) > BOWER_FIELD_NAME_MAX_LENGTH or len(item_field) > BOWER_FIELD_NAME_MAX_LENGTH:
-                raise ValueError(f"field names are at most {BOWER_FIELD_NAME_MAX_LENGTH} characters")
+                raise ValueError(
+                    f"column keys and item field names are at most {BOWER_FIELD_NAME_MAX_LENGTH} characters"
+                )
         return v
 
     def redacted_dump(self) -> dict[str, Any]:
@@ -83,11 +94,15 @@ class BowerConfig(DeliveryConfigBase):
 
 class BowerResult(BaseModel):
     """Result a bower run writes to WatchActionRun.result: the HTTP status of
-    the push that succeeded and how many rows OpenBower accepted (fewer than
-    sent when it already held some, by external_id)."""
+    the push and how many rows OpenBower accepted (fewer than sent when it
+    already held some, by external_id). A refused push keeps OpenBower's
+    `error` code and `detail` (which column, which row), cut to
+    BOWER_REFUSAL_MAX_LENGTH, so the run says why."""
 
     http_status: int
     accepted: int | None = None
+    error: str = Field(default="", max_length=BOWER_REFUSAL_MAX_LENGTH)
+    detail: str = Field(default="", max_length=BOWER_REFUSAL_MAX_LENGTH)
 
 
 # ── Outbound payload contract (OpenBower's push envelope) ──────────────────

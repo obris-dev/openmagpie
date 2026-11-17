@@ -75,7 +75,7 @@ class DigestBatchMixin:
         if objs:
             WatchActionRun.objects.bulk_create(objs, ignore_conflicts=True)
 
-    def digest_batch(self, *, action_id: str) -> builtins.list[WatchActionRun]:
+    def digest_batch(self, *, action_id: str, max_items: int | None = None) -> builtins.list[WatchActionRun]:
         """The PENDING runs of a digest action — the accumulated batch the
         flush emits. A digest action's runs are never drained, so its only
         pending runs are the un-emitted batch.
@@ -89,20 +89,24 @@ class DigestBatchMixin:
         old item can land in a LATER digest than newer items (delivery is no
         longer strictly chronological), which for a digest beats starvation.
 
-        CAPPED at DIGEST_MAX_BATCH_ITEMS: the flush loads every returned item's
-        data to build one payload, so an uncapped window would be unbounded in
-        memory + emission size + id__in width. A larger window drains over
-        successive slices (least-tried first ; the window stays open until
-        empty).
+        CAPPED at DIGEST_MAX_BATCH_ITEMS, or `max_items` (the action kind's
+        max_batch_items) when smaller: the flush loads every
+        returned item's data to build one payload, so an uncapped window would
+        be unbounded in memory + emission size + id__in width. A larger window
+        drains over successive slices (least-tried first ; the window stays
+        open until empty).
 
         No claim fence (no PENDING->RUNNING): digest delivery is at-least-once
         by design — a crash after a successful emit but before complete_batch
         re-gathers here and re-emits. Receivers dedup on the per-item key.
         See WatchDigestFlushOperation.run's DELIVERY CONTRACT note."""
+        limit = settings.DIGEST_MAX_BATCH_ITEMS
+        if max_items is not None:
+            limit = min(limit, max_items)
         return builtins.list(
             WatchActionRun.objects.filter(account_id=self.account_id, action_id=action_id, state=_PENDING).order_by(
                 "attempts", "id"
-            )[: settings.DIGEST_MAX_BATCH_ITEMS]
+            )[:limit]
         )
 
     def digest_pending_count(self, *, action_id: str) -> int:

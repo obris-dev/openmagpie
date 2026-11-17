@@ -3,8 +3,8 @@ HTTP-call audit (one WatchActionDelivery row per attempt).
 
 `record` persists one attempt ; `list_for_action` backs the deliveries CLI /
 API. There is NO server-side dedup: delivery is at-least-once (the POST is
-outside the run's transaction) and receivers dedup per item on the in-body
-`key`, so a replayed batch is collapsed receiver-side, not here.
+outside the run's transaction) and receivers dedup on the body's own key (webhook: each item's `key`; bower: each row's `external_id` and the push's `request_id`), so a replayed
+batch is collapsed receiver-side, not here.
 """
 
 from __future__ import annotations

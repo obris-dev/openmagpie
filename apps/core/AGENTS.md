@@ -34,8 +34,11 @@ watches/
     _run_batches.py       DigestBatchMixin (digest_batch / complete_batch / fail_batch)
     digest.py             WatchDigestWindowService (window open/close coordination) + Global
     deliveries.py         WatchActionDeliveryService (record / list) for the HTTP-call audit
-    bower_connect.py      BowerConnectService: create an OpenBower custom signal from a watch's item fields (an API
-                          key used once, never stored) and add the bower action delivering to it
+    bower_connect.py      BowerConnectService: add the bower action delivering to an OpenBower custom signal, an
+                          existing one (its webhook URL; columns matched by label) or a new one created from the
+                          watch's item fields (an API key used once, never stored). Helpers: _bower_fields.py (the
+                          item fields and the --fields choice), _bower_signal.py (an existing signal's columns),
+                          _bower_errors.py (what a connect answers when it does not complete)
   actions/                EXECUTION registry: protocol.py (ONE Action interface: run(items, context) -> ActionResult
                           for every kind, uniform dispatch no branching ; OutboundActionResult adds the `outbound`
                           OutboundCall record), registry.py (kind -> impl), the per-kind impls (semantic_filter.py /
@@ -131,7 +134,7 @@ Each model carries queryable common fields top-level + a `data`/`config`/`result
 
 - **`Feed.data`** is validated by a Pydantic config keyed off `Feed.kind` (see `feeds.registry`). v1 kind is `"curated"` -> `CuratedFeedConfig` (retention + default_field_map). The actual source set lives on `feeds.Source` rows; each row owns its own watermark. The Feed owns the poll loop.
 - **`WatchAction.config`** is the PURE kind-specific blob; the discriminator `kind` is a sibling column, NOT nested in the blob (k8s-style adjacent tag). Validated by `watches.registry` (kind -> config class): `semantic_filter` -> `SemanticFilterConfig`, `webhook` -> `WebhookConfig`, `bower` -> `BowerConfig`, `log` -> `LogConfig`. Per-kind classes carry a `CONFIG_KIND` ClassVar and no `kind` field. Validation is a registry dict, NOT a Pydantic discriminated union.
-- **`WatchActionRun.result`** is the kind-specific result blob (validated per kind), stored for the run audit: `SemanticFilterResult {passed, score, reason}`, `WebhookResult {http_status}`, `LogResult {rendered}`.
+- **`WatchActionRun.result`** is the kind-specific result blob (validated per kind), stored for the run audit: `SemanticFilterResult {passed, score, reason}`, `WebhookResult {http_status}`, `BowerResult {http_status, accepted, error, detail}`, `LogResult {rendered}`.
 - **`FeedItem.data`** is the full `SourcePayload.model_dump()` of a polled item (the browsable log; all items). `FeedItem.source_kind` / `source_label` / `source_meta` denormalize the producing Source row for cheap read paths. Actions read live `FeedItem.data` at run time (the run row stores no item snapshot).
 - **Secret-bearing configs** (webhook url + header values, bower url) implement `redacted_dump()` (mask on read) and `merge_preserving()` (restore an unchanged masked secret from the prior row on edit). The server never returns a real secret; an edit that submits a still-masked secret with no same-kind prior to restore from is rejected.
 
@@ -185,8 +188,8 @@ for window in WatchDigestWindowService.Global.iter_due():
 
 - **`delivery` is a config field on the delivery kinds** (webhook, bower, log), shared via `DeliveryConfigBase` (`delivery: instant|digest` + `digest_interval_seconds`). `semantic_filter` is a filter, not a delivery, so it doesn't carry these. The presence rule (DIGEST requires a positive interval) is a pure invariant in the shared schema; the magnitude bound (min/max seconds) is settings-coupled and lives in `policy`.
 - **A digest is the ACTION's property, not the run's** — there is no per-run digest flag. A run is "digest" iff its action has a `WatchActionDigestWindow` row. The window is a FIXED window anchored at first arrival (`close_at = now + interval`; later arrivals join without extending it). Window open/close is coordinated by `select_for_update` on the window row INSIDE the caller's transaction (a cache lock can't live in the drain's completion txn).
-- **The flush gathers the action's pending runs as the batch** (capped at `DIGEST_MAX_BATCH_ITEMS`; a larger window drains over successive flushes), emits once via the impl's `run` (webhook: one POST with per-item `key`s for receiver dedup; log: one entry), marks them succeeded + advances each, then closes the window iff drained (re-checked under the row lock so a straggler during emit isn't orphaned). A transient batch failure burns one attempt per run (the digest analog of the claim-time cap) so a down destination drains to terminal instead of re-emitting forever.
-- **Digest delivery is at-least-once by design**: the emit is OUTSIDE the terminal transaction, so a crash after a successful emit but before the commit re-emits next flush. Webhook carries a per-item idempotency `key`; a duplicate log line is harmless. Receivers MUST dedup on the key.
+- **The flush gathers the action's pending runs as the batch** (capped at `DIGEST_MAX_BATCH_ITEMS`, or the kind's `max_batch_items` / `max_batch_bytes` when smaller, read with `batch_limit`; a larger window drains in slices within the same flush), emits once per slice via the impl's `run` (webhook: one POST with per-item `key`s for receiver dedup; bower: one push of rows keyed by `external_id`; log: one entry), marks them succeeded + advances each, then closes the window iff drained (re-checked under the row lock so a straggler during emit isn't orphaned). A transient batch failure burns one attempt per run (the digest analog of the claim-time cap) so a down destination drains to terminal instead of re-emitting forever.
+- **Digest delivery is at-least-once by design**: the emit is OUTSIDE the terminal transaction, so a crash after a successful emit but before the commit re-emits next flush. Webhook carries a per-item idempotency `key` and bower a per-row `external_id` (plus a `request_id` per push); a duplicate log line is harmless. Receivers MUST dedup on those keys.
 
 ## Plugins (connectors, engines, actions)
 
@@ -234,7 +237,7 @@ with upstream. **Read `plugins/README.md` before adding to it.** In short:
 
 ### Discriminated-config endpoints
 
-For resources whose schema varies by `kind` (a `WatchAction` with `kind=semantic_filter|webhook|log`), the write accepts an envelope `{kind, config}` with `kind` a sibling of the config blob. Validate `config` via the Pydantic registry that owns the typed-blob schema (`watches.registry.validate_config(kind, data)`); don't duplicate the schema in a DRF serializer. Translate Pydantic `ValidationError` into DRF's nested 400 shape so a deep failure surfaces at the right path; a bad kind keys at `actions.N.kind`. Example: `watches/serializers.py`.
+For resources whose schema varies by `kind` (a `WatchAction` with `kind=semantic_filter|extract|webhook|bower|log`), the write accepts an envelope `{kind, config}` with `kind` a sibling of the config blob. Validate `config` via the Pydantic registry that owns the typed-blob schema (`watches.registry.validate_config(kind, data)`); don't duplicate the schema in a DRF serializer. Translate Pydantic `ValidationError` into DRF's nested 400 shape so a deep failure surfaces at the right path; a bad kind keys at `actions.N.kind`. Example: `watches/serializers.py`.
 
 ### Normalized list responses (keyed side tables, not per-row embeds)
 
@@ -264,7 +267,7 @@ When list rows reference a related entity, **don't embed that entity on every ro
 /v1/watches                                        GET/POST   watches in account
 /v1/watches/<id>                                   GET/PUT/DELETE
 /v1/watches/<id>/actions                           POST       add an action (rank insert or append)
-/v1/watches/<id>/connect-bower                     POST       create an OpenBower signal + add a bower action (?dry_run)
+/v1/watches/<id>/connect-bower                     POST       add a bower action to an existing OpenBower signal (webhook_url) or a created one (?dry_run)
 /v1/actions/<id>                                   GET/PUT/DELETE  one action by own id
 /v1/actions/<id>/activity                          GET        run audit log ("activity", cursor, ?state=)
 /v1/actions/<id>/deliveries                        GET        delivery audit log (cursor, ?state=)

@@ -37,8 +37,19 @@ logger = logging.getLogger("watches")
 # (bad URL / auth / payload) the receiver won't accept on retry.
 _RETRYABLE_4XX = frozenset({408, 429})
 
-# A run result from the HTTP status and, on a 2xx, the response.
+# A run result from the HTTP status and the response (None when none came back).
 ResultFor = Callable[[int, httpx.Response | None], dict[str, Any]]
+
+
+@dataclass(frozen=True)
+class DeliveryMessages:
+    """A kind's run errors for the permanent outcomes, in its own words (a
+    run_messages constant each): a blocked destination, a redirect, and a
+    refusal by status, since what a 4xx means depends on the receiver."""
+
+    blocked: str
+    redirect: str
+    rejected: Callable[[int], str]
 
 
 @dataclass(frozen=True)
@@ -52,6 +63,7 @@ class HttpDelivery:
     headers: dict[str, str]
     body: dict[str, Any]
     item_count: int
+    messages: DeliveryMessages
 
 
 def deliver(delivery: HttpDelivery, result_for: ResultFor) -> OutboundActionResult:
@@ -79,7 +91,7 @@ def deliver(delivery: HttpDelivery, result_for: ResultFor) -> OutboundActionResu
     if reason:
         logger.warning("%s: blocked destination for action=%s: %s", delivery.log_label, delivery.action_id, reason)
         return OutboundActionResult(
-            state=WatchActionRunState.ERRORED, error=run_messages.WEBHOOK_BLOCKED, outbound=make_call(None)
+            state=WatchActionRunState.ERRORED, error=delivery.messages.blocked, outbound=make_call(None)
         )
 
     try:
@@ -92,7 +104,7 @@ def deliver(delivery: HttpDelivery, result_for: ResultFor) -> OutboundActionResu
         )
         response.raise_for_status()
     except httpx.HTTPStatusError as exc:
-        return _classify_status(delivery, exc.response.status_code, result_for, make_call)
+        return _classify_status(delivery, exc.response, result_for, make_call)
     except httpx.HTTPError as exc:
         # Connect / timeout / etc: transient, no status. URL-free log (the
         # raw httpx str carries the url, a secret carrier).
@@ -109,11 +121,15 @@ def deliver(delivery: HttpDelivery, result_for: ResultFor) -> OutboundActionResu
 
 
 def _classify_status(
-    delivery: HttpDelivery, status: int, result_for: ResultFor, make_call: Callable[[int | None], OutboundCall]
+    delivery: HttpDelivery,
+    response: httpx.Response,
+    result_for: ResultFor,
+    make_call: Callable[[int | None], OutboundCall],
 ) -> OutboundActionResult:
     """A non-2xx response -> the right result + an OutboundCall carrying the
     status. follow_redirects stays False, so a 3xx arrives here too."""
-    result = result_for(status, None)
+    status = response.status_code
+    result = result_for(status, response)
     if 300 <= status < 400:
         # A redirect never reaches the receiver and re-redirects on retry:
         # a permanent misconfig (endpoint moved / wrong URL) -> ERRORED.
@@ -121,7 +137,7 @@ def _classify_status(
         return OutboundActionResult(
             state=WatchActionRunState.ERRORED,
             result=result,
-            error=run_messages.WEBHOOK_REDIRECT,
+            error=delivery.messages.redirect,
             outbound=make_call(status),
         )
     if 400 <= status < 500 and status not in _RETRYABLE_4XX:
@@ -130,7 +146,7 @@ def _classify_status(
         return OutboundActionResult(
             state=WatchActionRunState.ERRORED,
             result=result,
-            error=run_messages.WEBHOOK_REJECTED,
+            error=delivery.messages.rejected(status),
             outbound=make_call(status),
         )
     # Transient with a status (5xx / 408 / 429): retryable FAILED.

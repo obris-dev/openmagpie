@@ -16,6 +16,7 @@ from common.ssrf import destination_block_reason
 from engine import registry as engine_registry
 from openmagpie_schema.watch_actions import (
     BowerConfig,
+    DeliveryCadenceFields,
     DeliveryConfigBase,
     EngineActionConfigBase,
     WatchActionConfigBase,
@@ -35,13 +36,13 @@ def enforce_action_policy(config: WatchActionConfigBase) -> WatchActionConfigBas
     if isinstance(config, EngineActionConfigBase):  # the LLM-backed kinds (filter, extract, + any future)
         _enforce_engine_registered(config)
     if isinstance(config, DeliveryConfigBase):
-        _enforce_digest_interval(config)
+        enforce_digest_interval(config)
     if isinstance(config, (WebhookConfig, BowerConfig)):
         _enforce_url_safety(config.url)
     return config
 
 
-def _enforce_digest_interval(config: DeliveryConfigBase) -> None:
+def enforce_digest_interval(config: DeliveryCadenceFields) -> None:
     """A digest delivery's window length must be a sane bound (the flush
     cron's cadence). Only checked when delivery == DIGEST ; instant ignores
     the field."""

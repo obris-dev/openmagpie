@@ -9,6 +9,7 @@ parts it doesn't need.
 
 from __future__ import annotations
 
+import json
 from datetime import datetime
 
 from feeds.models import FeedItem
@@ -16,6 +17,27 @@ from openmagpie_schema.watch_enums import DeliveryCadence
 from watches.actions.protocol import ActionContext, ActionItem
 from watches.models import Watch, WatchActionRun
 from watches.services import WatchService
+
+
+def within_bytes(
+    pairs: list[tuple[WatchActionRun, FeedItem]], max_bytes: int | None
+) -> list[tuple[WatchActionRun, FeedItem]]:
+    """The leading pairs whose items' data, as JSON, fits `max_bytes`; at
+    least the first, so one oversized item still goes out (and fails alone)
+    rather than stalling the window. The rest stay pending for the next
+    slice. The stored data is the upper bound on what a delivery sends."""
+    if max_bytes is None:
+        return pairs
+    kept: list[tuple[WatchActionRun, FeedItem]] = []
+    total = 0
+    for run, item in pairs:
+        encoded = json.dumps(item.data, default=str)
+        size = len(encoded.encode())
+        if kept and total + size > max_bytes:
+            break
+        kept.append((run, item))
+        total += size
+    return kept
 
 
 def build_run_inputs(

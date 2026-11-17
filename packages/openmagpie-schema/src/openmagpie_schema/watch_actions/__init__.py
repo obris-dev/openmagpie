@@ -22,10 +22,19 @@ pure-Python change (no `choices=` on the column, no migration) ; import the publ
 names from here, not the submodules.
 """
 
-from ._delivery import DeliveryConfigBase
+from ._delivery import DeliveryCadenceFields, DeliveryConfigBase
 from ._engine import ENRICHMENT_STATUS_KEY, EngineActionConfigBase, EngineSpec, ExternalContentStatus
 from .base import WatchActionConfigBase, WatchActionConfigSummary
-from .bower import BOWER_MAX_ROWS_PER_PUSH, BowerConfig, BowerPush, BowerResult, BowerRow
+from .bower import (
+    BOWER_MAX_PUSH_BYTES,
+    BOWER_MAX_ROWS_PER_PUSH,
+    BOWER_REFUSAL_MAX_LENGTH,
+    BOWER_URL_GONE_STATUSES,
+    BowerConfig,
+    BowerPush,
+    BowerResult,
+    BowerRow,
+)
 from .extract import (
     EXTRACT_FIELD_NAME_KEY,
     EXTRACT_FIELDS_KEY,
@@ -49,7 +58,10 @@ from .webhook import (
 )
 
 __all__ = [
+    "BOWER_MAX_PUSH_BYTES",
     "BOWER_MAX_ROWS_PER_PUSH",
+    "BOWER_REFUSAL_MAX_LENGTH",
+    "BOWER_URL_GONE_STATUSES",
     "ENRICHMENT_STATUS_KEY",
     "EXTRACTED_KEY",
     "EXTRACT_FIELDS_KEY",
@@ -59,6 +71,7 @@ __all__ = [
     "BowerPush",
     "BowerResult",
     "BowerRow",
+    "DeliveryCadenceFields",
     "DeliveryConfigBase",
     "EngineActionConfigBase",
     "EngineSpec",

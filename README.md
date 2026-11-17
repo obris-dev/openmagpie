@@ -185,14 +185,35 @@ make local-cli ARGS="delivery get <delivery_id>"                    # one call i
 
 ### Send matches to OpenBower
 
-A `bower` action delivers each item as a row to an OpenBower custom signal, where its columns can be enriched. One command creates the signal (a column per item field the watch's sources produce) and adds the action:
+A `bower` action delivers each item as a row to an OpenBower custom signal, where its columns can be enriched. One command adds the action, to a signal you already have or to a new one:
 
 ```bash
+# An existing signal: paste its webhook URL from OpenBower at the hidden prompt; columns are matched to item fields by name
+magpie watch connect-bower <watch_id> --webhook-url
+# Or piped: there is no prompt to confirm then, so check it first and pass --yes
+pbpaste | magpie watch connect-bower <watch_id> --webhook-url --dry-run
+pbpaste | magpie watch connect-bower <watch_id> --webhook-url --yes
+
+# A new signal, with a column per item field the watch's sources produce
 export OPENBOWER_API_KEY=...     # an OpenBower API key; used once to create the signal, never stored
 magpie watch connect-bower <watch_id> --api-url https://api.example.io
 ```
 
-The action keeps only the signal's webhook URL. Each row's `external_id` is the item's `key`, so a resent item lands once. Rotating the URL in OpenBower stops delivery until the action's `url` is updated.
+`--dry-run` shows the columns first, and every item field you can send. `--fields title,url,occurred_at` sends only those (a new signal gets those columns, in that order), and `--rank` places the action in the watch's chain (it appends otherwise).
+
+OpenBower refuses a push with a cell for a column the signal no longer has, so before deleting a column there, take its key out of the action's `columns`:
+
+```bash
+magpie watch action config <action_id>                                     # the current config, columns map included
+magpie watch action config <action_id> columns '{"c_title": "title", "c_url": "url"}'
+```
+
+The action keeps only the signal's webhook URL. After rotating it in OpenBower, give the action the new one, with `--secret` so it never lands in your shell history:
+
+```bash
+magpie watch action config <action_id> url --secret                 # asks for it hidden
+pbpaste | magpie watch action config <action_id> url --secret --yes   # or piped
+```
 
 See [AGENTS.md](AGENTS.md) for the design conventions (char pointers, typed-blob pattern, the trigger/drain/flush execution model).
 

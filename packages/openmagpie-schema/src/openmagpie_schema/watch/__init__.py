@@ -19,7 +19,13 @@ from pydantic import BaseModel, Field
 # The action-node discriminated unions live in `_nodes` and the audit read-path
 # shapes in `_runs` (kept each module under the line cap); re-exported here so
 # `from openmagpie_schema.watch import X` keeps working for every consumer.
-from ._bower_connect import BowerConnectColumn, BowerConnectInput, BowerConnectResponse
+from ._bower_connect import (
+    BowerConnectColumn,
+    BowerConnectExisting,
+    BowerConnectInput,
+    BowerConnectNew,
+    BowerConnectResponse,
+)
 from ._nodes import (
     BowerActionInput,
     BowerActionWire,
@@ -72,7 +78,9 @@ __all__ = [
     "BowerActionInput",
     "BowerActionWire",
     "BowerConnectColumn",
+    "BowerConnectExisting",
     "BowerConnectInput",
+    "BowerConnectNew",
     "BowerConnectResponse",
     "BowerRunWire",
     "ExtractActionInput",

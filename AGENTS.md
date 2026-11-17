@@ -17,7 +17,7 @@ An open-source semantic listener. Tell it what to listen for; it picks out what 
 Three things stay pluggable across the codebase:
 - **Connectors** (Reddit, GitHub, GDocs, Slack, ...): yield typed `SourcePayload` subclasses from each source
 - **Engines** (any OpenAI-compatible `/v1` LLM: Ollama, vLLM, llama.cpp, LM Studio, OpenAI, ...; future keyword/other): BYO LLM that judges a `SourcePayload` for a semantic-filter action
-- **Action kinds** (semantic_filter, extract, webhook, bower, log, future keyword/Slack/email): the steps a Watch runs over each feed item -- three families: FILTER (gate the chain), EXTRACT (hydrate structured fields onto the run), DELIVER
+- **Action kinds** (semantic_filter, extract, webhook, bower, log, future keyword/Slack/email): the steps a Watch runs over each feed item, in three families: FILTER (gate the chain), EXTRACT (hydrate structured fields onto the run), DELIVER
 
 The product is **only** a listener: watches, judges, learns, notifies. It does NOT auto-reply, post back to sources, run workflows, or generate new reports/analysis as a product surface. Exporting your OWN activity is in scope though -- e.g. `magpie activity export` dumping an action's runs (incl. extracted fields) to CSV is observability over data you already produced, not report generation. Scope test: if a feature isn't listening / learning / notifying (or surfacing what it already did), it's out.
 
@@ -42,7 +42,7 @@ pyproject.toml + uv.lock    uv workspace root (one lock for all members)
 - **Resource names qualify by parent only when dependent.** A first-class entity, a hub other resources are addressed relative to, is named bare (`Watch`, `Feed`, `WatchAction`). A dependent record or component, meaningless apart from its parent, is qualified by it (a feed's items / sources, an action's activity / deliveries). This drives both REST route names ([apps/core/AGENTS.md](apps/core/AGENTS.md)) and CLI command nouns ([apps/cli/AGENTS.md](apps/cli/AGENTS.md)).
 - Source connectors are named for the variant: **`RedditSubRedditConnector`** (kind=`"reddit_subreddit"`). Future Reddit variants get their own connector + kind.
 - Payloads from sources are named for *what happened*: **`NewRedditPostPayload`** (`PAYLOAD_KIND="new_post"`).
-- An action's typed result is a per-kind model: **`SemanticFilterResult`** (`{passed, score, reason}`), `WebhookResult`, `LogResult`.
+- An action's typed result is a per-kind model: **`SemanticFilterResult`** (`{passed, score, reason}`), `WebhookResult`, `BowerResult`, `LogResult`.
 
 ## Cross-cutting code rules
 

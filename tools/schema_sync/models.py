@@ -39,7 +39,8 @@ from openmagpie_schema.feed import (
 from openmagpie_schema.telemetry import TelemetryState
 from openmagpie_schema.watch import (
     BowerActionInput,
-    BowerConnectInput,
+    BowerConnectExisting,
+    BowerConnectNew,
     BowerConnectResponse,
     ExtractActionInput,
     LogActionInput,
@@ -96,7 +97,8 @@ CONTRACT_MODELS = [
     WatchActionRunListResponse,
     WatchActionDeliveryView,
     WatchActionDeliveryListResponse,
-    BowerConnectInput,
+    BowerConnectExisting,
+    BowerConnectNew,
     BowerConnectResponse,
     # Backfill (re-run an action over the previous step's passes)
     BackfillPreview,
@@ -142,6 +144,8 @@ EXCLUDED_MODELS = frozenset(
         "WatchActionConfigBase",
         "EngineActionConfigBase",
         "DeliveryConfigBase",
+        "DeliveryCadenceFields",
+        "_BowerConnectCommon",
         "SourceFields",
         "_HackerNewsSpec",
         # Kind-independent field bases for the action-node + run unions; their
@@ -180,7 +184,8 @@ INPUT_MODELS = [
     LogActionInput,
     WebhookActionInput,
     BowerActionInput,
-    BowerConnectInput,
+    BowerConnectExisting,
+    BowerConnectNew,
     # The plugin fallback input member (+ its open PluginConfigBlob, pulled in by ref):
     # in the parity guard for symmetry with the built-in members above, so a future
     # alias / computed field on it can't slip the validation-vs-serialization check.

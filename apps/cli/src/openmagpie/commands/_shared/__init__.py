@@ -10,6 +10,7 @@ keeps it internal to the commands package, not a public surface.
   output    - detail tables + the table/NDJSON/`-o` emit helpers (read contract)
   choices   - client-side StrEnum filter validation
   authoring - `--format` + documented-template + dry-run-contract plumbing
+  secrets   - piped-stdin or hidden-prompt reads of a token or key
   timeflags - the export no-window default + client-side validation of the
               `--*-since`/`--*-until` flags (server resolves; see run_windows)
 """
@@ -54,6 +55,7 @@ from .output import (
     _print_detail,
     _print_next_page,
 )
+from .secrets import _read_secret
 from .timeflags import (
     _DEFAULT_WINDOW,
     WINDOW_DAY_HINT,
@@ -98,6 +100,7 @@ __all__ = [
     "_print_detail",
     "_print_next_page",
     "_read_file_or_abort",
+    "_read_secret",
     "_transpose_option",
     "_ts",
     "_union_error_lines",

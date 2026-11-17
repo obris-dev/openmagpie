@@ -53,7 +53,7 @@ class ReadTokenSecretTests(unittest.TestCase):
         return fake
 
     def test_reads_piped_stdin_stripped(self) -> None:
-        with mock.patch("openmagpie.commands.auth.sys.stdin", self._piped_stdin("  mgp_piped  \n")):
+        with mock.patch("openmagpie.commands._shared.secrets.sys.stdin", self._piped_stdin("  mgp_piped  \n")):
             self.assertEqual(_read_token_secret(), "mgp_piped")
 
     def test_env_is_not_a_source(self) -> None:
@@ -61,7 +61,7 @@ class ReadTokenSecretTests(unittest.TestCase):
         # set, so it's never read here. Stdin wins, env is ignored.
         with (
             mock.patch.dict(os.environ, {TOKEN_ENV_VAR: "mgp_env"}),
-            mock.patch("openmagpie.commands.auth.sys.stdin", self._piped_stdin("mgp_piped\n")),
+            mock.patch("openmagpie.commands._shared.secrets.sys.stdin", self._piped_stdin("mgp_piped\n")),
         ):
             self.assertEqual(_read_token_secret(), "mgp_piped")
 

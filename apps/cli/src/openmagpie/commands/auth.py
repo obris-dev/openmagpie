@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import getpass
 import os
-import sys
 import time
 import webbrowser
 from urllib.parse import urlparse
@@ -18,7 +16,7 @@ from ..api.auth import DeviceSessionCompleted, DeviceSessionExpired
 from ..constants import TOKEN_ENV_VAR, is_personal_access_token
 from ..context import app_config, app_ctx
 from ..http import ApiError, AuthError
-from ._shared import _abort_contract_mismatch, _unreachable_message
+from ._shared import _abort_contract_mismatch, _read_secret, _unreachable_message
 from .auth_token import token_app
 from .telemetry import notice_after_login
 
@@ -88,25 +86,13 @@ def _safe_authorize_url(authorize_url: str, server_url: str) -> bool:
 
 
 def _read_token_secret() -> str:
-    """Get the PAT without ever putting it in argv.
-
-    Piped stdin (`echo $TOK | magpie auth login --token`) -> a hidden
-    interactive prompt. Returns "" if neither is available. `MAGPIE_TOKEN`
-    is deliberately NOT a source here: when it's set, `login` refuses (it's
-    the ambient credential, used directly, no login needed).
+    """Get the PAT without ever putting it in argv: piped stdin
+    (`echo $TOK | magpie auth login --token`), else a hidden prompt. Returns
+    "" if neither gives one. `MAGPIE_TOKEN` is deliberately NOT a source
+    here: when it's set, `login` refuses (it's the ambient credential, used
+    directly, no login needed).
     """
-    if not sys.stdin.isatty():
-        # Piped / redirected: take the first line (no human to hint).
-        return sys.stdin.readline().strip()
-    # Interactive: tell the operator where a token comes from before prompting.
-    console.log(_TOKEN_PROMPT_HINT)
-    try:
-        return getpass.getpass("Personal access token: ").strip()
-    except (EOFError, KeyboardInterrupt):
-        # Ctrl-D / Ctrl-C at the prompt: exit cleanly (130 = 128 + SIGINT),
-        # matching the device-flow handler, not a raw traceback.
-        console.warn("\nCancelled.")
-        raise typer.Exit(code=130) from None
+    return _read_secret("Personal access token", hint=_TOKEN_PROMPT_HINT)
 
 
 def _login_with_token() -> None:

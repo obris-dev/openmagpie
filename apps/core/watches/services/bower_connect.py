@@ -1,7 +1,9 @@
-"""Connect a watch to OpenBower: create a custom signal whose columns are the
-watch's item fields, then add the `bower` action that delivers to it.
+"""Connect a watch to OpenBower: add the `bower` action that delivers to a
+custom signal, either a new one created with columns for the watch's item
+fields, or an existing one whose webhook URL is given (its columns read from
+the URL and matched to the item fields by label).
 
-The OpenBower API key is used for that one create and never stored, logged,
+The OpenBower API key is used for the one create and never stored, logged,
 or answered with: the action keeps only the signal's webhook URL, which
 OpenBower can rotate on its own.
 """
@@ -9,88 +11,47 @@ OpenBower can rotate on its own.
 from __future__ import annotations
 
 import logging
-import types
-import typing
-from dataclasses import dataclass
-from datetime import datetime
+from dataclasses import dataclass, replace
 from functools import cached_property
-from typing import Any
 
 import httpx
-from django.conf import settings
 from pydantic import BaseModel, ValidationError
 
-from common.ssrf import destination_block_reason
 from feeds.services import FeedService, SourceService
-from openmagpie_schema.watch import BowerConnectColumn, BowerConnectInput, build_watch_action_input
+from openmagpie_schema.watch import (
+    BowerConnectColumn,
+    BowerConnectInput,
+    BowerConnectNew,
+    build_watch_action_input,
+)
 from openmagpie_schema.watch_actions import BowerConfig
 from openmagpie_schema.watch_enums import WatchActionKind
 from sources.payload_registry import class_for_source
 from sources.payloads import SourcePayload
 from watches.models import Watch, WatchAction
-from watches.policy import PolicyError
+from watches.policy import PolicyError, enforce_digest_interval
 
+from . import _bower_http
+from ._bower_errors import (
+    ActionNotAdded,
+    BowerAnsweredOddly,
+    BowerConnectError,
+    BowerRefused,
+    BowerUnreachable,
+    NoItemFields,
+    is_outage,
+)
+from ._bower_fields import LEADING_FIELDS, ChosenColumns, DerivedColumn, choose, field_label, scalar_fields
+from ._bower_resolve import ResolvedSignal, existing, planned
 from .watches import WatchService
 from .watches._actions import ConcurrentChainError
 
 logger = logging.getLogger("watches")
 
-# OpenBower column types the derived columns use. Every value Magpie sends
-# must fit its column's type, or OpenBower refuses the whole push, so a
-# timestamp is `text` (OpenBower's `date` takes a bare YYYY-MM-DD) and only
-# an integer is a `number`.
-TEXT = "text"
-NUMBER = "number"
-URL = "url"
-
-# Item fields that are never a column: the row's own id rides as its
-# external_id, and the rest name the item's plumbing, not its content.
-_NOT_COLUMNS = frozenset({"kind", "external_id", "source", "parent_external_id"})
-# String fields holding a link, so OpenBower renders them as one.
-_URL_FIELDS = frozenset({"url", "external_url", "permalink", "feed_url"})
-# The fields every source shares lead, in this order; each source's own follow.
-_LEADING_FIELDS = ("title", "content", "url", "external_url", "author", "occurred_at")
-
 SIGNALS_PATH = "/v1/signals"
+# The most of OpenBower's refusal a connect relays to its caller.
+RELAYED_DETAIL_MAX_LENGTH = 300
 CUSTOM_SIGNAL_TYPE = "custom"
-
-
-class BowerConnectError(Exception):
-    """A connect that did not complete. `status` is the HTTP status the
-    endpoint answers with; the message is operator-facing and never carries
-    the key or a webhook URL."""
-
-    status = 400
-
-
-class NoItemFields(BowerConnectError):
-    pass
-
-
-class BowerUnreachable(BowerConnectError):
-    status = 502
-
-
-class BowerRefused(BowerConnectError):
-    """OpenBower answered the create with a refusal; the message carries its
-    detail (a wrong key, a label it refused)."""
-
-
-class BowerAnsweredOddly(BowerConnectError):
-    status = 502
-
-
-class ActionNotAdded(BowerConnectError):
-    """The signal exists in OpenBower but the action could not be added."""
-
-    status = 409
-
-
-@dataclass(frozen=True)
-class DerivedColumn:
-    field: str
-    label: str
-    type: str
 
 
 class _CreatedColumn(BaseModel):
@@ -113,10 +74,25 @@ class _CreatedSignal(BaseModel):
 
 
 @dataclass(frozen=True)
+class BowerPlan:
+    """What a connect would do: the signal (no id or keys yet when it would
+    be created), its columns, the chosen item fields no column takes, and
+    the ones the request left out."""
+
+    signal_id: str | None
+    signal_label: str
+    columns: list[BowerConnectColumn]
+    unmatched_fields: list[str]
+    left_out_fields: list[str]
+
+
+@dataclass(frozen=True)
 class BowerConnection:
     signal_id: str
     signal_label: str
     columns: list[BowerConnectColumn]
+    unmatched_fields: list[str]
+    left_out_fields: list[str]
     action: WatchAction
 
 
@@ -140,73 +116,115 @@ class BowerConnectService:
         """One column per scalar item field the watch's sources produce: the
         fields every source shares, then each source kind's own."""
         kinds: list[str] = []
-        for feed_id in self.watches.feed_ids(watch):
-            feed = self.feeds.get(feed_id)
+        feed_ids = self.watches.feed_ids(watch)
+        # A deleted feed's subscription can outlive it (the trigger skips
+        # it too), so only the feeds still there give fields.
+        feeds = self.feeds.get_many(feed_ids)
+        for feed in feeds.values():
             for source in self.sources.list(feed):
                 if source.kind not in kinds:
                     kinds.append(source.kind)
         if not kinds:
             raise NoItemFields("the watch's feeds have no sources, so there are no item fields to send")
-        fields: dict[str, str] = _scalar_fields(SourcePayload)
+        fields: dict[str, str] = scalar_fields(SourcePayload)
         for kind in kinds:
             payload = class_for_source(kind)
             if payload is not None:
-                for name, column_type in _scalar_fields(payload).items():
+                for name, column_type in scalar_fields(payload).items():
                     fields.setdefault(name, column_type)
-        names = [name for name in _LEADING_FIELDS if name in fields]
+        names = [name for name in LEADING_FIELDS if name in fields]
         names += [name for name in fields if name not in names]
-        return [DerivedColumn(field=name, label=_label(name), type=fields[name]) for name in names]
+        return [DerivedColumn(field=name, label=field_label(name), type=fields[name]) for name in names]
 
-    def preview(self, watch: Watch, request: BowerConnectInput) -> tuple[str, list[BowerConnectColumn]]:
-        """What a connect would create, without calling OpenBower: the
-        signal's label and its columns (no keys yet)."""
-        columns = [
-            BowerConnectColumn(label=column.label, type=column.type, field=column.field)
-            for column in self.columns_for(watch)
-        ]
-        return request.label or watch.name, columns
+    def chosen_for(self, watch: Watch, request: BowerConnectInput) -> ChosenColumns:
+        """The columns the request sends: the fields it names, or every one.
+        Also where a preview and a connect refuse the cadence, before any
+        call to OpenBower, so a bad one never leaves a created signal."""
+        try:
+            enforce_digest_interval(request)
+        except PolicyError as exc:
+            raise BowerConnectError(str(exc)) from exc
+        return choose(self.columns_for(watch), request.fields)
+
+    def preview(self, watch: Watch, request: BowerConnectInput) -> BowerPlan:
+        """What a connect would do, adding nothing. A create calls OpenBower
+        not at all; an existing signal's columns are read from its URL."""
+        chosen = self.chosen_for(watch, request)
+        if isinstance(request, BowerConnectNew):
+            signal = planned(request.label or watch.name, chosen)
+        else:
+            signal = existing(request, chosen)
+        return BowerPlan(
+            signal_id=signal.signal_id,
+            signal_label=signal.label,
+            columns=signal.columns,
+            unmatched_fields=signal.unmatched_fields,
+            left_out_fields=chosen.left_out,
+        )
 
     def connect(self, watch: Watch, request: BowerConnectInput) -> BowerConnection:
-        columns = self.columns_for(watch)
-        created = self._create_signal(request, label=request.label or watch.name, columns=columns)
-        by_label = {column.label: column for column in created.sheet.columns}
-        fields: dict[str, str] = {}
-        answered: list[BowerConnectColumn] = []
-        for column in columns:
-            made = by_label.get(column.label)
-            if made is None:
-                raise BowerAnsweredOddly(f"OpenBower created the signal without a {column.label!r} column")
-            fields[made.key] = column.field
-            answered.append(BowerConnectColumn(key=made.key, label=made.label, type=made.type, field=column.field))
-        config = BowerConfig(
+        chosen = self.chosen_for(watch, request)
+        if isinstance(request, BowerConnectNew):
+            signal = self._created(request, label=request.label or watch.name, chosen=chosen)
+        else:
+            signal = existing(request, chosen)
+        action = self._add(watch, request, signal)
+        return BowerConnection(
+            signal_id=signal.signal_id or "",
+            signal_label=signal.label,
+            columns=signal.columns,
+            unmatched_fields=signal.unmatched_fields,
+            left_out_fields=chosen.left_out,
+            action=action,
+        )
+
+    def _created(self, request: BowerConnectNew, *, label: str, chosen: ChosenColumns) -> ResolvedSignal:
+        """A new signal with a column per chosen field, its keys read back."""
+        created = self._create_signal(request, label=label, columns=chosen.columns)
+        signal = ResolvedSignal(
+            signal_id=created.sheet.id,
+            label=created.sheet.label,
             url=created.webhook_url,
-            fields=fields,
+            columns=[],
+            column_map={},
+            unmatched_fields=[],
+            created=True,
+        )
+        try:
+            columns, column_map = _created_columns(created, chosen.columns)
+        except BowerAnsweredOddly as exc:
+            raise BowerAnsweredOddly(signal.not_added(str(exc))) from exc
+        return replace(signal, columns=columns, column_map=column_map)
+
+    def _add(self, watch: Watch, request: BowerConnectInput, signal: ResolvedSignal) -> WatchAction:
+        """The one step both routes share: the bower action, delivering to it."""
+        try:
+            return self._add_action(watch, request, url=signal.url, column_map=signal.column_map)
+        except (PolicyError, ConcurrentChainError) as exc:
+            logger.warning("bower connect: signal %s, action not added: %s", signal.signal_id, exc)
+            raise ActionNotAdded(signal.not_added(str(exc))) from exc
+        except ValidationError as exc:
+            # The messages only: the error's own text quotes the config, URL included.
+            reasons = "; ".join(error["msg"] for error in exc.errors())
+            logger.warning("bower connect: signal %s, action not added: %s", signal.signal_id, reasons)
+            raise ActionNotAdded(signal.not_added(reasons)) from exc
+
+    def _add_action(
+        self, watch: Watch, request: BowerConnectInput, *, url: str, column_map: dict[str, str]
+    ) -> WatchAction:
+        config = BowerConfig(
+            url=url,
+            columns=column_map,
             delivery=request.delivery,
             digest_interval_seconds=request.digest_interval_seconds,
         )
-        spec = build_watch_action_input(kind=WatchActionKind.BOWER.value, config=config.model_dump(mode="json"))
-        try:
-            action = self.watches.action_svc.add(path_id=watch.initial_path_id, action=spec)
-        except (PolicyError, ConcurrentChainError, ValidationError) as exc:
-            logger.warning("bower connect: signal %s created, action not added: %s", created.sheet.id, exc)
-            raise ActionNotAdded(
-                f"The signal {created.sheet.label!r} was created in OpenBower, but the action was not added "
-                f"({exc}). Copy its webhook URL from OpenBower and add a bower action to the watch."
-            ) from exc
-        return BowerConnection(
-            signal_id=created.sheet.id, signal_label=created.sheet.label, columns=answered, action=action
-        )
+        dumped = config.model_dump(mode="json")
+        spec = build_watch_action_input(kind=WatchActionKind.BOWER.value, config=dumped)
+        return self.watches.action_svc.add(path_id=watch.initial_path_id, action=spec, rank=request.rank)
 
-    def _create_signal(self, request: BowerConnectInput, *, label: str, columns: list[DerivedColumn]) -> _CreatedSignal:
+    def _create_signal(self, request: BowerConnectNew, *, label: str, columns: list[DerivedColumn]) -> _CreatedSignal:
         url = request.api_url.rstrip("/") + SIGNALS_PATH
-        reason = destination_block_reason(
-            url,
-            require_https=settings.WEBHOOK_REQUIRE_HTTPS,
-            block_private_ips=settings.WEBHOOK_BLOCK_PRIVATE_IPS,
-            resolve_dns=True,
-        )
-        if reason:
-            raise BowerConnectError(f"api_url rejected: {reason}")
+        _bower_http.check(url, field="api_url")
         body = {
             "type": CUSTOM_SIGNAL_TYPE,
             "label": label,
@@ -214,68 +232,47 @@ class BowerConnectService:
         }
         headers = {"Authorization": f"Bearer {request.api_key}"}
         try:
-            response = httpx.post(url, json=body, headers=headers, timeout=settings.WEBHOOK_TIMEOUT_SECONDS)
+            response = _bower_http.post(url, field="api_url", json=body, headers=headers)
         except httpx.HTTPError as exc:
             logger.warning("bower connect: create failed %s", type(exc).__name__)
             raise BowerUnreachable(f"OpenBower did not answer at {request.api_url} ({type(exc).__name__})") from exc
-        if response.status_code != httpx.codes.CREATED:
-            raise BowerRefused(f"OpenBower refused the signal ({response.status_code}): {_detail(response)}")
+        status = response.status_code
+        if is_outage(status):
+            raise BowerUnreachable(f"OpenBower could not create the signal now ({status}); try again later")
+        if status != httpx.codes.CREATED:
+            raise BowerRefused(f"OpenBower refused the signal ({status}): {_detail(response)}")
         try:
             return _CreatedSignal.model_validate(response.json())
         except (ValueError, ValidationError) as exc:
             raise BowerAnsweredOddly("OpenBower's answer to the create was not a signal") from exc
 
 
-def _scalar_fields(payload: type[BaseModel]) -> dict[str, str]:
-    """Each field a payload class declares that a cell can hold, with its
-    column type; lists, objects, and the plumbing fields are left out."""
-    fields: dict[str, str] = {}
-    for name, info in payload.model_fields.items():
-        if name in _NOT_COLUMNS:
-            continue
-        column_type = _column_type(name, info.annotation)
-        if column_type is not None:
-            fields[name] = column_type
-    return fields
-
-
-def _column_type(name: str, annotation: Any) -> str | None:
-    base = _without_none(annotation)
-    if base is bool:
-        return TEXT
-    if base is int:
-        return NUMBER
-    if base is datetime:
-        return TEXT
-    if base is str:
-        return URL if name in _URL_FIELDS else TEXT
-    return None
-
-
-def _without_none(annotation: Any) -> Any:
-    """`X | None` -> `X`; anything else unchanged."""
-    if isinstance(annotation, types.UnionType) or typing.get_origin(annotation) is typing.Union:
-        members = [arg for arg in typing.get_args(annotation) if arg is not type(None)]
-        if len(members) == 1:
-            return members[0]
-    return annotation
-
-
-def _label(field: str) -> str:
-    """`external_url` -> `External url`."""
-    words = field.replace("_", " ")
-    return words[:1].upper() + words[1:]
+def _created_columns(
+    created: _CreatedSignal, derived: list[DerivedColumn]
+) -> tuple[list[BowerConnectColumn], dict[str, str]]:
+    """The created signal's columns, keyed back to the item fields they were
+    made for (by label), and the action's column key -> field map."""
+    by_label = {column.label: column for column in created.sheet.columns}
+    column_map: dict[str, str] = {}
+    answered: list[BowerConnectColumn] = []
+    for column in derived:
+        made = by_label.get(column.label)
+        if made is None:
+            raise BowerAnsweredOddly(f"OpenBower created the signal without a {column.label!r} column")
+        column_map[made.key] = column.field
+        answered.append(BowerConnectColumn(key=made.key, label=made.label, type=made.type, field=column.field))
+    return answered, column_map
 
 
 def _detail(response: httpx.Response) -> str:
-    """OpenBower's own words for a refusal, when its body carries them."""
+    """OpenBower's own words for a refusal: its `detail` or `error` string,
+    cut to a bound. Nothing else of the body is relayed, so the answer never
+    echoes whatever an address that is not OpenBower sent back."""
     try:
         body = response.json()
     except ValueError:
         return response.reason_phrase
-    if isinstance(body, dict):
-        detail = body.get("detail") or body.get("error")
-        if isinstance(detail, str) and detail:
-            return detail
-        return str(body)
+    detail = body.get("detail") or body.get("error") if isinstance(body, dict) else None
+    if isinstance(detail, str) and detail:
+        return detail[:RELAYED_DETAIL_MAX_LENGTH]
     return response.reason_phrase

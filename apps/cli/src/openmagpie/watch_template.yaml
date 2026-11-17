@@ -2,7 +2,7 @@
 #
 # A watch subscribes to one or more feeds and runs an ordered chain of
 # actions over each new item. v1 chains start with a semantic_filter (an
-# LLM relevance gate) followed by delivery actions (webhook, log).
+# LLM relevance gate) followed by delivery actions (webhook, bower, log).
 # Save and run:
 #   magpie watch create -f watch.yaml
 #
@@ -39,3 +39,9 @@ actions:
   #     instructions: ""               # optional extra steering for the whole extraction
   #     fetch_external_content: true   # also read the item's linked article (default true)
   #     # engine: {kind: "", model: ""}   # optional; empty = server default
+
+  # Optional delivery, bower: send each passing item as a row to an
+  # OpenBower custom signal. Add it after creating the watch, so its columns
+  # are matched to the item fields for you:
+  #   magpie watch connect-bower <watch_id> --webhook-url
+  # (`magpie watch action template` shows the hand-written form.)

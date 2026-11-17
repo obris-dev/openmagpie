@@ -4,7 +4,12 @@ import httpx
 import ulid
 from django.test import SimpleTestCase
 
-from openmagpie_schema.watch_actions import BOWER_MAX_ROWS_PER_PUSH, BowerConfig
+from openmagpie_schema.watch_actions import (
+    BOWER_MAX_PUSH_BYTES,
+    BOWER_MAX_ROWS_PER_PUSH,
+    BOWER_REFUSAL_MAX_LENGTH,
+    BowerConfig,
+)
 from openmagpie_schema.watch_actions._secrets import REDACTED
 from openmagpie_schema.watch_enums import DeliveryCadence, WatchActionRunState
 from watches import run_messages
@@ -14,7 +19,7 @@ from watches.models import WatchAction
 from watches.policy import PolicyError, enforce_action_policy
 
 URL = "https://api.example.io/v1/signals/01ABC/ingest/tok_secret"
-FIELDS = {"title": "title", "subreddit": "subreddit", "posted_at": "occurred_at", "points": "points"}
+COLUMNS = {"title": "title", "subreddit": "subreddit", "posted_at": "occurred_at", "points": "points"}
 
 
 def _item(external_id: str, **data: object) -> ActionItem:
@@ -27,7 +32,7 @@ def _item(external_id: str, **data: object) -> ActionItem:
 
 
 def _config(**overrides: object) -> BowerConfig:
-    return BowerConfig.model_validate({"url": URL, "fields": FIELDS, **overrides})
+    return BowerConfig.model_validate({"url": URL, "columns": COLUMNS, **overrides})
 
 
 class BowerPushTests(SimpleTestCase):
@@ -45,7 +50,7 @@ class BowerPushTests(SimpleTestCase):
             categories=["a", "b"],
             content="not mapped",
         )
-        config = _config(fields={**FIELDS, "tags": "categories", "missing": "nope"})
+        config = _config(columns={**COLUMNS, "tags": "categories", "missing": "nope"})
         push = build_push("act_1", config, [item])
         self.assertEqual(len(push.rows), 1)
         self.assertEqual(push.rows[0].external_id, "reddit_subreddit:abc")
@@ -70,12 +75,18 @@ class BowerPushTests(SimpleTestCase):
         with self.assertRaises(ValueError):
             build_push("act_1", _config(), items)
 
+    def test_a_digest_slice_is_never_larger_than_one_push(self) -> None:
+        # FAILS if the flush could gather a slice build_push refuses.
+        self.assertEqual(BowerAction.max_batch_items, BOWER_MAX_ROWS_PER_PUSH)
+        # FAILS if a slice could outgrow the push size OpenBower takes.
+        self.assertEqual(BowerAction.max_batch_bytes, BOWER_MAX_PUSH_BYTES)
+
 
 class BowerRunTests(SimpleTestCase):
     """The run: the POST it makes and how OpenBower's answer settles it."""
 
     def _run(self, status: int, body: object = None) -> tuple[ActionResult, dict]:
-        action = WatchAction(id=ulid.ulid(), kind="bower", config={"url": URL, "fields": FIELDS})
+        action = WatchAction(id=ulid.ulid(), kind="bower", config={"url": URL, "columns": COLUMNS})
         context = ActionContext(watch_id="w", watch_name="n", delivery=DeliveryCadence.INSTANT)
         captured: dict = {}
 
@@ -98,20 +109,36 @@ class BowerRunTests(SimpleTestCase):
         self.assertEqual(set(sent["json"]), {"request_id", "rows"})
         self.assertEqual(sent["json"]["rows"], [{"external_id": "reddit_subreddit:abc", "cells": {"title": "T"}}])
         self.assertEqual(result.state, WatchActionRunState.SUCCEEDED)
-        self.assertEqual(result.result, {"http_status": 202, "accepted": 1})
+        self.assertEqual(result.result, {"http_status": 202, "accepted": 1, "error": "", "detail": ""})
         assert isinstance(result, OutboundActionResult)
         self.assertEqual(result.outbound.item_count, 1)
         self.assertEqual(result.outbound.request_payload, sent["json"])
 
     def test_a_refusal_errors_and_a_server_failure_retries(self) -> None:
-        refused, _ = self._run(400, {"error": "unknown_columns"})
+        refused, _ = self._run(400, {"error": "ingest_invalid", "detail": "row 0: unknown column 'c_x'"})
         self.assertEqual(refused.state, WatchActionRunState.ERRORED)
-        self.assertEqual(refused.error, run_messages.WEBHOOK_REJECTED)
+        # FAILS if a bower refusal reads as a webhook's, or OpenBower's reason is dropped.
+        self.assertEqual(refused.error, run_messages.BOWER_REJECTED)
+        self.assertEqual(refused.result["error"], "ingest_invalid")
+        self.assertEqual(refused.result["detail"], "row 0: unknown column 'c_x'")
         gone, _ = self._run(404)
         self.assertEqual(gone.state, WatchActionRunState.ERRORED)
+        # FAILS if a rotated URL is not told apart from refused rows.
+        self.assertEqual(gone.error, run_messages.BOWER_URL_GONE)
         down, _ = self._run(503)
         self.assertEqual(down.state, WatchActionRunState.FAILED)
         self.assertEqual(down.error, run_messages.TRANSIENT)
+
+    def test_a_long_refusal_is_cut_to_its_bound(self) -> None:
+        refused, _ = self._run(400, {"error": "e", "detail": "x" * (BOWER_REFUSAL_MAX_LENGTH + 50)})
+        self.assertEqual(len(refused.result["detail"]), BOWER_REFUSAL_MAX_LENGTH)
+
+    def test_a_blocked_destination_uses_the_bower_message(self) -> None:
+        action = WatchAction(id=ulid.ulid(), kind="bower", config={"url": URL, "columns": COLUMNS})
+        context = ActionContext(watch_id="w", watch_name="n", delivery=DeliveryCadence.INSTANT)
+        with mock.patch("watches.actions._http_delivery.destination_block_reason", return_value="private address"):
+            result = BowerAction().run(action, items=[_item("abc", title="T")], context=context)
+        self.assertEqual(result.error, run_messages.BOWER_BLOCKED)
 
 
 class BowerConfigTests(SimpleTestCase):
@@ -124,11 +151,11 @@ class BowerConfigTests(SimpleTestCase):
         shown = prior.redacted_dump()
         self.assertEqual(shown["url"], f"https://api.example.io/{REDACTED}")
         self.assertNotIn("tok_secret", str(shown))
-        edited = BowerConfig.model_validate({**shown, "fields": {"title": "title"}})
+        edited = BowerConfig.model_validate({**shown, "columns": {"title": "title"}})
         self.assertTrue(edited.has_masked_secret())
         merged = edited.merge_preserving(prior)
         self.assertEqual(merged.url, URL)
-        self.assertEqual(merged.fields, {"title": "title"})
+        self.assertEqual(merged.columns, {"title": "title"})
 
     def test_a_masked_url_with_no_bower_prior_is_kept_as_sent(self) -> None:
         masked = _config(url=f"https://api.example.io/{REDACTED}")
@@ -136,7 +163,7 @@ class BowerConfigTests(SimpleTestCase):
 
     def test_an_empty_field_map_is_refused(self) -> None:
         with self.assertRaises(ValueError):
-            _config(fields={})
+            _config(columns={})
 
     def test_the_write_time_url_policy_applies(self) -> None:
         with self.settings(WEBHOOK_BLOCK_PRIVATE_IPS=True), self.assertRaises(PolicyError):

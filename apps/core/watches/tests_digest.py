@@ -229,6 +229,30 @@ class DigestDeliveryTests(TestCase):
         window.refresh_from_db()
         self.assertIsNone(window.close_at)  # fully drained -> closed
 
+    @override_settings(DIGEST_MAX_BATCH_ITEMS=5)
+    def test_a_kind_with_a_smaller_limit_drains_in_its_own_slices(self) -> None:
+        # A kind's smaller max_batch_items sizes each run; the window still drains in one flush.
+        now = timezone.now()
+        _, a1, window = self._digest_window_with_items(5, now=now)
+        later = window.close_at + timedelta(seconds=1)
+        sizes: list[int] = []
+
+        def record(action, *, items, context):
+            sizes.append(len(items))
+            return ActionResult(state=WatchActionRunState.SUCCEEDED)
+
+        with (
+            mock.patch.object(LogAction, "max_batch_items", 2, create=True),
+            mock.patch.object(LogAction, "run", side_effect=record),
+        ):
+            self._flush_due(later)
+
+        # FAILS if the slice ignores the kind's limit (one run of 5).
+        self.assertEqual(sizes, [2, 2, 1])
+        self.assertEqual(self._count(str(a1.id), "succeeded"), 5)
+        window.refresh_from_db()
+        self.assertIsNone(window.close_at)
+
     @override_settings(DIGEST_MAX_BATCH_ITEMS=1)
     def test_failing_run_does_not_block_fresh_run(self) -> None:
         # A run that already failed a transient flush (attempts>0) must not

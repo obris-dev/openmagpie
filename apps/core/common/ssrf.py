@@ -5,7 +5,7 @@ unsafe to call under the given flags, or None if it's allowed. Flags
 (not settings) are passed in so the helper is pure and testable ; the
 caller reads the relevant settings.
 
-Used by the webhook action at TWO seams: write-time (`watches.policy`,
+Used by the URL-bound delivery kinds (webhook, bower) at TWO seams: write-time (`watches.policy`,
 `resolve_dns=False` ; catch an operator pasting a private IP literal) and
 send-time (the impl, `resolve_dns=True` ; re-resolve the hostname so a
 public name that points at an internal address, or DNS that changed since

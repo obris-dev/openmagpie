@@ -93,7 +93,7 @@ class PluginActionWire(WatchActionWireFields):
         return reject_builtin_kind(v, _BUILTIN_KINDS)
 
 
-# One action node on the wire, keyed by `kind`: the four built-ins as a
+# One action node on the wire, keyed by `kind`: the built-ins as a
 # discriminated union, then a left-to-right fallthrough to the plugin member for
 # any other kind. A built-in tag always takes its typed branch; a built-in whose
 # config is malformed fails BOTH branches (the plugin member rejects built-in
@@ -200,7 +200,7 @@ class PluginActionInput(WatchActionInputFields):
         return reject_builtin_kind(v, _BUILTIN_KINDS)
 
 
-# One action on a create / edit / add-action request, keyed by `kind`: the four
+# One action on a create / edit / add-action request, keyed by `kind`: the
 # built-ins as a discriminated union, then a left-to-right fallthrough to the
 # plugin member (same discipline as WatchActionWire). The persisted blob stays the
 # pure config (no `kind` nested inside).
@@ -229,7 +229,7 @@ for _name, _union in (("WatchActionWire", _BuiltinWatchActionWire), ("WatchActio
 # another (the config registry keys on CONFIG_KIND). Core's BuiltinActionKindInvariantTests
 # catches this drift downstream, but pinning it here makes the package self-defending,
 # matching the source side. Derive the members from the union (like configs.py's pin),
-# NOT a hand-written tuple: a fifth built-in added to the union would otherwise pass the
+# NOT a hand-written tuple: a built-in added to the union would otherwise pass the
 # kind-set guard above but silently skip this pin, half-recreating the drift it closes.
 for _member in get_args(get_args(_BuiltinWatchActionInput)[0]):
     _literal = get_args(_member.model_fields["kind"].annotation)

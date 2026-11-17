@@ -130,8 +130,9 @@ class WatchApi:
         self._http.delete(routes.actions.detail(action_id))
 
     def connect_bower(self, watch_id: str, body: BowerConnectInput, *, dry_run: bool = False) -> BowerConnectResponse:
-        """Create an OpenBower custom signal for the watch and add the bower
-        action delivering to it; a dry run names what it would create."""
+        """Add the bower action delivering to an OpenBower custom signal, an
+        existing one or a new one (by the body's type); a dry run names what
+        it would connect or create."""
         params = {"dry_run": "true"} if dry_run else None
         raw = self._http.post(
             routes.watches.connect_bower(watch_id), json_body=body.model_dump(mode="json"), params=params

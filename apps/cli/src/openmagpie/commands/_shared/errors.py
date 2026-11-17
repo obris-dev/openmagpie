@@ -30,6 +30,10 @@ def _abort_contract_mismatch() -> NoReturn:
     raise typer.Exit(code=1) from None
 
 
+# What pydantic puts before a validator's own message.
+_VALUE_ERROR_PREFIX = "Value error, "
+
+
 def _union_error_lines(exc: ValidationError) -> list[tuple[str, str]]:
     """The cleaned (path, message) lines of a union ValidationError.
 
@@ -38,8 +42,14 @@ def _union_error_lines(exc: ValidationError) -> list[tuple[str, str]]:
     `tagged-union[...]` / plugin-member loc segments, so each path reads as the
     operator's own field (`semantic_filter.config.instructions`, `sources.0.spec.rss.url`)
     rather than union machinery. Kind-agnostic (handles the built-in AND plugin branches).
+    Pydantic's "Value error, " prefix (on a validator's own message) is dropped.
     Pure, so it's unit-testable; `_abort_union_validation_error` prints these."""
-    return [(".".join(str(p) for p in err["loc"]) or "_", err["msg"]) for err in clean_union_errors(exc.errors())]
+    lines: list[tuple[str, str]] = []
+    for err in clean_union_errors(exc.errors()):
+        path = ".".join(str(p) for p in err["loc"]) or "_"
+        message = err["msg"].removeprefix(_VALUE_ERROR_PREFIX)
+        lines.append((path, message))
+    return lines
 
 
 def _abort_union_validation_error(exc: ValidationError, *, header: str) -> NoReturn:

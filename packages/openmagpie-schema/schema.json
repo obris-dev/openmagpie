@@ -366,8 +366,16 @@
       "type": "object"
     },
     "BowerConfig": {
-      "description": "Config for a WatchAction with kind == 'bower'.\n\nPOSTs items to `url`, a custom signal's webhook URL, as rows. `fields`\nmaps each of the signal's field keys to the item field that fills it\n(`{\"subreddit\": \"subreddit\"}`); an item lacking a field, or holding a list\nor object there, leaves that cell out. `delivery` /\n`digest_interval_seconds` (from the base) pick instant vs batched.\n\nSecret-bearing: the URL path holds the signal's token, so `redacted_dump`\nmasks it and `merge_preserving` carries it forward when an edit leaves it\nmasked.",
+      "description": "Config for a WatchAction with kind == 'bower'.\n\nPOSTs items to `url`, a custom signal's webhook URL, as rows. `columns`\nmaps each of the signal's column keys to the item field that fills it\n(`{\"c_subreddit\": \"subreddit\"}`); an item lacking a field, or holding a list\nor object there, leaves that cell out. `delivery` /\n`digest_interval_seconds` (from the base) pick instant vs batched.\n\nSecret-bearing: the URL path holds the signal's token, so `redacted_dump`\nmasks it and `merge_preserving` carries it forward when an edit leaves it\nmasked.",
       "properties": {
+        "columns": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "minProperties": 1,
+          "title": "Columns",
+          "type": "object"
+        },
         "delivery": {
           "$ref": "#/$defs/DeliveryCadence",
           "default": "instant"
@@ -378,14 +386,6 @@
           "title": "Digest Interval Seconds",
           "type": "integer"
         },
-        "fields": {
-          "additionalProperties": {
-            "type": "string"
-          },
-          "minProperties": 1,
-          "title": "Fields",
-          "type": "object"
-        },
         "url": {
           "title": "Url",
           "type": "string"
@@ -393,13 +393,13 @@
       },
       "required": [
         "url",
-        "fields"
+        "columns"
       ],
       "title": "BowerConfig",
       "type": "object"
     },
     "BowerConnectColumn": {
-      "description": "One column of the signal: its label, type, and the item field that\nfills it, and its OpenBower key once created (empty on a dry run).",
+      "description": "One column of the signal: its label, type, the item field that fills\nit (empty for an existing signal's column no field matches, left blank),\nand its OpenBower key (empty on a dry run that creates).",
       "properties": {
         "field": {
           "title": "Field",
@@ -427,8 +427,52 @@
       "title": "BowerConnectColumn",
       "type": "object"
     },
-    "BowerConnectInput": {
-      "description": "`api_key` is an OpenBower API key, used for the one create and never\nstored. `label` names the signal (empty = the watch's name). The cadence\nfields become the added action's.",
+    "BowerConnectExisting": {
+      "description": "Connect an existing signal by its webhook URL as OpenBower shows it:\nits columns are read from the URL and matched to the item fields.",
+      "properties": {
+        "delivery": {
+          "$ref": "#/$defs/DeliveryCadence",
+          "default": "instant"
+        },
+        "digest_interval_seconds": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Digest Interval Seconds",
+          "type": "integer"
+        },
+        "fields": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Fields",
+          "type": "array"
+        },
+        "rank": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rank"
+        },
+        "webhook_url": {
+          "title": "Webhook Url",
+          "type": "string"
+        }
+      },
+      "required": [
+        "webhook_url"
+      ],
+      "title": "BowerConnectExisting",
+      "type": "object"
+    },
+    "BowerConnectNew": {
+      "description": "Create a new signal through OpenBower's API at `api_url`, with an API\nkey used for the one create and never stored, named `label` (empty =\nthe watch's name).",
       "properties": {
         "api_key": {
           "minLength": 1,
@@ -449,21 +493,41 @@
           "title": "Digest Interval Seconds",
           "type": "integer"
         },
+        "fields": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Fields",
+          "type": "array"
+        },
         "label": {
           "default": "",
           "title": "Label",
           "type": "string"
+        },
+        "rank": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rank"
         }
       },
       "required": [
         "api_url",
         "api_key"
       ],
-      "title": "BowerConnectInput",
+      "title": "BowerConnectNew",
       "type": "object"
     },
     "BowerConnectResponse": {
-      "description": "The connect's answer (real and `?dry_run=true`). A dry run calls\nOpenBower not at all: it names the signal and the columns a connect would\ncreate, with no `signal_id` and no `action`. A real one carries the\ncreated signal and the action added to the watch (its URL masked).",
+      "description": "The connect's answer (real and `?dry_run=true`). A dry run adds\nnothing: one that creates names the signal and the columns it would\nmake, calling OpenBower not at all; one for an existing signal reads its\ncolumns and shows how the fields match. A real one carries the action\nadded to the watch (its URL masked). `signal_label` is empty for an\nexisting signal (its webhook URL does not name it); `unmatched_fields`\nare the chosen item fields no column takes, and `left_out_fields` the\nones `fields` left out.",
       "properties": {
         "action": {
           "anyOf": [
@@ -517,6 +581,13 @@
           "title": "Dry Run",
           "type": "boolean"
         },
+        "left_out_fields": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Left Out Fields",
+          "type": "array"
+        },
         "signal_id": {
           "anyOf": [
             {
@@ -532,6 +603,13 @@
         "signal_label": {
           "title": "Signal Label",
           "type": "string"
+        },
+        "unmatched_fields": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Unmatched Fields",
+          "type": "array"
         }
       },
       "required": [
@@ -542,7 +620,7 @@
       "type": "object"
     },
     "BowerResult": {
-      "description": "Result a bower run writes to WatchActionRun.result: the HTTP status of\nthe push that succeeded and how many rows OpenBower accepted (fewer than\nsent when it already held some, by external_id).",
+      "description": "Result a bower run writes to WatchActionRun.result: the HTTP status of\nthe push and how many rows OpenBower accepted (fewer than sent when it\nalready held some, by external_id). A refused push keeps OpenBower's\n`error` code and `detail` (which column, which row), cut to\nBOWER_REFUSAL_MAX_LENGTH, so the run says why.",
       "properties": {
         "accepted": {
           "anyOf": [
@@ -555,6 +633,18 @@
           ],
           "default": null,
           "title": "Accepted"
+        },
+        "detail": {
+          "default": "",
+          "maxLength": 500,
+          "title": "Detail",
+          "type": "string"
+        },
+        "error": {
+          "default": "",
+          "maxLength": 500,
+          "title": "Error",
+          "type": "string"
         },
         "http_status": {
           "title": "Http Status",
@@ -693,7 +783,7 @@
       "type": "object"
     },
     "DeliveryCadence": {
-      "description": "Cadence of a DELIVERY action (webhook / log): emit per item, or\nbatch a window into one emission. A field in the action's config, not\na separate kind.",
+      "description": "Cadence of a DELIVERY action (webhook / bower / log): emit per item, or\nbatch a window into one emission. A field in the action's config, not\na separate kind.",
       "enum": [
         "instant",
         "digest"
@@ -4726,7 +4816,10 @@
       "$ref": "#/$defs/WatchActionDeliveryListResponse"
     },
     {
-      "$ref": "#/$defs/BowerConnectInput"
+      "$ref": "#/$defs/BowerConnectExisting"
+    },
+    {
+      "$ref": "#/$defs/BowerConnectNew"
     },
     {
       "$ref": "#/$defs/BowerConnectResponse"

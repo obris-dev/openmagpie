@@ -26,7 +26,7 @@ from watches import run_messages
 from watches.models import WatchAction
 
 from ._config import load_typed
-from ._http_delivery import HttpDelivery, deliver
+from ._http_delivery import DeliveryMessages, HttpDelivery, deliver
 from .protocol import (
     Action,
     ActionContext,
@@ -58,8 +58,16 @@ class WebhookAction(Action):
             headers=dict(config.headers),
             body=payload.model_dump(mode="json"),
             item_count=len(items),
+            messages=_MESSAGES,
         )
         return deliver(delivery, _result_for)
+
+
+_MESSAGES = DeliveryMessages(
+    blocked=run_messages.WEBHOOK_BLOCKED,
+    redirect=run_messages.WEBHOOK_REDIRECT,
+    rejected=lambda _status: run_messages.WEBHOOK_REJECTED,
+)
 
 
 def _result_for(http_status: int, _response: httpx.Response | None) -> dict[str, Any]:
