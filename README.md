@@ -30,7 +30,7 @@
 
 You scan X/Twitter, YouTube, Reddit, Hacker News, and a few RSS feeds looking for someone talking about your product, hitting a problem it solves, or asking a question you can answer well. Getting there while the conversation is happening is how you build a brand and a community around what you know: a mention answered the day it's posted beats one found in next month's report. OpenMagpie watches the threads for you so you spend your time on engagement instead of searching.
 
-You curate sources into a feed, write a natural-language description of what's relevant (for example, "someone frustrated with manual social monitoring and asking for alternatives"), and a local LLM run via any OpenAI-compatible runner (e.g. Ollama, vLLM, LM Studio) scores each new post against it. Matches go to a webhook, an [OpenBower](https://openbower.ai) signal, or your logs (more integrations coming); everything else is dropped. You read the hits instead of the firehose.
+You curate sources into a feed, write a natural-language description of what's relevant (for example, "someone frustrated with manual social monitoring and asking for alternatives"), and a local LLM run via any OpenAI-compatible runner (e.g. Ollama, vLLM, LM Studio) scores each new post against it. Matches go to a webhook, an [OpenBower](https://github.com/obris-dev/openbower) signal, or your logs (more integrations coming); everything else is dropped. You read the hits instead of the firehose.
 
 ## Where it listens
 
