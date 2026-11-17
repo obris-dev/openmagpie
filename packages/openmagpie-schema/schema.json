@@ -279,6 +279,490 @@
       "title": "BackfillPreview",
       "type": "object"
     },
+    "BowerActionInput": {
+      "properties": {
+        "config": {
+          "$ref": "#/$defs/BowerConfig"
+        },
+        "id": {
+          "default": "",
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "const": "bower",
+          "default": "bower",
+          "title": "Kind",
+          "type": "string"
+        },
+        "rank": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rank"
+        }
+      },
+      "required": [
+        "config"
+      ],
+      "title": "BowerActionInput",
+      "type": "object"
+    },
+    "BowerActionWire": {
+      "properties": {
+        "config": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BowerConfig"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "created_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Created At"
+        },
+        "id": {
+          "default": "",
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "const": "bower",
+          "default": "bower",
+          "title": "Kind",
+          "type": "string"
+        },
+        "rank": {
+          "title": "Rank",
+          "type": "integer"
+        },
+        "summary": {
+          "$ref": "#/$defs/WatchActionConfigSummary"
+        }
+      },
+      "required": [
+        "rank"
+      ],
+      "title": "BowerActionWire",
+      "type": "object"
+    },
+    "BowerConfig": {
+      "description": "Config for a WatchAction with kind == 'bower'.\n\nPOSTs items to `url`, a custom signal's webhook URL, as rows. `columns`\nmaps each of the signal's column keys to the item field that fills it\n(`{\"c_subreddit\": \"subreddit\"}`); an item lacking a field, or holding a list\nor object there, leaves that cell out. `delivery` /\n`digest_interval_seconds` (from the base) pick instant vs batched.\n\nSecret-bearing: the URL path holds the signal's token, so `redacted_dump`\nmasks it and `merge_preserving` carries it forward when an edit leaves it\nmasked.",
+      "properties": {
+        "columns": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "minProperties": 1,
+          "title": "Columns",
+          "type": "object"
+        },
+        "delivery": {
+          "$ref": "#/$defs/DeliveryCadence",
+          "default": "instant"
+        },
+        "digest_interval_seconds": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Digest Interval Seconds",
+          "type": "integer"
+        },
+        "url": {
+          "title": "Url",
+          "type": "string"
+        }
+      },
+      "required": [
+        "url",
+        "columns"
+      ],
+      "title": "BowerConfig",
+      "type": "object"
+    },
+    "BowerConnectColumn": {
+      "description": "One column of the signal: its label, type, the item field that fills\nit (empty for an existing signal's column no field matches, left blank),\nand its OpenBower key (empty on a dry run that creates).",
+      "properties": {
+        "field": {
+          "title": "Field",
+          "type": "string"
+        },
+        "key": {
+          "default": "",
+          "title": "Key",
+          "type": "string"
+        },
+        "label": {
+          "title": "Label",
+          "type": "string"
+        },
+        "type": {
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "label",
+        "type",
+        "field"
+      ],
+      "title": "BowerConnectColumn",
+      "type": "object"
+    },
+    "BowerConnectExisting": {
+      "description": "Connect an existing signal by its webhook URL as OpenBower shows it:\nits columns are read from the URL and matched to the item fields.",
+      "properties": {
+        "delivery": {
+          "$ref": "#/$defs/DeliveryCadence",
+          "default": "instant"
+        },
+        "digest_interval_seconds": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Digest Interval Seconds",
+          "type": "integer"
+        },
+        "fields": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Fields",
+          "type": "array"
+        },
+        "rank": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rank"
+        },
+        "webhook_url": {
+          "title": "Webhook Url",
+          "type": "string"
+        }
+      },
+      "required": [
+        "webhook_url"
+      ],
+      "title": "BowerConnectExisting",
+      "type": "object"
+    },
+    "BowerConnectNew": {
+      "description": "Create a new signal through OpenBower's API at `api_url`, with an API\nkey used for the one create and never stored, named `label` (empty =\nthe watch's name).",
+      "properties": {
+        "api_key": {
+          "minLength": 1,
+          "title": "Api Key",
+          "type": "string"
+        },
+        "api_url": {
+          "title": "Api Url",
+          "type": "string"
+        },
+        "delivery": {
+          "$ref": "#/$defs/DeliveryCadence",
+          "default": "instant"
+        },
+        "digest_interval_seconds": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Digest Interval Seconds",
+          "type": "integer"
+        },
+        "fields": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Fields",
+          "type": "array"
+        },
+        "label": {
+          "default": "",
+          "title": "Label",
+          "type": "string"
+        },
+        "rank": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rank"
+        }
+      },
+      "required": [
+        "api_url",
+        "api_key"
+      ],
+      "title": "BowerConnectNew",
+      "type": "object"
+    },
+    "BowerConnectResponse": {
+      "description": "The connect's answer (real and `?dry_run=true`). A dry run adds\nnothing: one that creates names the signal and the columns it would\nmake, calling OpenBower not at all; one for an existing signal reads its\ncolumns and shows how the fields match. A real one carries the action\nadded to the watch (its URL masked). `signal_label` is empty for an\nexisting signal (its webhook URL does not name it); `unmatched_fields`\nare the chosen item fields no column takes, and `left_out_fields` the\nones `fields` left out.",
+      "properties": {
+        "action": {
+          "anyOf": [
+            {
+              "discriminator": {
+                "mapping": {
+                  "bower": "#/$defs/BowerActionWire",
+                  "extract": "#/$defs/ExtractActionWire",
+                  "log": "#/$defs/LogActionWire",
+                  "semantic_filter": "#/$defs/SemanticFilterActionWire",
+                  "webhook": "#/$defs/WebhookActionWire"
+                },
+                "propertyName": "kind"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/SemanticFilterActionWire"
+                },
+                {
+                  "$ref": "#/$defs/ExtractActionWire"
+                },
+                {
+                  "$ref": "#/$defs/LogActionWire"
+                },
+                {
+                  "$ref": "#/$defs/WebhookActionWire"
+                },
+                {
+                  "$ref": "#/$defs/BowerActionWire"
+                }
+              ]
+            },
+            {
+              "$ref": "#/$defs/PluginActionWire"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Action"
+        },
+        "columns": {
+          "items": {
+            "$ref": "#/$defs/BowerConnectColumn"
+          },
+          "title": "Columns",
+          "type": "array"
+        },
+        "dry_run": {
+          "title": "Dry Run",
+          "type": "boolean"
+        },
+        "left_out_fields": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Left Out Fields",
+          "type": "array"
+        },
+        "signal_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Signal Id"
+        },
+        "signal_label": {
+          "title": "Signal Label",
+          "type": "string"
+        },
+        "unmatched_fields": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Unmatched Fields",
+          "type": "array"
+        }
+      },
+      "required": [
+        "dry_run",
+        "signal_label"
+      ],
+      "title": "BowerConnectResponse",
+      "type": "object"
+    },
+    "BowerResult": {
+      "description": "Result a bower run writes to WatchActionRun.result: the HTTP status of\nthe push and how many rows OpenBower accepted (fewer than sent when it\nalready held some, by external_id). A refused push keeps OpenBower's\n`error` code and `detail` (which column, which row), cut to\nBOWER_REFUSAL_MAX_LENGTH, so the run says why.",
+      "properties": {
+        "accepted": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Accepted"
+        },
+        "detail": {
+          "default": "",
+          "maxLength": 500,
+          "title": "Detail",
+          "type": "string"
+        },
+        "error": {
+          "default": "",
+          "maxLength": 500,
+          "title": "Error",
+          "type": "string"
+        },
+        "http_status": {
+          "title": "Http Status",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "http_status"
+      ],
+      "title": "BowerResult",
+      "type": "object"
+    },
+    "BowerRunWire": {
+      "properties": {
+        "action_id": {
+          "title": "Action Id",
+          "type": "string"
+        },
+        "completed_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Completed At"
+        },
+        "created_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Created At"
+        },
+        "error": {
+          "default": "",
+          "title": "Error",
+          "type": "string"
+        },
+        "feed_item_id": {
+          "title": "Feed Item Id",
+          "type": "string"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "const": "bower",
+          "default": "bower",
+          "title": "Kind",
+          "type": "string"
+        },
+        "result": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BowerResult"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "scheduled_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Scheduled At"
+        },
+        "started_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Started At"
+        },
+        "state": {
+          "$ref": "#/$defs/WatchActionRunState"
+        },
+        "watch_id": {
+          "title": "Watch Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "watch_id",
+        "action_id",
+        "feed_item_id",
+        "state"
+      ],
+      "title": "BowerRunWire",
+      "type": "object"
+    },
     "CuratedFeedConfig": {
       "description": "Schema for Feed.data when Feed.kind == 'curated'.\n\nSources are user-maintained ; one Source row per place data comes\nfrom, regardless of whether they were typed in by hand or generated\nby an external script. Watermarks + per-source metadata live on the\nSource rows; this config only carries feed-level knobs.\n\n`default_field_map` is a connector-readable hint dictionary that\napplies to every source in the feed; per-source overrides on a\nSource row's `field_map` take precedence. Keys a connector doesn't\nrecognise are ignored.",
       "properties": {
@@ -299,7 +783,7 @@
       "type": "object"
     },
     "DeliveryCadence": {
-      "description": "Cadence of a DELIVERY action (webhook / log): emit per item, or\nbatch a window into one emission. A field in the action's config, not\na separate kind.",
+      "description": "Cadence of a DELIVERY action (webhook / bower / log): emit per item, or\nbatch a window into one emission. A field in the action's config, not\na separate kind.",
       "enum": [
         "instant",
         "digest"
@@ -3267,11 +3751,12 @@
       "type": "object"
     },
     "WatchActionKind": {
-      "description": "The kind of node in a watch's action chain ; selects the impl + the\nconfig/result contract.\n\nThree families:\n  - FILTER:   semantic_filter ; gates the chain (a pass=false GATES).\n  - EXTRACT:  extract ; hydrates declared fields onto the run's result.\n              Gates nothing, delivers nothing ; always advances.\n  - DELIVERY: webhook, log ; emit the item outward. Delivery cadence\n              (instant vs digest) is a `delivery` field in the action's\n              config, NOT a separate kind.",
+      "description": "The kind of node in a watch's action chain ; selects the impl + the\nconfig/result contract.\n\nThree families:\n  - FILTER:   semantic_filter ; gates the chain (a pass=false GATES).\n  - EXTRACT:  extract ; hydrates declared fields onto the run's result.\n              Gates nothing, delivers nothing ; always advances.\n  - DELIVERY: webhook, bower, log ; emit the item outward. Delivery cadence\n              (instant vs digest) is a `delivery` field in the action's\n              config, NOT a separate kind.",
       "enum": [
         "semantic_filter",
         "extract",
         "webhook",
+        "bower",
         "log"
       ],
       "title": "WatchActionKind",
@@ -3285,6 +3770,7 @@
             {
               "discriminator": {
                 "mapping": {
+                  "bower": "#/$defs/BowerActionWire",
                   "extract": "#/$defs/ExtractActionWire",
                   "log": "#/$defs/LogActionWire",
                   "semantic_filter": "#/$defs/SemanticFilterActionWire",
@@ -3304,6 +3790,9 @@
                 },
                 {
                   "$ref": "#/$defs/WebhookActionWire"
+                },
+                {
+                  "$ref": "#/$defs/BowerActionWire"
                 }
               ]
             },
@@ -3333,6 +3822,7 @@
             {
               "discriminator": {
                 "mapping": {
+                  "bower": "#/$defs/BowerActionWire",
                   "extract": "#/$defs/ExtractActionWire",
                   "log": "#/$defs/LogActionWire",
                   "semantic_filter": "#/$defs/SemanticFilterActionWire",
@@ -3352,6 +3842,9 @@
                 },
                 {
                   "$ref": "#/$defs/WebhookActionWire"
+                },
+                {
+                  "$ref": "#/$defs/BowerActionWire"
                 }
               ]
             },
@@ -3385,6 +3878,7 @@
               {
                 "discriminator": {
                   "mapping": {
+                    "bower": "#/$defs/BowerRunWire",
                     "extract": "#/$defs/ExtractRunWire",
                     "log": "#/$defs/LogRunWire",
                     "semantic_filter": "#/$defs/SemanticFilterRunWire",
@@ -3404,6 +3898,9 @@
                   },
                   {
                     "$ref": "#/$defs/WebhookRunWire"
+                  },
+                  {
+                    "$ref": "#/$defs/BowerRunWire"
                   }
                 ]
               },
@@ -3521,6 +4018,7 @@
             {
               "discriminator": {
                 "mapping": {
+                  "bower": "#/$defs/BowerActionWire",
                   "extract": "#/$defs/ExtractActionWire",
                   "log": "#/$defs/LogActionWire",
                   "semantic_filter": "#/$defs/SemanticFilterActionWire",
@@ -3540,6 +4038,9 @@
                 },
                 {
                   "$ref": "#/$defs/WebhookActionWire"
+                },
+                {
+                  "$ref": "#/$defs/BowerActionWire"
                 }
               ]
             },
@@ -3580,6 +4081,7 @@
             {
               "discriminator": {
                 "mapping": {
+                  "bower": "#/$defs/BowerRunWire",
                   "extract": "#/$defs/ExtractRunWire",
                   "log": "#/$defs/LogRunWire",
                   "semantic_filter": "#/$defs/SemanticFilterRunWire",
@@ -3599,6 +4101,9 @@
                 },
                 {
                   "$ref": "#/$defs/WebhookRunWire"
+                },
+                {
+                  "$ref": "#/$defs/BowerRunWire"
                 }
               ]
             },
@@ -3635,6 +4140,7 @@
               {
                 "discriminator": {
                   "mapping": {
+                    "bower": "#/$defs/BowerActionInput",
                     "extract": "#/$defs/ExtractActionInput",
                     "log": "#/$defs/LogActionInput",
                     "semantic_filter": "#/$defs/SemanticFilterActionInput",
@@ -3654,6 +4160,9 @@
                   },
                   {
                     "$ref": "#/$defs/WebhookActionInput"
+                  },
+                  {
+                    "$ref": "#/$defs/BowerActionInput"
                   }
                 ]
               },
@@ -3723,6 +4232,7 @@
               {
                 "discriminator": {
                   "mapping": {
+                    "bower": "#/$defs/BowerActionWire",
                     "extract": "#/$defs/ExtractActionWire",
                     "log": "#/$defs/LogActionWire",
                     "semantic_filter": "#/$defs/SemanticFilterActionWire",
@@ -3742,6 +4252,9 @@
                   },
                   {
                     "$ref": "#/$defs/WebhookActionWire"
+                  },
+                  {
+                    "$ref": "#/$defs/BowerActionWire"
                   }
                 ]
               },
@@ -3820,6 +4333,7 @@
               {
                 "discriminator": {
                   "mapping": {
+                    "bower": "#/$defs/BowerActionWire",
                     "extract": "#/$defs/ExtractActionWire",
                     "log": "#/$defs/LogActionWire",
                     "semantic_filter": "#/$defs/SemanticFilterActionWire",
@@ -3839,6 +4353,9 @@
                   },
                   {
                     "$ref": "#/$defs/WebhookActionWire"
+                  },
+                  {
+                    "$ref": "#/$defs/BowerActionWire"
                   }
                 ]
               },
@@ -4299,6 +4816,15 @@
       "$ref": "#/$defs/WatchActionDeliveryListResponse"
     },
     {
+      "$ref": "#/$defs/BowerConnectExisting"
+    },
+    {
+      "$ref": "#/$defs/BowerConnectNew"
+    },
+    {
+      "$ref": "#/$defs/BowerConnectResponse"
+    },
+    {
       "$ref": "#/$defs/BackfillPreview"
     },
     {
@@ -4330,6 +4856,12 @@
     },
     {
       "$ref": "#/$defs/WebhookResult"
+    },
+    {
+      "$ref": "#/$defs/BowerConfig"
+    },
+    {
+      "$ref": "#/$defs/BowerResult"
     },
     {
       "$ref": "#/$defs/RedditSubredditSourceSpec"

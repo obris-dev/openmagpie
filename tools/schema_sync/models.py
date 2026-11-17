@@ -38,6 +38,10 @@ from openmagpie_schema.feed import (
 )
 from openmagpie_schema.telemetry import TelemetryState
 from openmagpie_schema.watch import (
+    BowerActionInput,
+    BowerConnectExisting,
+    BowerConnectNew,
+    BowerConnectResponse,
     ExtractActionInput,
     LogActionInput,
     PluginActionInput,
@@ -54,6 +58,8 @@ from openmagpie_schema.watch import (
     WebhookActionInput,
 )
 from openmagpie_schema.watch_actions import (
+    BowerConfig,
+    BowerResult,
     ExtractConfig,
     ExtractResult,
     LogConfig,
@@ -91,6 +97,9 @@ CONTRACT_MODELS = [
     WatchActionRunListResponse,
     WatchActionDeliveryView,
     WatchActionDeliveryListResponse,
+    BowerConnectExisting,
+    BowerConnectNew,
+    BowerConnectResponse,
     # Backfill (re-run an action over the previous step's passes)
     BackfillPreview,
     BackfillJob,
@@ -105,6 +114,8 @@ CONTRACT_MODELS = [
     LogResult,
     WebhookConfig,
     WebhookResult,
+    BowerConfig,
+    BowerResult,
     # Source specs (a discriminated union; also reached via SourceFields.spec)
     RedditSubredditSourceSpec,
     RssSourceSpec,
@@ -133,6 +144,8 @@ EXCLUDED_MODELS = frozenset(
         "WatchActionConfigBase",
         "EngineActionConfigBase",
         "DeliveryConfigBase",
+        "DeliveryCadenceFields",
+        "_BowerConnectCommon",
         "SourceFields",
         "_HackerNewsSpec",
         # Kind-independent field bases for the action-node + run unions; their
@@ -148,6 +161,10 @@ EXCLUDED_MODELS = frozenset(
         "WebhookSource",
         "WebhookWatchRef",
         "WebhookWindow",
+        # Outbound OpenBower push body: reaches the API only inside
+        # request_payload, like the webhook's.
+        "BowerPush",
+        "BowerRow",
     }
 )
 
@@ -166,6 +183,9 @@ INPUT_MODELS = [
     ExtractActionInput,
     LogActionInput,
     WebhookActionInput,
+    BowerActionInput,
+    BowerConnectExisting,
+    BowerConnectNew,
     # The plugin fallback input member (+ its open PluginConfigBlob, pulled in by ref):
     # in the parity guard for symmetry with the built-in members above, so a future
     # alias / computed field on it can't slip the validation-vs-serialization check.

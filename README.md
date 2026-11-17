@@ -30,7 +30,7 @@
 
 You scan X/Twitter, YouTube, Reddit, Hacker News, and a few RSS feeds looking for someone talking about your product, hitting a problem it solves, or asking a question you can answer well. Getting there while the conversation is happening is how you build a brand and a community around what you know: a mention answered the day it's posted beats one found in next month's report. OpenMagpie watches the threads for you so you spend your time on engagement instead of searching.
 
-You curate sources into a feed, write a natural-language description of what's relevant (for example, "someone frustrated with manual social monitoring and asking for alternatives"), and a local LLM run via any OpenAI-compatible runner (e.g. Ollama, vLLM, LM Studio) scores each new post against it. Matches go to a webhook or your logs (more integrations coming); everything else is dropped. You read the hits instead of the firehose.
+You curate sources into a feed, write a natural-language description of what's relevant (for example, "someone frustrated with manual social monitoring and asking for alternatives"), and a local LLM run via any OpenAI-compatible runner (e.g. Ollama, vLLM, LM Studio) scores each new post against it. Matches go to a webhook, an [OpenBower](https://openbower.ai) signal, or your logs (more integrations coming); everything else is dropped. You read the hits instead of the firehose.
 
 ## Where it listens
 
@@ -138,7 +138,7 @@ It stops any in-flight job pass, advances the checkout to the latest release tag
 
 ## How it works
 
-A `Feed` is a reusable, curated stream (a set of sources plus an item log). A `Watch` subscribes to one or more feeds and runs an ordered **action chain** over each new item: a `semantic_filter` gates the chain (a score below threshold stops it), and downstream `webhook` / `log` actions deliver what passes. One feed can back many watches, so you pay for source polling once.
+A `Feed` is a reusable, curated stream (a set of sources plus an item log). A `Watch` subscribes to one or more feeds and runs an ordered **action chain** over each new item: a `semantic_filter` gates the chain (a score below threshold stops it), and downstream `webhook` / `bower` / `log` actions deliver what passes. One feed can back many watches, so you pay for source polling once.
 
 ```mermaid
 flowchart TD
@@ -183,6 +183,38 @@ make local-cli ARGS="delivery list --action <webhook_action_id>"    # the list: 
 make local-cli ARGS="delivery get <delivery_id>"                    # one call in full, incl. the exact body sent
 ```
 
+### Send matches to OpenBower
+
+A `bower` action delivers each item as a row to an OpenBower custom signal, where its columns can be enriched. One command adds the action, to a signal you already have or to a new one:
+
+```bash
+# An existing signal: paste its webhook URL from OpenBower at the hidden prompt; columns are matched to item fields by name
+magpie watch connect-bower <watch_id> --webhook-url
+# Or piped: there is no prompt to confirm then, so check it first and pass --yes
+pbpaste | magpie watch connect-bower <watch_id> --webhook-url --dry-run
+pbpaste | magpie watch connect-bower <watch_id> --webhook-url --yes
+
+# A new signal, with a column per item field the watch's sources produce
+export OPENBOWER_API_KEY=...     # an OpenBower API key; used once to create the signal, never stored
+magpie watch connect-bower <watch_id> --api-url https://api.example.io
+```
+
+`--dry-run` shows the columns first, and every item field you can send. `--fields title,url,occurred_at` sends only those (a new signal gets those columns, in that order), and `--rank` places the action in the watch's chain (it appends otherwise).
+
+OpenBower refuses a push with a cell for a column the signal no longer has, so before deleting a column there, take its key out of the action's `columns`:
+
+```bash
+magpie watch action config <action_id>                                     # the current config, columns map included
+magpie watch action config <action_id> columns '{"c_title": "title", "c_url": "url"}'
+```
+
+The action keeps only the signal's webhook URL. After rotating it in OpenBower, give the action the new one, with `--secret` so it never lands in your shell history:
+
+```bash
+magpie watch action config <action_id> url --secret                 # asks for it hidden
+pbpaste | magpie watch action config <action_id> url --secret --yes   # or piped
+```
+
 See [AGENTS.md](AGENTS.md) for the design conventions (char pointers, typed-blob pattern, the trigger/drain/flush execution model).
 
 ## Why self-host it
@@ -200,7 +232,7 @@ Social listening is a crowded market (Brand24, Mention, Octolens, Syften, and to
 |---|---|
 | Connectors | X/Twitter (`twitter_search`), YouTube (`youtube_search`), Reddit (`reddit_subreddit`), Hacker News (`hn_feed`, `hn_comment`), RSS/Atom (`rss`) |
 | Engines | Any OpenAI-compatible `/v1` API: Ollama, vLLM, llama.cpp, LM Studio, OpenAI, ... |
-| Action kinds | `semantic_filter` (LLM-judged), `webhook`, `log` |
+| Action kinds | `semantic_filter` (LLM-judged), `webhook`, `bower` (OpenBower), `log` |
 | Delivery modes | instant, digest |
 | Webhook methods | `POST`, `PUT`, `PATCH` |
 | Delivery audit | per-attempt `WatchActionDelivery` |

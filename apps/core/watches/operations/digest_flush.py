@@ -33,7 +33,7 @@ from openmagpie_schema.watch_actions import DeliveryConfigBase
 from openmagpie_schema.watch_enums import DeliveryCadence, WatchActionRunState
 from watches import run_messages
 from watches.actions import registry as actions_registry
-from watches.actions.protocol import Action, ActionResult, OutboundActionResult, OutboundCall
+from watches.actions.protocol import Action, ActionResult, OutboundActionResult, OutboundCall, batch_limit
 from watches.models import WatchAction, WatchActionDigestWindow, WatchActionRun
 from watches.registry import load_config
 from watches.services import (
@@ -45,7 +45,7 @@ from watches.services import (
 
 from .advance import enqueue_next_batch
 from .result_enforce import enforce_result_schema
-from .run_inputs import build_run_inputs
+from .run_inputs import build_run_inputs, within_bytes
 
 logger = logging.getLogger("watches")
 
@@ -102,8 +102,8 @@ class WatchDigestFlushOperation:
         gone): mark the slice errored. On a transient failure: leave the runs
         pending + window open and STOP (the next cron flush retries the rest).
 
-        Each slice is CAPPED at DIGEST_MAX_BATCH_ITEMS (bounds peak memory +
-        emission size). A window with more pending runs is emitted as
+        Each slice is CAPPED at DIGEST_MAX_BATCH_ITEMS or the kind's smaller
+        max_batch_items (bounds peak memory + emission size). A window with more pending runs is emitted as
         successive slices WITHIN THIS FLUSH (least-tried then oldest first —
         see digest_batch), looping until close_if_drained reports no pending
         run remains. A window that spans more than one slice logs N/total
@@ -151,12 +151,13 @@ class WatchDigestFlushOperation:
         slice committed terminal runs and the window still has pending runs to
         emit (so run() loops again) ; it is False on empty / permanent-error /
         transient-failure, where the caller must stop."""
-        runs = self.run_svc.digest_batch(action_id=self.action_id)
+        action, impl, impl_err = self._resolve_action()
+        max_items = batch_limit(impl, "max_batch_items")
+        runs = self.run_svc.digest_batch(action_id=self.action_id, max_items=max_items)
         if not runs:
             self._close()
             return _SliceResult(outcome=None, more=False, count=0)
 
-        action, impl, impl_err = self._resolve_action()
         if impl_err is not None:
             self.run_svc.complete_batch(
                 [str(r.id) for r in runs], state=WatchActionRunState.ERRORED, error=impl_err, now=self.now
@@ -167,8 +168,7 @@ class WatchDigestFlushOperation:
             )
         assert action is not None and impl is not None
 
-        # Build the batch in ONE query (no per-run fetch), dropping runs whose
-        # item is gone (mark them ERRORED).
+        # Build the batch in ONE query, marking runs whose item is gone ERRORED.
         item_by_id = self.feed_item_svc.get_many(str(r.feed_item_id) for r in runs)
         pairs: list[tuple[WatchActionRun, FeedItem]] = []
         gone_ids: list[str] = []
@@ -190,6 +190,7 @@ class WatchDigestFlushOperation:
                 count=len(runs),
             )
 
+        pairs = within_bytes(pairs, batch_limit(impl, "max_batch_bytes"))
         batch_runs = [run for run, _ in pairs]
         # The window is keyed on action_id and an action belongs to exactly one
         # watch, so every run in the batch shares a watch_id. Trust that, but
@@ -230,8 +231,8 @@ class WatchDigestFlushOperation:
         result = enforce_result_schema(str(action.kind), result, label=f"digest action {self.action_id} batch")
         # Record EVERY outbound attempt (success or transient) as a delivery row
         # for the audit. Delivery is at-least-once (a crash before complete_batch
-        # re-emits next flush) ; receivers dedup per item on the in-body `key`,
-        # so there is no server-side dedup to do here.
+        # re-emits next flush) ; receivers dedup on the body's own keys, so
+        # there is no server-side dedup to do here.
         delivery_id = (
             self._record(batch_runs, result.outbound, result) if isinstance(result, OutboundActionResult) else ""
         )
@@ -331,7 +332,7 @@ class WatchDigestFlushOperation:
     def _resolve_action(self) -> tuple[WatchAction | None, Action | None, str | None]:
         """The digest action + its impl, or (None, None, sanitized error) when
         the action is gone or has no executor. The impl is returned so the
-        caller emits without re-fetching. Only delivery kinds (webhook, log)
+        caller emits without re-fetching. Only delivery kinds (webhook, bower, log)
         ever carry a digest window, so the impl is always batch-capable here ;
         if a future non-delivery kind somehow had one, its run() would handle
         the batch or raise (caught as a transient)."""

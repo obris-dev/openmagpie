@@ -12,9 +12,10 @@ from pydantic import BaseModel
 from common.models import reject_bad_plugin_kind
 from openmagpie_schema.watch_actions import WatchActionConfigBase
 
+from .bower import BowerAction
 from .extract import ExtractAction
 from .log import LogAction
-from .protocol import Action
+from .protocol import BATCH_LIMITS, Action, batch_limit
 from .semantic_filter import SemanticFilterAction
 from .webhook import WebhookAction
 
@@ -22,6 +23,7 @@ _REGISTRY: dict[str, Action] = {
     SemanticFilterAction.kind: SemanticFilterAction(),
     ExtractAction.kind: ExtractAction(),
     WebhookAction.kind: WebhookAction(),
+    BowerAction.kind: BowerAction(),
     LogAction.kind: LogAction(),
 }
 
@@ -43,6 +45,11 @@ def register(action: Action) -> None:
     reject_bad_plugin_kind(
         action.kind, builtin_kinds=_BUILTIN_KINDS, noun="action", owner=f"{type(action).__name__}.kind"
     )
+    for name in BATCH_LIMITS:
+        limit = batch_limit(action, name)
+        # A zero limit would gather an empty slice and close a window with runs still pending.
+        if limit is not None and (isinstance(limit, bool) or not isinstance(limit, int) or limit <= 0):
+            raise ValueError(f"{type(action).__name__}.{name} must be a positive int or None, got {limit!r}")
     existing = _REGISTRY.get(action.kind)
     if existing is not None and type(existing) is not type(action):
         # Fail loud on a collision (two plugins claiming the same kind); re-registering

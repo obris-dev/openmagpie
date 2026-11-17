@@ -1,6 +1,7 @@
 """Secret-redaction helpers shared by secret-bearing action configs.
 
-Today only `webhook` has secrets (its URL path/query + header values).
+The secret-bearing kinds: `webhook` (its URL path/query + header values)
+and `bower` (its webhook URL, whose path carries the token).
 The redaction sentinel + URL masking live here so the read path and the
 edit round-trip (`redacted_dump` / `merge_preserving`) agree on one
 representation.
@@ -14,7 +15,7 @@ REDACTED = "***"
 
 
 def redact_url(url: str) -> str:
-    """Mask a webhook URL to `scheme://host[:port]/***`: the path/query
+    """Mask a delivery URL to `scheme://host[:port]/***`: the path/query
     (where tokens often hide) are dropped, the destination host kept so the
     redacted view stays recognizable. NEVER raises ; it's on the read path
     (GET / CLI preview), so a malformed stored URL falls back to the bare

@@ -27,6 +27,16 @@ ENGINE_REJECTED = "The LLM rejected the request as misconfigured (verify ENGINE_
 WEBHOOK_BLOCKED = "The webhook destination is not allowed by server policy."
 WEBHOOK_REJECTED = "The webhook endpoint rejected the request (check the URL and credentials)."
 WEBHOOK_REDIRECT = "The webhook endpoint returned a redirect; point the URL at its final destination."
+BOWER_BLOCKED = "The OpenBower destination is not allowed by server policy."
+BOWER_REDIRECT = "OpenBower answered with a redirect; give the action the signal's webhook URL as OpenBower shows it."
+BOWER_URL_GONE = (
+    "OpenBower no longer takes this webhook URL (rotated, or the signal deleted); "
+    "copy the current one and run `magpie watch action config <action_id> url --secret`."
+)
+BOWER_REJECTED = (
+    "OpenBower refused the rows; the run's result says why. "
+    "A column deleted in OpenBower needs its key taken out of the action's `columns` first."
+)
 
 # Transient failures (run state FAILED) ; retried until attempts run out.
 TRANSIENT = "A temporary problem occurred while running this action; it will be retried."

@@ -106,6 +106,19 @@ class OutboundActionResult(ActionResult):
     outbound: OutboundCall = field(kw_only=True)
 
 
+# Optional per-kind caps on one digest run, set as class attributes by a kind
+# whose receiver limits a request: `max_batch_items` (rows) and
+# `max_batch_bytes` (item data). They stay off the Action protocol, whose
+# members a structural plugin must all declare; `batch_limit` reads them.
+BATCH_LIMITS = ("max_batch_items", "max_batch_bytes")
+
+
+def batch_limit(action: object, name: str) -> int | None:
+    """An action's batch limit, None when it sets none (None leaves
+    DIGEST_MAX_BATCH_ITEMS the only bound on a digest slice)."""
+    return getattr(action, name, None)
+
+
 class Action(Protocol):
     """A runnable action kind. Declares its `kind` (matches a `WatchActionKind`
     value) and runs against one item (instant / filter) or many (digest) via

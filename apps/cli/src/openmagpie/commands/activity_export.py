@@ -21,6 +21,7 @@ import typer
 from openmagpie_schema.watch import WatchActionWire
 from openmagpie_schema.watch_actions import (
     EXTRACTED_KEY,
+    BowerResult,
     ExtractConfig,
     ExtractResult,
     LogResult,
@@ -117,6 +118,7 @@ _RESULT_MODELS = {
     WatchActionKind.SEMANTIC_FILTER: SemanticFilterResult,
     WatchActionKind.LOG: LogResult,
     WatchActionKind.WEBHOOK: WebhookResult,
+    WatchActionKind.BOWER: BowerResult,
 }
 # Completeness (every known kind categorized into exactly one of these two maps) is
 # enforced by a test, not an import-time assert -- a kind the CLI doesn't know still

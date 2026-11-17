@@ -1,6 +1,6 @@
 """Shared base for every per-kind WatchAction config + the CLI summary.
 
-Each concrete kind (semantic_filter, webhook, log) lives in its own
+Each concrete kind (semantic_filter, extract, webhook, bower, log) lives in its own
 sibling module and subclasses `WatchActionConfigBase`. The base declares
 the read-path contract every kind MUST implement so a new kind can't ship
 a silent hole (a blank preview, a secret-leaking dump).

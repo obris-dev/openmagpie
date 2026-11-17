@@ -80,6 +80,9 @@ for example, has two:
 - **Execution:** the `Action` Protocol (`watches/actions/protocol.py`), a `kind`
   and `run(...) -> ActionResult`. It's structural, so `ty` checks a plugin's impl
   against it at type-check time.
+  Optionally, `max_batch_items` / `max_batch_bytes` cap what one digest run
+  carries, when the receiver limits a request (each a positive int; `register`
+  refuses anything else). Leave them off and a digest window flushes whole.
 - **Config/validation:** a Pydantic `WatchActionConfigBase` subclass, validated
   through the single `watches.registry.parse_config` / `validate_config`
   chokepoint. Reusing that base and path means there is no second schema to drift.

@@ -7,7 +7,7 @@
 # `kind` selects the action type; `config` is its kind-specific settings.
 # A chain's first action is typically a semantic_filter (an LLM relevance
 # gate that STOPS the chain when an item scores below `threshold`); an extract
-# (pull structured fields onto the run) and delivery actions (log, webhook)
+# (pull structured fields onto the run) and delivery actions (webhook, bower, log)
 # follow. Each kind has its own `config` shape; the semantic_filter below is the
 # common starting point (see `magpie watch template` for a full chain, or
 # `magpie watch action get <id>` for a live one).
@@ -36,3 +36,21 @@ config:
 #   # engine: {kind: "", model: ""}   # optional; empty = server default
 #
 # webhook: POST matched items to a URL.  log: write them to the server log.
+#
+# bower: send each item as a row to an OpenBower custom signal. Add it with
+#   magpie watch connect-bower <watch_id> --webhook-url             # an existing signal (paste its Webhook URL)
+#   magpie watch connect-bower <watch_id> --api-url <api_url>       # a new one, made with an API key
+# which matches the signal's columns to the item fields for you. Add
+# --dry-run to only list them: each column as `Label [key] (type) <- field`,
+# the columns left blank, and the item fields no column takes; add
+# --fields title,url to send only those. That listing is also where the
+# keys and fields for a hand-written action come from:
+# kind: bower
+# config:
+#   url: https://api.example.io/v1/signals/<signal_id>/ingest/<token>  # the URL is the credential; keep this file private
+#   columns:           # <column key>: <item field>
+#     c_title: title
+#     c_url: url       # a column left out lands blank; extract's fields are not sent
+#   # remove a field here before deleting its column in OpenBower, which refuses a push naming a missing column
+#   # delivery: digest              # optional; default instant
+#   # digest_interval_seconds: 300

@@ -24,8 +24,8 @@ def _resp(status: int) -> httpx.Response:
 def _http(status: int):
     """Patch the SSRF gate open + the transport to a fixed status."""
     return (
-        mock.patch("watches.actions.webhook.destination_block_reason", return_value=None),
-        mock.patch("watches.actions.webhook.httpx.request", return_value=_resp(status)),
+        mock.patch("watches.actions._http_delivery.destination_block_reason", return_value=None),
+        mock.patch("watches.actions._http_delivery.httpx.request", return_value=_resp(status)),
     )
 
 

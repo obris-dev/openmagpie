@@ -17,8 +17,8 @@ class WatchActionDelivery(BaseModel):
     on that column and "which call carried this run" is the run's pointer.
 
     Retry is NOT driven here: the run state owns requeue. This row only RECORDS
-    each attempt. Delivery is at-least-once and receivers dedup per item on the
-    in-body `key`, so there is no server-side dedup field.
+    each attempt. Delivery is at-least-once and receivers dedup on the body's own key (webhook: each item's `key`; bower: each row's `external_id` and the push's `request_id`),
+    so there is no server-side dedup field.
 
     `request_payload` is the exact body we sent (the WebhookPayload), stored
     point-in-time so the log is faithful even after the items are pruned or the
