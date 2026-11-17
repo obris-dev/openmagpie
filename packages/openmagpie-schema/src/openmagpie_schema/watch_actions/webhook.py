@@ -17,6 +17,7 @@ from openmagpie_schema.watch_enums import DeliveryCadence, WatchActionKind, Webh
 
 from ._delivery import DeliveryConfigBase
 from ._secrets import REDACTED, looks_redacted_url, redact_url
+from ._url import check_delivery_url, restore_masked_url
 from .base import WatchActionConfigBase, WatchActionConfigSummary
 
 
@@ -44,25 +45,7 @@ class WebhookConfig(DeliveryConfigBase):
     @field_validator("url")
     @classmethod
     def _validate_url(cls, v: str) -> str:
-        """Structural check: an http(s) URL with a host AND an in-range port.
-        The SSRF gate (private-IP / require-https) is settings-coupled, so it
-        lives in `watches.policy` (write) + the impl (send), not here. A
-        redacted `scheme://host/***` still passes (host + scheme present), so
-        an edit that leaves the URL masked validates and `merge_preserving`
-        restores the real one.
-
-        The port is validated HERE so a bad one can never persist: `.port` is
-        a lazy property that raises only on access, so a URL like
-        `https://h:99999/p` would otherwise pass and then crash every read
-        (redacted_dump) and the send-time resolve."""
-        parts = urlsplit(v)
-        if parts.scheme not in ("http", "https") or not parts.hostname:
-            raise ValueError("url must be an http(s) URL with a host")
-        try:
-            parts.port  # noqa: B018 - property access validates the port range
-        except ValueError:
-            raise ValueError("url has an out-of-range port") from None
-        return v
+        return check_delivery_url(v)
 
     def redacted_dump(self) -> dict[str, Any]:
         """Mask both secret carriers: the URL path/query and every header
@@ -86,9 +69,7 @@ class WebhookConfig(DeliveryConfigBase):
         for the prior. Headers restore on the exact `***` sentinel; a header
         left masked with no prior value to restore raises (re-enter it)."""
         prior_webhook = prior if isinstance(prior, WebhookConfig) else None
-        # Restore only on an EXACT match to the masked form we showed for the
-        # prior (not shape) ; a real URL ending in /*** is kept.
-        url = prior_webhook.url if prior_webhook is not None and self.url == redact_url(prior_webhook.url) else self.url
+        url = restore_masked_url(self.url, prior_webhook.url if prior_webhook is not None else None)
         headers: dict[str, str] = {}
         for name, value in self.headers.items():
             if value != REDACTED:

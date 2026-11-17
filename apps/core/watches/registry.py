@@ -14,6 +14,7 @@ from pydantic import BaseModel
 
 from common.models import reject_bad_plugin_kind
 from openmagpie_schema.watch_actions import (
+    BowerConfig,
     ExtractConfig,
     LogConfig,
     SemanticFilterConfig,
@@ -27,6 +28,7 @@ _REGISTRY: dict[str, type[WatchActionConfigBase]] = {
     SemanticFilterConfig.CONFIG_KIND: SemanticFilterConfig,
     ExtractConfig.CONFIG_KIND: ExtractConfig,
     WebhookConfig.CONFIG_KIND: WebhookConfig,
+    BowerConfig.CONFIG_KIND: BowerConfig,
     LogConfig.CONFIG_KIND: LogConfig,
 }
 

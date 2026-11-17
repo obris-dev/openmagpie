@@ -36,3 +36,14 @@ config:
 #   # engine: {kind: "", model: ""}   # optional; empty = server default
 #
 # webhook: POST matched items to a URL.  log: write them to the server log.
+#
+# bower: send each item as a row to an OpenBower custom signal, at its webhook
+# URL. `magpie watch connect-bower <watch_id> --api-url <url>` creates the
+# signal and this action for you; to set one up by hand, map each of the
+# signal's field keys to the item field that fills it.
+# kind: bower
+# config:
+#   url: https://api.example.io/v1/signals/<signal_id>/ingest/<token>
+#   fields: {title: title, url: url, author: author}
+#   # delivery: digest              # optional; default instant
+#   # digest_interval_seconds: 300

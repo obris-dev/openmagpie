@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field, TypeAdapter, field_validator
 
 from .._unions import _PLUGIN_MEMBER_LOC_NAMES, KIND_MAX_LENGTH, builtin_union_kinds, reject_builtin_kind
 from ..watch_actions import (
+    BowerConfig,
     ExtractConfig,
     LogConfig,
     SemanticFilterConfig,
@@ -67,6 +68,11 @@ class LogActionWire(WatchActionWireFields):
     config: LogConfig | None = None
 
 
+class BowerActionWire(WatchActionWireFields):
+    kind: Literal[WatchActionKind.BOWER] = WatchActionKind.BOWER
+    config: BowerConfig | None = None
+
+
 class WebhookActionWire(WatchActionWireFields):
     kind: Literal[WatchActionKind.WEBHOOK] = WatchActionKind.WEBHOOK
     config: WebhookConfig | None = None
@@ -94,7 +100,7 @@ class PluginActionWire(WatchActionWireFields):
 # kinds), so the server's per-row catch still degrades it to config=None rather
 # than the fallback silently absorbing a corrupt built-in config as a raw dict.
 _BuiltinWatchActionWire = Annotated[
-    SemanticFilterActionWire | ExtractActionWire | LogActionWire | WebhookActionWire,
+    SemanticFilterActionWire | ExtractActionWire | LogActionWire | WebhookActionWire | BowerActionWire,
     Field(discriminator="kind"),
 ]
 WatchActionWire = Annotated[_BuiltinWatchActionWire | PluginActionWire, Field(union_mode="left_to_right")]
@@ -161,6 +167,11 @@ class LogActionInput(WatchActionInputFields):
     config: LogConfig
 
 
+class BowerActionInput(WatchActionInputFields):
+    kind: Literal[WatchActionKind.BOWER] = WatchActionKind.BOWER
+    config: BowerConfig
+
+
 class WebhookActionInput(WatchActionInputFields):
     kind: Literal[WatchActionKind.WEBHOOK] = WatchActionKind.WEBHOOK
     config: WebhookConfig
@@ -194,7 +205,7 @@ class PluginActionInput(WatchActionInputFields):
 # plugin member (same discipline as WatchActionWire). The persisted blob stays the
 # pure config (no `kind` nested inside).
 _BuiltinWatchActionInput = Annotated[
-    SemanticFilterActionInput | ExtractActionInput | LogActionInput | WebhookActionInput,
+    SemanticFilterActionInput | ExtractActionInput | LogActionInput | WebhookActionInput | BowerActionInput,
     Field(discriminator="kind"),
 ]
 WatchActionInput = Annotated[_BuiltinWatchActionInput | PluginActionInput, Field(union_mode="left_to_right")]

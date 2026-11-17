@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field, TypeAdapter, field_validator
 
 from .._unions import _PLUGIN_MEMBER_LOC_NAMES, KIND_MAX_LENGTH, builtin_union_kinds, reject_builtin_kind
 from ..watch_actions import (
+    BowerResult,
     ExtractResult,
     LogResult,
     SemanticFilterResult,
@@ -123,6 +124,11 @@ class LogRunWire(WatchActionRunFields):
     result: LogResult | None = None
 
 
+class BowerRunWire(WatchActionRunFields):
+    kind: Literal[WatchActionKind.BOWER] = WatchActionKind.BOWER
+    result: BowerResult | None = None
+
+
 class WebhookRunWire(WatchActionRunFields):
     kind: Literal[WatchActionKind.WEBHOOK] = WatchActionKind.WEBHOOK
     result: WebhookResult | None = None
@@ -146,7 +152,7 @@ class PluginRunWire(WatchActionRunFields):
 # by `kind`: the four built-ins as a discriminated union, then a left-to-right
 # fallthrough to the plugin member (same discipline as WatchActionWire).
 _BuiltinWatchActionRunWire = Annotated[
-    SemanticFilterRunWire | ExtractRunWire | LogRunWire | WebhookRunWire,
+    SemanticFilterRunWire | ExtractRunWire | LogRunWire | WebhookRunWire | BowerRunWire,
     Field(discriminator="kind"),
 ]
 WatchActionRunWire = Annotated[_BuiltinWatchActionRunWire | PluginRunWire, Field(union_mode="left_to_right")]

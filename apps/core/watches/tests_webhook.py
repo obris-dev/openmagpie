@@ -25,8 +25,8 @@ class WebhookRunTests(TestCase):
         context = ActionContext(watch_id="w", watch_name="n", delivery=DeliveryCadence.INSTANT)
         # follow_redirects stays off, so a 3xx is a returned response, not a hop.
         with (
-            mock.patch("watches.actions.webhook.destination_block_reason", return_value=None),
-            mock.patch("watches.actions.webhook.httpx.request", return_value=resp),
+            mock.patch("watches.actions._http_delivery.destination_block_reason", return_value=None),
+            mock.patch("watches.actions._http_delivery.httpx.request", return_value=resp),
         ):
             return WebhookAction().run(action, items=[item], context=context)
 
@@ -68,8 +68,8 @@ class WebhookRunTests(TestCase):
             return resp
 
         with (
-            mock.patch("watches.actions.webhook.destination_block_reason", return_value=None),
-            mock.patch("watches.actions.webhook.httpx.request", side_effect=fake_request),
+            mock.patch("watches.actions._http_delivery.destination_block_reason", return_value=None),
+            mock.patch("watches.actions._http_delivery.httpx.request", side_effect=fake_request),
         ):
             WebhookAction().run(action, items=[item], context=context)
         return captured

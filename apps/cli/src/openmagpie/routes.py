@@ -115,6 +115,10 @@ class watches:
         # action's own id.
         return f"{_WATCHES}/{watch_id}/actions"
 
+    @staticmethod
+    def connect_bower(watch_id: str) -> str:
+        return f"{_WATCHES}/{watch_id}/connect-bower"
+
 
 class actions:
     """`/v1/actions/*` — per-action ops keyed on the action's own ULID. The

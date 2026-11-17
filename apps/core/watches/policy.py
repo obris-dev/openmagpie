@@ -15,6 +15,7 @@ from django.conf import settings
 from common.ssrf import destination_block_reason
 from engine import registry as engine_registry
 from openmagpie_schema.watch_actions import (
+    BowerConfig,
     DeliveryConfigBase,
     EngineActionConfigBase,
     WatchActionConfigBase,
@@ -35,8 +36,8 @@ def enforce_action_policy(config: WatchActionConfigBase) -> WatchActionConfigBas
         _enforce_engine_registered(config)
     if isinstance(config, DeliveryConfigBase):
         _enforce_digest_interval(config)
-    if isinstance(config, WebhookConfig):
-        _enforce_webhook_url_safety(config)
+    if isinstance(config, (WebhookConfig, BowerConfig)):
+        _enforce_url_safety(config.url)
     return config
 
 
@@ -53,19 +54,19 @@ def _enforce_digest_interval(config: DeliveryConfigBase) -> None:
         )
 
 
-def _enforce_webhook_url_safety(config: WebhookConfig) -> None:
+def _enforce_url_safety(url: str) -> None:
     """Write-time SSRF gate: reject a require-https violation or an
     IP-literal host in a blocked range. DNS resolution is deferred to send
     time (the impl re-checks with resolve_dns=True), since a hostname's
     address can change between create and delivery."""
     reason = destination_block_reason(
-        config.url,
+        url,
         require_https=settings.WEBHOOK_REQUIRE_HTTPS,
         block_private_ips=settings.WEBHOOK_BLOCK_PRIVATE_IPS,
         resolve_dns=False,
     )
     if reason:
-        raise PolicyError(f"webhook url rejected: {reason}")
+        raise PolicyError(f"url rejected: {reason}")
 
 
 def _enforce_engine_registered(config: EngineActionConfigBase) -> None:

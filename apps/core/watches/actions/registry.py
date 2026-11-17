@@ -12,6 +12,7 @@ from pydantic import BaseModel
 from common.models import reject_bad_plugin_kind
 from openmagpie_schema.watch_actions import WatchActionConfigBase
 
+from .bower import BowerAction
 from .extract import ExtractAction
 from .log import LogAction
 from .protocol import Action
@@ -22,6 +23,7 @@ _REGISTRY: dict[str, Action] = {
     SemanticFilterAction.kind: SemanticFilterAction(),
     ExtractAction.kind: ExtractAction(),
     WebhookAction.kind: WebhookAction(),
+    BowerAction.kind: BowerAction(),
     LogAction.kind: LogAction(),
 }
 

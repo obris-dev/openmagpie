@@ -25,6 +25,7 @@ names from here, not the submodules.
 from ._delivery import DeliveryConfigBase
 from ._engine import ENRICHMENT_STATUS_KEY, EngineActionConfigBase, EngineSpec, ExternalContentStatus
 from .base import WatchActionConfigBase, WatchActionConfigSummary
+from .bower import BOWER_MAX_ROWS_PER_PUSH, BowerConfig, BowerPush, BowerResult, BowerRow
 from .extract import (
     EXTRACT_FIELD_NAME_KEY,
     EXTRACT_FIELDS_KEY,
@@ -48,11 +49,16 @@ from .webhook import (
 )
 
 __all__ = [
+    "BOWER_MAX_ROWS_PER_PUSH",
     "ENRICHMENT_STATUS_KEY",
     "EXTRACTED_KEY",
     "EXTRACT_FIELDS_KEY",
     "EXTRACT_FIELD_NAME_KEY",
     "EXTRACT_STATUS_KEY",
+    "BowerConfig",
+    "BowerPush",
+    "BowerResult",
+    "BowerRow",
     "DeliveryConfigBase",
     "EngineActionConfigBase",
     "EngineSpec",

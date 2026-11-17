@@ -26,7 +26,7 @@ class WatchActionKind(StrEnum):
       - FILTER:   semantic_filter ; gates the chain (a pass=false GATES).
       - EXTRACT:  extract ; hydrates declared fields onto the run's result.
                   Gates nothing, delivers nothing ; always advances.
-      - DELIVERY: webhook, log ; emit the item outward. Delivery cadence
+      - DELIVERY: webhook, bower, log ; emit the item outward. Delivery cadence
                   (instant vs digest) is a `delivery` field in the action's
                   config, NOT a separate kind.
     """
@@ -34,6 +34,7 @@ class WatchActionKind(StrEnum):
     SEMANTIC_FILTER = "semantic_filter"
     EXTRACT = "extract"
     WEBHOOK = "webhook"
+    BOWER = "bower"
     LOG = "log"
 
 
