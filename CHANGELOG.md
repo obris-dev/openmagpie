@@ -5,6 +5,13 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.0](https://github.com/obris-dev/openmagpie/compare/v0.11.0...v0.12.0) (2026-11-17)
+
+
+### ✨ Features
+
+* **watches:** a bower action, and connect-bower to provision it ([#189](https://github.com/obris-dev/openmagpie/issues/189)) ([bc8da5a](https://github.com/obris-dev/openmagpie/commit/bc8da5ace3f23d8bce51a5068eaa8012e189f65c))
+
 ## [0.11.0](https://github.com/obris-dev/openmagpie/compare/v0.10.0...v0.11.0) (2026-10-13)
 
 
