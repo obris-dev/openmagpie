@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.0](https://github.com/obris-dev/openmagpie/compare/cli-v0.9.0...cli-v0.10.0) (2026-11-17)
+
+
+### ✨ Features
+
+* **watches:** a bower action, and connect-bower to provision it ([#189](https://github.com/obris-dev/openmagpie/issues/189)) ([bc8da5a](https://github.com/obris-dev/openmagpie/commit/bc8da5ace3f23d8bce51a5068eaa8012e189f65c))
+
 ## [0.9.0](https://github.com/obris-dev/openmagpie/compare/cli-v0.8.0...cli-v0.9.0) (2026-10-13)
 
 
