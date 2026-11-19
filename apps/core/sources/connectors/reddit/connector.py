@@ -6,6 +6,7 @@ from typing import Any
 
 import feedparser
 import httpx
+from django.conf import settings
 
 from openmagpie_schema.configs import RedditSubredditSourceSpec
 from sources.payload_registry import register
@@ -31,10 +32,27 @@ logger = logging.getLogger("sources")
 # comments, upvote_ratio) switch to authenticated PRAW against
 # oauth.reddit.com with a registered Reddit app
 # (https://www.reddit.com/prefs/apps).
-REDDIT_USER_AGENT = (
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-)
+#
+# `.rss` IS gated on User-Agent, though. Since ~2026-11-17 browser UAs (and
+# generic library UAs like `python-httpx/x`) get a zero quota: the very first
+# request is a 429 with `x-ratelimit-remaining: 0.0`, or a fake 404 whose body
+# is a valid but empty Atom feed. A descriptive UA in Reddit's documented
+# `<platform>:<app id>:<version> (by /u/<user>)` format is served normally.
+# Deliberately no per-install / instance id in the UA: rate limits already
+# key on IP, and a stable token would let Reddit link one install across IPs
+# (and the telemetry instance_id must never leak past its opt-out this way).
+REDDIT_APP_ID = "openmagpie"
+REDDIT_PROJECT_URL = "https://github.com/obris-dev/openmagpie"
+
+
+def reddit_user_agent() -> str:
+    """The honest, Reddit-format User-Agent for `.rss` requests. An operator
+    can set REDDIT_USER_AGENT_CONTACT (e.g. `/u/name`) to identify themselves;
+    otherwise the project URL stands in as the contact."""
+    contact = settings.REDDIT_USER_AGENT_CONTACT
+    suffix = f"by {contact}" if contact else f"+{REDDIT_PROJECT_URL}"
+    return f"linux:{REDDIT_APP_ID}:v{settings.PRODUCT_VERSION} ({suffix})"
+
 
 # Reddit's anonymous max page size is 100. Cap pagination at MAX_PAGES *per sub*
 # so a feed silent for weeks doesn't fetch unbounded history on wake; with
@@ -241,7 +259,7 @@ class RedditSubRedditConnector(BaseConnector[RedditSubredditSourceSpec]):
         slug = "+".join(subreddits)
         url = f"https://www.reddit.com/r/{slug}/new/.rss"
         after: str | None = None
-        with httpx.Client(timeout=15.0, headers={"User-Agent": REDDIT_USER_AGENT}) as client:
+        with httpx.Client(timeout=15.0, headers={"User-Agent": reddit_user_agent()}) as client:
             # MAX_PAGES is per-sub: scale by the combine size so a multireddit
             # walk gives each sub its own ~1000 budget (single-sub parity), not a
             # shared one. Reddit's listing depth (or the `< since` early-return)
