@@ -22,12 +22,15 @@ os.environ.setdefault("SOURCE_CHALLENGE_BYPASS_URL", "http://flaresolverr:8191/v
 # trade-off for convenience ; prod multi-tenant deployments leave it off.
 os.environ.setdefault("SOURCE_ALLOW_INSECURE_TLS", "true")
 
-from common.env import env_bool
+from common.env import env_bool, env_list
 
 from .base import *  # noqa: F403
 
 DEBUG = env_bool("DEBUG", "true")
-ALLOWED_HOSTS = ["localhost", "127.0.0.1", "core", ".ngrok-free.app"]
+# Dev defaults plus any operator-set hosts. A self-host served on another
+# hostname or IP lists it in ALLOWED_HOSTS in .env instead of editing this
+# file, which would block `make upgrade`.
+ALLOWED_HOSTS = ["localhost", "127.0.0.1", "core", ".ngrok-free.app", *env_list("ALLOWED_HOSTS")]
 
 # CORS: explicit allowlist even in dev. Allow-all + credentials would
 # let any localhost page (a random dev server on :3000, a one-off
