@@ -27,9 +27,9 @@ from common.env import env_bool, env_list
 from .base import *  # noqa: F403
 
 DEBUG = env_bool("DEBUG", "true")
-# Dev defaults plus any operator-set hosts. A self-host reached by LAN IP or its
-# own hostname (e.g. 192.168.1.50, magpie.home) adds it via ALLOWED_HOSTS in
-# .env instead of editing this file, which would block `make upgrade`.
+# Dev defaults plus any operator-set hosts. A self-host served on another
+# hostname or IP lists it in ALLOWED_HOSTS in .env instead of editing this
+# file, which would block `make upgrade`.
 ALLOWED_HOSTS = ["localhost", "127.0.0.1", "core", ".ngrok-free.app", *env_list("ALLOWED_HOSTS")]
 
 # CORS: explicit allowlist even in dev. Allow-all + credentials would
