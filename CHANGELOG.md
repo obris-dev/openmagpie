@@ -5,6 +5,13 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.2](https://github.com/obris-dev/openmagpie/compare/v0.12.1...v0.12.2) (2026-11-19)
+
+
+### 🐛 Bug Fixes
+
+* **core:** let self-hosts add ALLOWED_HOSTS from .env in local settings ([#195](https://github.com/obris-dev/openmagpie/issues/195)) ([ea4c50d](https://github.com/obris-dev/openmagpie/commit/ea4c50dd94abfe7b90a789b15787df282ac58b5f))
+
 ## [0.12.1](https://github.com/obris-dev/openmagpie/compare/v0.12.0...v0.12.1) (2026-11-19)
 
 
