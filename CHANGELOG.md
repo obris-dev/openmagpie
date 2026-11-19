@@ -5,6 +5,13 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.1](https://github.com/obris-dev/openmagpie/compare/v0.12.0...v0.12.1) (2026-11-19)
+
+
+### 🐛 Bug Fixes
+
+* **core:** send a descriptive User-Agent to Reddit RSS ([#193](https://github.com/obris-dev/openmagpie/issues/193)) ([62829ae](https://github.com/obris-dev/openmagpie/commit/62829ae70a0e0bf3b769b36e7cc9a6f5c99ef39e))
+
 ## [0.12.0](https://github.com/obris-dev/openmagpie/compare/v0.11.0...v0.12.0) (2026-11-17)
 
 
