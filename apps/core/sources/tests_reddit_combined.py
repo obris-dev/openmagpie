@@ -11,10 +11,10 @@ from datetime import UTC, datetime
 from unittest import mock
 
 import httpx
-from django.test import SimpleTestCase
+from django.test import SimpleTestCase, override_settings
 
 from sources.connectors.base import ConnectorParseError
-from sources.connectors.reddit.connector import RedditSubRedditConnector
+from sources.connectors.reddit.connector import RedditSubRedditConnector, reddit_user_agent
 
 
 class RedditCombinedPollTests(SimpleTestCase):
@@ -104,3 +104,24 @@ class RedditCombinedPollTests(SimpleTestCase):
         )
         with self.assertRaises(ConnectorParseError):
             self._poll_combined(["alpha"], None, [httpx.Response(200, content=self._feed(entry_no_category))])
+
+
+class RedditUserAgentTests(SimpleTestCase):
+    """Reddit's `.rss` zero-quotas browser / generic UAs; we must send an honest,
+    Reddit-format one."""
+
+    @override_settings(PRODUCT_VERSION="1.2.3", REDDIT_USER_AGENT_CONTACT="")
+    def test_default_format(self):
+        self.assertEqual(
+            reddit_user_agent(),
+            "linux:openmagpie:v1.2.3 (+https://github.com/obris-dev/openmagpie)",
+        )
+
+    @override_settings(PRODUCT_VERSION="1.2.3", REDDIT_USER_AGENT_CONTACT="/u/someone")
+    def test_contact_override(self):
+        self.assertEqual(reddit_user_agent(), "linux:openmagpie:v1.2.3 (by /u/someone)")
+
+    def test_never_a_browser_ua(self):
+        ua = reddit_user_agent()
+        for marker in ("Mozilla", "Chrome", "Safari", "Gecko", "python-httpx"):
+            self.assertNotIn(marker, ua)

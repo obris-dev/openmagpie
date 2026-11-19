@@ -238,6 +238,10 @@ try:
 except (OSError, UnicodeDecodeError):
     PRODUCT_VERSION = "unknown"
 
+# Optional operator contact appended to the Reddit connector's User-Agent
+# (`... (by /u/name)`), per Reddit's UA guidance. Empty -> the project URL is used.
+REDDIT_USER_AGENT_CONTACT = os.environ.get("REDDIT_USER_AGENT_CONTACT", "").strip()
+
 # Transactional email. Enqueued (mailer.OutboundEmail) by request handlers, then
 # rendered out-of-process by the email-render service (EMAIL_RENDER_URL/render)
 # and sent via Django's EMAIL_BACKEND by the send_outbound_emails drain. The
