@@ -5,6 +5,18 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.13.0](https://github.com/obris-dev/openmagpie/compare/v0.12.2...v0.13.0) (2026-11-20)
+
+
+### ✨ Features
+
+* **sources:** a Product Hunt launches connector ([#197](https://github.com/obris-dev/openmagpie/issues/197)) ([5fa236e](https://github.com/obris-dev/openmagpie/commit/5fa236eab7a6cacf7497a1e1d16b78abefcd4f5f))
+
+
+### 🐛 Bug Fixes
+
+* **core:** Reddit User-Agent reports the OS the server runs on ([#198](https://github.com/obris-dev/openmagpie/issues/198)) ([486d56e](https://github.com/obris-dev/openmagpie/commit/486d56e2704225e466813b04fd2a1d1c3e0fb293))
+
 ## [0.12.2](https://github.com/obris-dev/openmagpie/compare/v0.12.1...v0.12.2) (2026-11-19)
 
 
