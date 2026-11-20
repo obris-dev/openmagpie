@@ -8,6 +8,11 @@ Guards on the feed config:
   - retention_days in [1, 365] (0/negative would prune everything;
     unbounded would grow the item log forever).
 
+Source guards, run on the sources a write ADDS (`validate_source_specs`):
+  - the connector kind is registered (`enforce_connectors_registered`),
+  - the server has the settings it needs (`enforce_connector_settings`),
+  - its fetched URL is safe (`enforce_source_spec_safety`).
+
 Per-source watermark guards (rows on a different model than the config):
   - `enforce_source_watermark` rejects a future `last_event_at` ; run by
     every operator-supplied write (create / set / seek). The poll path's
@@ -35,6 +40,8 @@ from django.utils import timezone
 
 from feeds.configs import FeedConfig
 from openmagpie_schema.configs import PluginSourceSpec, SourceSpec
+from sources import registry as source_registry
+from sources.required_settings import refusal
 
 RETENTION_MIN_DAYS = 1
 RETENTION_MAX_DAYS = 365
@@ -209,6 +216,50 @@ def enforce_source_spec_safety(specs: list[SourceSpec]) -> None:
     loud with a 400 instead of reaching the connector."""
     for spec in specs:
         _enforce_source_url_safety(spec)
+
+
+def enforce_connectors_registered(specs: list[SourceSpec]) -> None:
+    """Refuse specs whose connector kind isn't loaded in this deployment, naming
+    the kind, rather than saving a row that never polls (the poll path would only
+    log and skip it)."""
+    missing: set[str] = set()
+    for spec in specs:
+        try:
+            source_registry.get(spec.kind)
+        except KeyError:
+            missing.add(spec.kind)
+    if missing:
+        raise PolicyError(
+            "no connector registered for source kind(s): "
+            + ", ".join(sorted(missing))
+            + " (this deployment is missing the connector; remove the offending sources or upgrade the server)"
+        )
+
+
+def validate_source_specs(specs: list[SourceSpec]) -> None:
+    """Every write-time guard on sources being added to a feed: the connector is
+    registered, the server has the settings it needs, and its URL is safe. The one
+    entry point for feed create (dry run included) and `set_sources`."""
+    enforce_connectors_registered(specs)
+    enforce_connector_settings(specs)
+    enforce_source_spec_safety(specs)
+
+
+def enforce_connector_settings(specs: list[SourceSpec]) -> None:
+    """Refuse specs whose connector needs a server setting that is empty (e.g. a
+    Product Hunt source without PRODUCT_HUNT_TOKEN), naming the setting and how to
+    load it. A kind with no registered connector is skipped here; the registration
+    check reports it."""
+    problems: list[str] = []
+    for kind in dict.fromkeys(spec.kind for spec in specs):
+        try:
+            connector = source_registry.get(kind)
+        except KeyError:
+            continue
+        if message := refusal(kind, connector):
+            problems.append(message)
+    if problems:
+        raise PolicyError(" ".join(problems))
 
 
 def _enforce_retention(config: FeedConfig) -> None:

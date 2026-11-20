@@ -113,6 +113,21 @@ class NewVideoPayload(FeedItemPayload):
     media: list[dict[str, object]] = []
 
 
+class NewProductHuntLaunchPayload(FeedItemPayload):
+    """`new_producthunt_launch`: one Product Hunt front-page launch (ProductHuntLaunchesConnector,
+    the GraphQL API). `title` is the product name, `content` its tagline plus
+    description, `url` its Product Hunt page, `occurred_at` its launch time.
+    `makers` is the makers the API shows (comma-joined; empty when redacted),
+    `topics` its topics (comma-joined), `source_topic` the topic slug its source is narrowed to."""
+
+    kind: Literal["new_producthunt_launch"]  # required, so a non-producthunt dump can't match here
+    author: str = ""
+    tagline: str = ""
+    makers: str = ""
+    topics: str = ""
+    source_topic: str = ""  # the topic slug the producing source is narrowed to ("" for every topic)
+
+
 # Tried left-to-right so a dump resolves to its concrete variant (matched on the
 # required `kind` literal) and only falls to the permissive base when no variant
 # claims it. Variants REQUIRE their `kind`, so an empty / kind-less dict can't
@@ -129,6 +144,7 @@ FeedItemData = Annotated[
     | HackerNewsCommentPayload
     | NewTweetPayload
     | NewVideoPayload
+    | NewProductHuntLaunchPayload
     | FeedItemPayload,
     Field(union_mode="left_to_right"),
 ]

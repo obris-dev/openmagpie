@@ -24,6 +24,10 @@ Available starters:
 - `youtube`: a YouTube search (`youtube_search`) filtered to the last week's
   uploads, for videos reviewing or recommending tools in your space. No
   credentials needed for public search.
+- `producthunt`: new Product Hunt launches (`producthunt_launches`), for finding
+  newly launched companies in your market. Needs your own Product Hunt developer
+  token (`PRODUCT_HUNT_TOKEN`); please read Product Hunt's API terms of service
+  and use it within them.
 
 Both HN starters take a `query` keyword that runs **server-side as a pre-filter**:
 it narrows which items the connector pulls into the feed at all, before any watch

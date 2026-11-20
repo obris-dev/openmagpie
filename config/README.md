@@ -24,6 +24,13 @@ each source is one `spec` entry under `sources`. Supported kinds:
 - `hn_comment`: Hacker News comments matching a keyword `query` (required, the comment
   stream is huge, so it is always keyword-filtered server-side). `{kind: hn_comment, query: "your product"}`
 - `rss`: any RSS/Atom feed by URL. `{kind: rss, url: "https://example.com/feed.xml", name: "Example blog"}`
+- `twitter_search`: an X (Twitter) search; `query` is required. Needs an x.com session
+  cookie (see `apps/core/credentials/README.md`). `{kind: twitter_search, query: "your product"}`
+- `youtube_search`: a YouTube search over the last week's uploads; `query` is required.
+  `{kind: youtube_search, query: "your product"}`
+- `producthunt_launches`: Product Hunt's front-page launches, optionally one `topic`. Needs
+  `PRODUCT_HUNT_TOKEN`; please read Product Hunt's API terms of service and use it within them.
+  `{kind: producthunt_launches, topic: developer-tools}`
 
 Both HN kinds accept a `query` keyword filter (optional for `hn_feed`, required for
 `hn_comment`), matched server-side before anything reaches your watch:

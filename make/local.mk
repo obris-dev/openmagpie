@@ -1,4 +1,4 @@
-.PHONY: install-local-cli upgrade up build down restart restart-web logs logs-core logs-web local-exec local-manage local-test local-makemigrations local-dbshell local-migrate local-tick up-jobs down-jobs _job-up local-lint local-lint-fix local-types local-check local-web local-web-reinstall local-web-shell local-cli-sync local-cli hooks
+.PHONY: install-local-cli upgrade up build down restart reload-core-env restart-web logs logs-core logs-web local-exec local-manage local-test local-makemigrations local-dbshell local-migrate local-tick up-jobs down-jobs _job-up _jobs-running local-lint local-lint-fix local-types local-check local-web local-web-reinstall local-web-shell local-cli-sync local-cli hooks
 
 # Getting started is the curl|sh installer (scripts/quickstart/bootstrap.sh) or,
 # in a clone, ./scripts/quickstart/run.sh. That orchestration lives in POSIX sh,
@@ -28,8 +28,26 @@ build: ## Rebuild Docker images and start
 down: ## Stop local Docker dev environment
 	docker compose down
 
-restart: ## Restart all services in place (bounces the dev servers; recompiles .next). Use `make down && make up` after docker-compose.yml changes.
+restart: ## Restart all services in place, keeping the old environment (after editing apps/core/.env, use `make reload-core-env`)
 	docker compose restart
+
+reload-core-env: ## Load apps/core/.env changes into the backend (recreates core; stops and restarts the job tickers around it)
+	@# Stopping the tickers first means no pass is cut off mid-run holding its lock.
+	@# With them down, down-jobs' lock clear is safe: nothing can start a new pass,
+	@# and the recreate removes any that is still finishing. Without them (passes
+	@# from local-tick or cron), only signal the passes: a scheduler outside our
+	@# control may be mid-pass, and a blanket clear would free its live lock.
+	@if $(MAKE) --no-print-directory -s _jobs-running 2>/dev/null; then \
+		echo "job tickers are running: stopping them for the reload, restarting after"; \
+		$(MAKE) --no-print-directory down-jobs; \
+		tickers=1; \
+	else \
+		echo "signaling any in-container job passes to stop gracefully..."; \
+		$(MAKE) --no-print-directory local-manage CMD="stop_due_jobs" || true; \
+	fi; \
+	docker compose up -d --wait --force-recreate core || { \
+		echo "core did not come up healthy; job tickers left stopped (run make up-jobs once it is)"; exit 1; }; \
+	if [ -n "$$tickers" ]; then $(MAKE) --no-print-directory up-jobs; fi
 
 restart-web: ## Restart just the web container (app + marketing + blog); use when host-side edits have confused its dev server
 	docker compose restart web
@@ -87,6 +105,7 @@ local-tick: ## Run one pipeline pass: poll feeds -> trigger watches -> run backf
 # (Prod scheduling = plain cron per command on these cadences; no flock /
 # singleton infra needed, since the command self-skips overlaps.)
 JOBS_DIR := .jobs
+JOB_NAMES := poll trigger backfill drain digest email heartbeat
 POLL_INTERVAL ?= 300
 TRIGGER_INTERVAL ?= 300
 BACKFILL_INTERVAL ?= 60
@@ -125,8 +144,14 @@ _job-up:
 		echo "$(NAME) ($(CMD)) started (pid $$(cat $(JOBS_DIR)/$(NAME).pid)) every $(INTERVAL)s -> $(JOBS_DIR)/$(NAME).log"; \
 	fi
 
+_jobs-running:
+	@# Succeeds if any up-jobs ticker is alive, fails if none is.
+	@for n in $(JOB_NAMES); do \
+		if [ -f $(JOBS_DIR)/$$n.pid ] && kill -0 $$(cat $(JOBS_DIR)/$$n.pid) 2>/dev/null; then exit 0; fi; \
+	done; exit 1
+
 down-jobs: ## Stop the background tickers started by up-jobs (signal in-flight passes, then clear locks)
-	@for n in poll trigger backfill drain digest email heartbeat; do \
+	@for n in $(JOB_NAMES); do \
 		if [ -f $(JOBS_DIR)/$$n.pid ]; then \
 			kill $$(cat $(JOBS_DIR)/$$n.pid) 2>/dev/null; rm -f $(JOBS_DIR)/$$n.pid; echo "$$n stopped"; \
 		else echo "$$n not running"; fi; \

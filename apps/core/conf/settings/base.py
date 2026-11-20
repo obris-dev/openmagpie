@@ -565,6 +565,17 @@ SOURCE_ALLOW_INSECURE_TLS = env_bool("SOURCE_ALLOW_INSECURE_TLS", "false")
 # Google account. Empty (the default) disables it.
 YOUTUBE_COOKIES_FILE = os.environ.get("YOUTUBE_COOKIES_FILE", "")
 
+# Developer token for the Product Hunt connector (the GraphQL API v2). Create
+# one at https://www.producthunt.com/v2/oauth/applications, and read Product
+# Hunt's API terms of service to use the connector within them. Empty (the
+# default) refuses producthunt_launches sources on feed writes and polls.
+PRODUCT_HUNT_TOKEN = os.environ.get("PRODUCT_HUNT_TOKEN", "").strip()
+
+# The sentence that ends a source refusal for a missing server setting
+# (sources/required_settings.py); `{name}` is the setting. Each settings profile
+# words it for how that deployment sets and loads its environment.
+ENV_RELOAD_HINT: str = "{name} is not available in the server's environment."
+
 # X (Twitter) connector session config. The connector authenticates with an
 # existing x.com session, resolved per poll in priority order:
 #   TWITTER_COOKIES_JSON      a full JSON dict of x.com cookies (inline env)

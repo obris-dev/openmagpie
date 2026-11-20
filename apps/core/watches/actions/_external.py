@@ -19,7 +19,7 @@ from django.conf import settings
 
 from common.ssrf import destination_block_reason
 from openmagpie_schema.watch_actions import ExternalContentStatus
-from sources.connectors.base import FETCH_DEFAULT_MAX_BYTES, ConnectorParseError, extract_article_text
+from sources.connectors.base import FETCH_DEFAULT_MAX_BYTES, PROJECT_URL, ConnectorParseError, extract_article_text
 from sources.connectors.challenge_bypass import challenge_bypass_fetch
 
 logger = logging.getLogger("watches")
@@ -27,7 +27,7 @@ logger = logging.getLogger("watches")
 # Bounds for the opt-in external-article fetch (config.fetch_external_content); the
 # shared untrusted-fetch cap so the article + sidecar + RSS caps can't drift apart.
 MAX_ARTICLE_BYTES = FETCH_DEFAULT_MAX_BYTES
-ARTICLE_USER_AGENT = "openmagpie/1.0 (+https://github.com/obris-dev/openmagpie)"
+ARTICLE_USER_AGENT = f"openmagpie/1.0 (+{PROJECT_URL})"
 
 # Primary-fetch outcomes a Cloudflare-style block produces, i.e. the ones worth
 # retrying through the headless challenge-bypass sidecar: the fetch was refused

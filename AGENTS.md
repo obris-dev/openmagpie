@@ -15,7 +15,7 @@ When working in `apps/core/`, `apps/cli/`, or `web/`, load the matching `AGENTS.
 An open-source semantic listener. Tell it what to listen for; it picks out what matters from any stream and learns over time.
 
 Three things stay pluggable across the codebase:
-- **Connectors** (Reddit, GitHub, GDocs, Slack, ...): yield typed `SourcePayload` subclasses from each source
+- **Connectors** (Reddit, Hacker News, RSS, X, YouTube, Product Hunt, ...): yield typed `SourcePayload` subclasses from each source
 - **Engines** (any OpenAI-compatible `/v1` LLM: Ollama, vLLM, llama.cpp, LM Studio, OpenAI, ...; future keyword/other): BYO LLM that judges a `SourcePayload` for a semantic-filter action
 - **Action kinds** (semantic_filter, extract, webhook, bower, log, future keyword/Slack/email): the steps a Watch runs over each feed item, in three families: FILTER (gate the chain), EXTRACT (hydrate structured fields onto the run), DELIVER
 

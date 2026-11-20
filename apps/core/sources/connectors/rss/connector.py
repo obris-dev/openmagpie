@@ -22,6 +22,7 @@ from sources.payloads import SourcePayload
 
 from ..base import (
     FETCH_DEFAULT_MAX_BYTES,
+    PROJECT_URL,
     BaseConnector,
     ConnectorParseError,
     read_response_capped,
@@ -34,7 +35,7 @@ logger = logging.getLogger("sources")
 
 # Polite default UA ; some publishers 403 the bare `python-httpx/...` UA.
 # Identify the project so a publisher can correlate traffic if they look.
-RSS_USER_AGENT = "openmagpie-rss/1.0 (+https://github.com/obris-dev/openmagpie)"
+RSS_USER_AGENT = f"openmagpie-rss/1.0 (+{PROJECT_URL})"
 
 # Cap how many bytes we accumulate from a single feed in one cycle.
 # RSS feeds are typically <100KB; a >5MB body is either a misconfigured

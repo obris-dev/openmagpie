@@ -36,7 +36,7 @@ from .api import (
     SourceSvcMixin,
 )
 from .models import FeedItem, Source
-from .policy import PolicyError
+from .policy import PolicyError, validate_source_specs
 from .serializers import (
     SOURCE_INPUT_LIST_ADAPTER,
     FeedCreateSerializer,
@@ -59,6 +59,11 @@ class FeedListCreateView(FeedSvcMixin, AccountScopedAPIView):
         serializer = FeedCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         d = serializer.validated_data
+        # Here, not in the serializer: PUT shares it and ignores `sources`.
+        try:
+            validate_source_specs([item.spec for item in d["sources"]])
+        except PolicyError as exc:
+            return Response({"sources": [str(exc)]}, status=status.HTTP_400_BAD_REQUEST)
 
         if wants_dry_run(request):
             preview = self.feed_svc.build(
@@ -227,7 +232,8 @@ class FeedSourcesView(SourceSvcMixin, FeedScopedAPIView):
         try:
             result = self.source_svc.set_sources(self.feed, items, dry_run=dry_run)
         except PolicyError as exc:
-            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+            # Keyed by the field it is about, the same shape feed create gives.
+            return Response({"sources": [str(exc)]}, status=status.HTTP_400_BAD_REQUEST)
         except ConcurrentSetSourcesError as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
         return Response(result.model_dump(mode="json"), status=status.HTTP_200_OK)

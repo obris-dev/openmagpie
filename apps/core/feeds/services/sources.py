@@ -36,10 +36,9 @@ from django.db.models import Count, Q, QuerySet
 from common.locks import feed_set_lock
 from feeds.configs import CuratedFeedConfig
 from feeds.models import Feed, Source
-from feeds.policy import PolicyError, default_and_enforce_source_watermark, enforce_source_spec_safety
+from feeds.policy import PolicyError, default_and_enforce_source_watermark, validate_source_specs
 from openmagpie_schema.configs import SourceSpec, canonical_spec
 from openmagpie_schema.feed import SourceInput, SourceSetResult
-from sources import registry as source_registry
 
 from ._sources_seek import SourceSeekMixin
 
@@ -51,28 +50,6 @@ class ConcurrentSetSourcesError(Exception):
 
 
 logger = logging.getLogger("feeds")
-
-
-def _assert_connector_registered(specs: list[SourceSpec]) -> None:
-    """Reject input specs whose connector kind isn't loaded in this
-    deployment. The poll path is defensive about this (`KeyError` is
-    in `_RECOVERABLE_ERRORS` so an unknown kind logs and skips one
-    source instead of aborting the cycle), but a write-time check
-    means an operator sees a clean 400 with the offending kind named
-    instead of a row that silently never polls. Mirrors how feeds
-    `validate_config` runs at the boundary."""
-    missing: set[str] = set()
-    for spec in specs:
-        try:
-            source_registry.get(spec.kind)
-        except KeyError:
-            missing.add(spec.kind)
-    if missing:
-        raise PolicyError(
-            "no connector registered for source kind(s): "
-            + ", ".join(sorted(missing))
-            + " (this deployment is missing the connector; remove the offending sources or upgrade the server)"
-        )
 
 
 def _hash_spec(spec: SourceSpec) -> str:
@@ -230,9 +207,6 @@ class SourceService(SourceSeekMixin):
         duplicates are logged at WARNING so the operator can spot a
         scrape script that's silently dropping data."""
         self._assert_curated(feed)
-        specs = [item.spec for item in items]
-        _assert_connector_registered(specs)
-        enforce_source_spec_safety(specs)
 
         new_by_hash: dict[str, SourceInput] = {}
         for item in items:
@@ -260,6 +234,7 @@ class SourceService(SourceSeekMixin):
         # silently deletes rows A added).
         if dry_run:
             existing_hashes = set(self._scoped(feed).values_list("spec_hash", flat=True))
+            validate_source_specs([new_by_hash[h].spec for h in new_hashes - existing_hashes])
             return SourceSetResult(
                 added=len(new_hashes - existing_hashes),
                 removed=len(existing_hashes - new_hashes),
@@ -285,6 +260,10 @@ class SourceService(SourceSeekMixin):
                 added_hashes = new_hashes - existing_hashes
                 removed_hashes = existing_hashes - new_hashes
                 persisted_hashes = existing_hashes & new_hashes
+                # Only what this set adds: a source already on the feed was
+                # validated when it was added, and re-checking it would block every
+                # other edit (e.g. while a connector's token is unset).
+                validate_source_specs([new_by_hash[h].spec for h in added_hashes])
 
                 if removed_hashes:
                     self._scoped(feed).filter(spec_hash__in=removed_hashes).delete()
