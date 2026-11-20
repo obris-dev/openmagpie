@@ -21,8 +21,7 @@ YOUTUBE_COOKIES_FILE=/app/apps/core/credentials/youtube/cookies.txt
 ```
 
 Settings are read per poll, so a refreshed export applies on the next cycle
-without a restart. `.env` changes themselves still need the usual
-`docker compose up -d --force-recreate`.
+without a restart. `.env` changes themselves still need `make reload-core-env`.
 
 ## X / Twitter: generating a cookie export
 

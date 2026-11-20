@@ -147,6 +147,16 @@ def register() -> None:
 built-in kind; it validates through the `SourceSpec` fallback member (give it a
 `display()`).
 
+**Server settings:** if your connector can't poll without a setting (an API token read
+from the environment), declare it and core enforces it for you: feed create and
+`feed source set` refuse your sources while it is empty, and so does the poll, naming
+the setting, the note you give, and how to load it.
+```python
+class MyConnector(BaseConnector[MySpec]):
+    required_settings: ClassVar[dict[str, str]] = {"MY_API_TOKEN": "your API token, from https://example.com/keys"}
+```
+Optional: omit it (or don't subclass `BaseConnector`) and nothing is required.
+
 **SSRF:** core's write-time gate (`feeds/policy.py`) rejects a spec URL whose host is a
 blocked IP literal, so a fork spec gets that defense-in-depth for free. The scan scopes
 by a `URL_FIELDS: ClassVar[tuple[str, ...]]` on the spec: declare the fields your

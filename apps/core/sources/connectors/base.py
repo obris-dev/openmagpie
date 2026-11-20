@@ -3,7 +3,7 @@ import math
 import time
 from collections.abc import Callable, Iterator
 from datetime import datetime
-from typing import Protocol
+from typing import ClassVar, Protocol
 
 import httpx
 from django.conf import settings
@@ -26,6 +26,15 @@ FETCH_TOTAL_TIMEOUT = 30.0
 # enrichment, challenge-bypass sidecar). One shared value so the caps can't drift
 # apart across the callers that each fetch untrusted bytes.
 FETCH_DEFAULT_MAX_BYTES = 5 * 1024 * 1024
+
+# Where a source operator can find out what is making requests; every connector's
+# User-Agent points here.
+PROJECT_URL = "https://github.com/obris-dev/openmagpie"
+
+
+def openmagpie_user_agent() -> str:
+    """The descriptive User-Agent for upstream APIs: product, version, project URL."""
+    return f"openmagpie/{settings.PRODUCT_VERSION} (+{PROJECT_URL})"
 
 
 class ConnectorParseError(Exception):
@@ -64,7 +73,7 @@ def read_response_capped(
     return bytes(body)
 
 
-def _as_positive_float(raw: str | None) -> float | None:
+def as_positive_float(raw: str | None) -> float | None:
     """Parse a header value to a finite, positive float, else None. `float()` on
     a str raises only ValueError - an overflowing literal like "1e400" returns
     inf, not OverflowError (that's float(huge_int)) - so ValueError is the only
@@ -97,10 +106,10 @@ def parse_rate_limit_wait(response: httpx.Response) -> float | None:
 
     Only a finite, positive result is returned, so the caller never sleeps on a
     NaN, an infinity, or a non-positive value."""
-    seconds = _as_positive_float(response.headers.get("Retry-After"))
+    seconds = as_positive_float(response.headers.get("Retry-After"))
     if seconds is not None:
         return seconds
-    return _as_positive_float(response.headers.get("X-RateLimit-Reset"))
+    return as_positive_float(response.headers.get("X-RateLimit-Reset"))
 
 
 def rate_limit_delay(relative_wait: float | None, attempt: int, *, base: float, cap: float) -> float:
@@ -237,7 +246,12 @@ class Connector[SpecT: BaseModel](Protocol):
       - declares its `payloads` (SourcePayload subclasses it produces, used
         by `sources.payload_registry` to hydrate stored data back to typed
         SourcePayloads),
-      - yields typed SourcePayloads for a given stream_spec.
+      - yields typed SourcePayloads for a given stream_spec,
+      - optionally declares `required_settings`: {setting name: where its value
+        comes from} for server settings it cannot poll without (an API token).
+        Feed writes refuse a source whose connector is missing one, naming the
+        setting and how to load it (`sources.required_settings`). Omitting it,
+        or inheriting BaseConnector's empty default, means none.
 
     Connectors are tenant-agnostic: the Feed drives polling, so `poll` takes
     only the source spec + watermark (no watch/account).
@@ -305,8 +319,11 @@ class BaseConnector[SpecT: BaseModel]:
     `BaseConnector` itself is NOT a `Connector` (it has no `kind` /
     `payloads`); a concrete subclass that declares those plus `poll`
     is what structurally satisfies the Protocol. This class only supplies
-    the `count` default, it is opt-in, not a required parent.
+    the `count` default, it is opt-in, not a required parent. It also
+    declares `required_settings` empty, so a subclass only names its own.
     """
+
+    required_settings: ClassVar[dict[str, str]] = {}
 
     def count(
         self,

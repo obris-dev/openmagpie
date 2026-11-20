@@ -1326,6 +1326,9 @@
               "$ref": "#/$defs/NewVideoPayload"
             },
             {
+              "$ref": "#/$defs/NewProductHuntLaunchPayload"
+            },
+            {
               "$ref": "#/$defs/FeedItemPayload"
             }
           ],
@@ -2144,6 +2147,95 @@
       "title": "LogRunWire",
       "type": "object"
     },
+    "NewProductHuntLaunchPayload": {
+      "additionalProperties": true,
+      "description": "`new_producthunt_launch`: one Product Hunt front-page launch (ProductHuntLaunchesConnector,\nthe GraphQL API). `title` is the product name, `content` its tagline plus\ndescription, `url` its Product Hunt page, `occurred_at` its launch time.\n`makers` is the makers the API shows (comma-joined; empty when redacted),\n`topics` its topics (comma-joined), `source_topic` the topic slug its source is narrowed to.",
+      "properties": {
+        "author": {
+          "default": "",
+          "title": "Author",
+          "type": "string"
+        },
+        "content": {
+          "default": "",
+          "title": "Content",
+          "type": "string"
+        },
+        "external_id": {
+          "default": "",
+          "title": "External Id",
+          "type": "string"
+        },
+        "external_url": {
+          "default": "",
+          "title": "External Url",
+          "type": "string"
+        },
+        "kind": {
+          "const": "new_producthunt_launch",
+          "title": "Kind",
+          "type": "string"
+        },
+        "makers": {
+          "default": "",
+          "title": "Makers",
+          "type": "string"
+        },
+        "occurred_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Occurred At"
+        },
+        "parent_external_id": {
+          "default": "",
+          "title": "Parent External Id",
+          "type": "string"
+        },
+        "source": {
+          "default": "",
+          "title": "Source",
+          "type": "string"
+        },
+        "source_topic": {
+          "default": "",
+          "title": "Source Topic",
+          "type": "string"
+        },
+        "tagline": {
+          "default": "",
+          "title": "Tagline",
+          "type": "string"
+        },
+        "title": {
+          "default": "",
+          "title": "Title",
+          "type": "string"
+        },
+        "topics": {
+          "default": "",
+          "title": "Topics",
+          "type": "string"
+        },
+        "url": {
+          "default": "",
+          "title": "Url",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "title": "NewProductHuntLaunchPayload",
+      "type": "object"
+    },
     "NewRedditPostPayload": {
       "additionalProperties": true,
       "description": "`new_post`: one post off a subreddit's /new (RedditSubredditConnector).",
@@ -2685,6 +2777,24 @@
       "title": "PluginSourceSpec",
       "type": "object"
     },
+    "ProductHuntLaunchesSourceSpec": {
+      "description": "Identity of one Product Hunt launch stream. Bound to ProductHuntLaunchesConnector.\n\nFront-page (featured) launches, read from the official GraphQL API with the\nserver's developer token (PRODUCT_HUNT_TOKEN). `topic` narrows to one topic by\nits slug (`developer-tools`) or its pasted topic URL; empty = every topic.",
+      "properties": {
+        "kind": {
+          "const": "producthunt_launches",
+          "default": "producthunt_launches",
+          "title": "Kind",
+          "type": "string"
+        },
+        "topic": {
+          "default": "",
+          "title": "Topic",
+          "type": "string"
+        }
+      },
+      "title": "ProductHuntLaunchesSourceSpec",
+      "type": "object"
+    },
     "RedditSubredditSourceSpec": {
       "description": "Identity of one subreddit source. Bound to RedditSubRedditConnector.",
       "properties": {
@@ -3165,6 +3275,7 @@
                 "mapping": {
                   "hn_comment": "#/$defs/HackerNewsCommentSourceSpec",
                   "hn_feed": "#/$defs/HackerNewsFeedSourceSpec",
+                  "producthunt_launches": "#/$defs/ProductHuntLaunchesSourceSpec",
                   "reddit_subreddit": "#/$defs/RedditSubredditSourceSpec",
                   "rss": "#/$defs/RssSourceSpec",
                   "twitter_search": "#/$defs/TwitterSearchSourceSpec",
@@ -3190,6 +3301,9 @@
                 },
                 {
                   "$ref": "#/$defs/YouTubeSearchSourceSpec"
+                },
+                {
+                  "$ref": "#/$defs/ProductHuntLaunchesSourceSpec"
                 }
               ]
             },
@@ -3355,6 +3469,7 @@
                 "mapping": {
                   "hn_comment": "#/$defs/HackerNewsCommentSourceSpec",
                   "hn_feed": "#/$defs/HackerNewsFeedSourceSpec",
+                  "producthunt_launches": "#/$defs/ProductHuntLaunchesSourceSpec",
                   "reddit_subreddit": "#/$defs/RedditSubredditSourceSpec",
                   "rss": "#/$defs/RssSourceSpec",
                   "twitter_search": "#/$defs/TwitterSearchSourceSpec",
@@ -3380,6 +3495,9 @@
                 },
                 {
                   "$ref": "#/$defs/YouTubeSearchSourceSpec"
+                },
+                {
+                  "$ref": "#/$defs/ProductHuntLaunchesSourceSpec"
                 }
               ]
             },

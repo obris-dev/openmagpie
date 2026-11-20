@@ -14,6 +14,7 @@ from urllib.parse import urlsplit
 
 from pydantic import BaseModel, Field, field_validator
 
+from ._platform_source_specs import ProductHuntLaunchesSourceSpec, TwitterSearchSourceSpec, YouTubeSearchSourceSpec
 from ._unions import _PLUGIN_MEMBER_LOC_NAMES, KIND_MAX_LENGTH, builtin_union_kinds, reject_builtin_kind
 
 # ── Source specs (discriminated union over kind) ──────────────────────────
@@ -149,71 +150,6 @@ class HackerNewsCommentSourceSpec(_HackerNewsSpec):
         return f'HN comments: "{self.query}"'
 
 
-class TwitterSearchSourceSpec(BaseModel):
-    """Identity of one X (Twitter) search stream. Bound to TwitterSearchConnector.
-
-    `query` is the search expression (keywords, quoted phrases, `from:`,
-    `lang:`, `filter:` operators, whatever X's search syntax accepts); it is
-    REQUIRED and NON-BLANK so a source always carries a server-side pre-filter
-    before any per-item LLM cost (same discipline as hn_comment: a blank query
-    would be the unfiltered firehose). `mode` picks the result ordering twikit
-    asks X for: `latest` (newest first, the listener's default) or `top`
-    (ranked). `count` caps the per-cycle fetch. `lang` optionally narrows to
-    tweets in one language (ISO 639-1, e.g. "en"); empty = no filter.
-    """
-
-    SOURCE_KIND: ClassVar[str] = "twitter_search"
-    URL_FIELDS: ClassVar[tuple[str, ...]] = ()  # no operator-supplied URL to SSRF-check
-
-    kind: Literal["twitter_search"] = "twitter_search"
-    query: str = Field(min_length=1)
-    mode: Literal["latest", "top"] = "latest"
-    count: int = Field(default=20, ge=1, le=100)
-    lang: str = ""
-
-    @field_validator("query")
-    @classmethod
-    def _query_not_blank(cls, v: str) -> str:
-        v = v.strip()
-        if not v:
-            raise ValueError("twitter_search requires a non-blank query (the firehose guard)")
-        return v
-
-    @field_validator("lang")
-    @classmethod
-    def _lang_normalize(cls, v: str) -> str:
-        return v.strip().lower()
-
-    def display(self) -> str:
-        return f'X search: "{self.query}"'
-
-
-class YouTubeSearchSourceSpec(BaseModel):
-    """Identity of one YouTube search stream. Bound to YouTubeSearchConnector.
-
-    `query` is REQUIRED and NON-BLANK so a source always carries a server-side
-    pre-filter before any per-item LLM cost. `count` caps the per-cycle fetch
-    (bounded at 50, the client's search cap)."""
-
-    SOURCE_KIND: ClassVar[str] = "youtube_search"
-    URL_FIELDS: ClassVar[tuple[str, ...]] = ()  # no operator-supplied URL to SSRF-check
-
-    kind: Literal["youtube_search"] = "youtube_search"
-    query: str = Field(min_length=1)
-    count: int = Field(default=20, ge=1, le=50)
-
-    @field_validator("query")
-    @classmethod
-    def _query_not_blank(cls, v: str) -> str:
-        v = v.strip()
-        if not v:
-            raise ValueError("youtube_search requires a non-blank query (the firehose guard)")
-        return v
-
-    def display(self) -> str:
-        return f'YouTube search: "{self.query}"'
-
-
 # The built-ins as a discriminated union over `kind` (defined before the plugin
 # fallback so the built-in kind set can be derived from it below). A built-in kind
 # with a malformed spec fails its typed member here and is rejected by the fallback,
@@ -224,7 +160,8 @@ _BuiltinSourceSpec = Annotated[
     | HackerNewsFeedSourceSpec
     | HackerNewsCommentSourceSpec
     | TwitterSearchSourceSpec
-    | YouTubeSearchSourceSpec,
+    | YouTubeSearchSourceSpec
+    | ProductHuntLaunchesSourceSpec,
     Field(discriminator="kind"),
 ]
 

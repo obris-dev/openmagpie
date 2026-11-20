@@ -13,6 +13,7 @@ from sources.payload_registry import register
 from sources.payloads import SourcePayload
 
 from ..base import (
+    PROJECT_URL,
     BaseConnector,
     ConnectorParseError,
     parse_rate_limit_wait,
@@ -42,7 +43,6 @@ logger = logging.getLogger("sources")
 # key on IP, and a stable token would let Reddit link one install across IPs
 # (and the telemetry instance_id must never leak past its opt-out this way).
 REDDIT_APP_ID = "openmagpie"
-REDDIT_PROJECT_URL = "https://github.com/obris-dev/openmagpie"
 
 
 def reddit_user_agent() -> str:
@@ -50,7 +50,7 @@ def reddit_user_agent() -> str:
     can set REDDIT_USER_AGENT_CONTACT (e.g. `/u/name`) to identify themselves;
     otherwise the project URL stands in as the contact."""
     contact = settings.REDDIT_USER_AGENT_CONTACT
-    suffix = f"by {contact}" if contact else f"+{REDDIT_PROJECT_URL}"
+    suffix = f"by {contact}" if contact else f"+{PROJECT_URL}"
     return f"linux:{REDDIT_APP_ID}:v{settings.PRODUCT_VERSION} ({suffix})"
 
 

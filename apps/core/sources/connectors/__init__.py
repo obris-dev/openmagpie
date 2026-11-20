@@ -1,5 +1,6 @@
 from .base import Connector
 from .hackernews import HackerNewsCommentConnector, HackerNewsFeedConnector
+from .producthunt import ProductHuntLaunchesConnector
 from .reddit import RedditSubRedditConnector
 from .rss import RssConnector
 from .twitter import TwitterSearchConnector
@@ -9,6 +10,7 @@ __all__ = [
     "Connector",
     "HackerNewsCommentConnector",
     "HackerNewsFeedConnector",
+    "ProductHuntLaunchesConnector",
     "RedditSubRedditConnector",
     "RssConnector",
     "TwitterSearchConnector",

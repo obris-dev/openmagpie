@@ -16,13 +16,13 @@ from django.test import SimpleTestCase, override_settings
 from pydantic import TypeAdapter, ValidationError
 
 from common.models import KIND_MAX_LENGTH
-from feeds.policy import PolicyError, enforce_source_spec_safety
-from feeds.services.sources import _assert_connector_registered
+from feeds.policy import PolicyError, enforce_connectors_registered, enforce_source_spec_safety
 from openmagpie_schema.configs import (
     _BUILTIN_SOURCE_KINDS,
     HackerNewsCommentSourceSpec,
     HackerNewsFeedSourceSpec,
     PluginSourceSpec,
+    ProductHuntLaunchesSourceSpec,
     RedditSubredditSourceSpec,
     RssSourceSpec,
     SourceSpec,
@@ -218,11 +218,11 @@ class ConnectorGateTests(SimpleTestCase):
         connector = mock.Mock()
         connector.kind = "custom_source"
         with mock.patch.dict(source_registry._REGISTRY, {"custom_source": connector}, clear=False):
-            _assert_connector_registered([self._spec()])  # no raise
+            enforce_connectors_registered([self._spec()])  # no raise
 
     def test_unregistered_plugin_kind_is_rejected(self) -> None:
         with self.assertRaises(PolicyError):
-            _assert_connector_registered([self._spec()])
+            enforce_connectors_registered([self._spec()])
 
 
 class RegisterSourceFacadeTests(SimpleTestCase):
@@ -321,6 +321,7 @@ class BuiltinSourceKindInvariantTests(SimpleTestCase):
                     HackerNewsCommentSourceSpec.SOURCE_KIND,
                     TwitterSearchSourceSpec.SOURCE_KIND,
                     YouTubeSearchSourceSpec.SOURCE_KIND,
+                    ProductHuntLaunchesSourceSpec.SOURCE_KIND,
                 }
             ),
         )

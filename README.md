@@ -28,7 +28,7 @@
 
 ## What it does
 
-You scan X/Twitter, YouTube, Reddit, Hacker News, and a few RSS feeds looking for someone talking about your product, hitting a problem it solves, or asking a question you can answer well. Getting there while the conversation is happening is how you build a brand and a community around what you know: a mention answered the day it's posted beats one found in next month's report. OpenMagpie watches the threads for you so you spend your time on engagement instead of searching.
+You scan social platforms and community sites (X/Twitter, YouTube, Reddit, Hacker News, RSS feeds, and more) looking for someone talking about your product, hitting a problem it solves, or asking a question you can answer well. Getting there while the conversation is happening is how you build a brand and a community around what you know: a mention answered the day it's posted beats one found in next month's report. OpenMagpie watches the threads for you so you spend your time on engagement instead of searching.
 
 You curate sources into a feed, write a natural-language description of what's relevant (for example, "someone frustrated with manual social monitoring and asking for alternatives"), and a local LLM run via any OpenAI-compatible runner (e.g. Ollama, vLLM, LM Studio) scores each new post against it. Matches go to a webhook, an [OpenBower](https://github.com/obris-dev/openbower) signal, or your logs (more integrations coming); everything else is dropped. You read the hits instead of the firehose.
 
@@ -37,6 +37,7 @@ You curate sources into a feed, write a natural-language description of what's r
 OpenMagpie listens wherever communities are having those conversations.
 
 - **Public discussion (today):** X/Twitter, YouTube, Reddit, Hacker News, and any RSS or Atom feed (news, blogs, Substack publications, and forums that publish feeds).
+- **Product launches (today):** Product Hunt, through its official API with your own developer token.
 - **Communities you're in (roadmap):** Slack workspaces and LinkedIn you already belong to, so you catch relevant threads in the groups where you participate, no admin or app install required.
 - **Public discussion (soon to be added):** Facebook, TikTok, and Instagram.
 
@@ -142,7 +143,7 @@ A `Feed` is a reusable, curated stream (a set of sources plus an item log). A `W
 
 ```mermaid
 flowchart TD
-    SOURCES["Sources<br/>X/Twitter, YouTube, Reddit,<br/>Hacker News, RSS/Atom"]
+    SOURCES["Sources<br/>X/Twitter, YouTube, Reddit,<br/>Hacker News, RSS/Atom, Product Hunt"]
     FEED["Feed<br/>curated sources + item log"]
     WATCH["Watch<br/>subscribes to one or more feeds"]
     FILTER["semantic_filter<br/>scores each item against your description"]
@@ -230,14 +231,25 @@ Social listening is a crowded market (Brand24, Mention, Octolens, Syften, and to
 
 | Layer | Shipped |
 |---|---|
-| Connectors | X/Twitter (`twitter_search`), YouTube (`youtube_search`), Reddit (`reddit_subreddit`), Hacker News (`hn_feed`, `hn_comment`), RSS/Atom (`rss`) |
+| Connectors | Reddit, Hacker News, RSS/Atom, X/Twitter, YouTube, Product Hunt ([below](#connectors)) |
 | Engines | Any OpenAI-compatible `/v1` API: Ollama, vLLM, llama.cpp, LM Studio, OpenAI, ... |
 | Action kinds | `semantic_filter` (LLM-judged), `webhook`, `bower` (OpenBower), `log` |
 | Delivery modes | instant, digest |
 | Webhook methods | `POST`, `PUT`, `PATCH` |
 | Delivery audit | per-attempt `WatchActionDelivery` |
 
-Two connectors ride an unofficial route and need a browser session cookie (X/Twitter always, YouTube only for age-restricted videos); see [apps/core/credentials/README.md](apps/core/credentials/README.md) for setup and the terms-of-service caveat. Per-release history is in the [changelog](CHANGELOG.md).
+### Connectors
+
+| Connector | Source kind | Needs |
+|---|---|---|
+| Reddit | `reddit_subreddit` | nothing |
+| Hacker News | `hn_feed`, `hn_comment` | nothing |
+| RSS/Atom | `rss` | nothing |
+| X/Twitter | `twitter_search` | an x.com session cookie |
+| YouTube | `youtube_search` | nothing (a session cookie only for age-restricted videos) |
+| Product Hunt | `producthunt_launches` | your developer token (`PRODUCT_HUNT_TOKEN` in `apps/core/.env`) |
+
+X/Twitter and YouTube ride an unofficial route; [apps/core/credentials/README.md](apps/core/credentials/README.md) covers the cookie setup and the terms-of-service caveat. Product Hunt is read through its official API; please read Product Hunt's API terms of service and use the connector within them. Per-release history is in the [changelog](CHANGELOG.md).
 
 ## Roadmap
 
@@ -264,7 +276,7 @@ apps/
     common/                   BaseModel (ULID PK + timestamps), ULIDField, locks + lease renewer, db ceilings, /healthz
     accounts/                 User / Account / UserProfile + services + AccountScopedAPIView mixin
     auth_api/                 signup / login / logout / me + tokens/* + device-flow handshake (DRF)
-    sources/                  Connectors (Reddit, Hacker News, RSS/Atom) + SourcePayload classes + registry
+    sources/                  Connectors (listed under Connectors above) + SourcePayload classes + registry
     feeds/                    Feed + Source + FeedItem models + poll orchestrator + item log
     engine/                   Engine Protocol + OpenAICompatEngine + registry (+ probe)
     watches/                  Watch + WatchFeed + WatchPath + WatchAction + WatchActionRun + WatchActionDelivery

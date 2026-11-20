@@ -1,0 +1,25 @@
+# OpenMagpie starter: new Product Hunt launches.
+# Uses the `producthunt_launches` source kind: Product Hunt's official GraphQL
+# API, read with YOUR developer token. Set PRODUCT_HUNT_TOKEN in apps/core/.env
+# first (create a token at https://www.producthunt.com/v2/oauth/applications).
+# Please read Product Hunt's API terms of service and use this connector within
+# them.
+# Apply by hand (this starter isn't wired into the quickstart seed script):
+#   magpie feed create -f examples/starters/producthunt/feed.yaml
+#   magpie watch create -f examples/starters/producthunt/watch.yaml   (after the edits in examples/README.md)
+# Without a last_event_at the source starts at the next day's launches. To fill
+# a past window, set last_event_at to its first day (within retention_days): a
+# long backlog is read about 10 days per poll, oldest first, and each poll that
+# stops early logs how far it got.
+# Full walkthrough: examples/README.md
+name: "Product Hunt launches (starter)"
+kind: curated
+poll_interval_seconds: 1800
+data:
+  retention_days: 30
+sources:
+  # Front-page launches in every topic.
+  - spec: {kind: producthunt_launches}
+  # Narrow to one topic by the slug in its URL
+  # (producthunt.com/topics/developer-tools -> developer-tools):
+  #   - spec: {kind: producthunt_launches, topic: developer-tools}

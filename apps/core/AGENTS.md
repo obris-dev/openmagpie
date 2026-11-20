@@ -204,6 +204,7 @@ app/
 
 - Adding a new plugin = one file + one registry entry.
 - Connector classes declare both `kind: str` and `payloads: list[type[SourcePayload]]`; the `register(...)` call references the class attrs (no string duplication).
+- A connector that can't poll without a server setting (an API token) declares `required_settings: ClassVar[dict[str, str]]` (setting name -> where its value comes from). Feed writes and the poll then refuse its sources while the setting is empty, with guidance from `sources/required_settings.py`; don't hand-roll a token check in the connector or client.
 - App `ready()` hooks import the registry so plugins self-register at Django startup, not lazily.
 - **Action kinds have TWO registries, kept separate**: the CONFIG registry (`watches.registry`, kind -> Pydantic config class, validation) and the EXECUTION registry (`watches.actions.registry`, kind -> runnable `Action` impl). An action impl declares `kind` and implements `run(action, *, items, context)` (a uniform batch call: the instant drain passes a one-item list, the digest flush the whole slice).
 

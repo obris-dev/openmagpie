@@ -1,0 +1,27 @@
+# Companion watch for the Product Hunt launches starter. See feed.yaml and
+# examples/README.md. Apply with `magpie watch create -f` after creating the
+# feed, and set its real id below (replacing REPLACE_WITH_FEED_ID).
+name: "Product Hunt launches in my market (starter)"
+is_active: true
+feed_ids:
+  - REPLACE_WITH_FEED_ID
+actions:
+  - kind: semantic_filter
+    config:
+      instructions: "A new product launch that a B2B software company could sell to: a startup building a developer tool, data product, or SaaS for businesses. The product name, tagline, and description are the judged text. Not consumer apps, games, or AI wrappers for personal use."
+      threshold: 0.6
+  - kind: log
+    config:
+      prefix: "[producthunt launch]"
+  # Prefer a push over a log line? Uncomment and point at your notifier (ntfy, or
+  # a relay like a Slack/Discord webhook or openclaw-style instance). A webhook also
+  # records a delivery audit you can inspect with `magpie delivery list --action <action_id>`:
+  # - kind: webhook
+  #   config:
+  #     url: "https://your-notifier.example/hook"
+  #     method: POST
+  # To send each match as a row to a new OpenBower signal, with a column per item
+  # field (product, tagline, Product Hunt page, makers, topics, launch time, ...),
+  # add a bower action once the watch exists. Add --dry-run first to see the columns.
+  #   export OPENBOWER_API_KEY=...   # used once to create the signal, never stored
+  #   magpie watch connect-bower <watch_id> --api-url <your OpenBower API URL>

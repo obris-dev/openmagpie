@@ -32,7 +32,9 @@ from feeds.models import Feed, Source
 from feeds.registry import load_config
 from openmagpie_schema.configs import RedditSubredditSourceSpec, SourceSpec
 from sources import registry as source_registry
+from sources.connectors.base import ConnectorParseError
 from sources.payloads import SourcePayload
+from sources.required_settings import refusal
 
 from ._poll_common import _RECOVERABLE_ERRORS, FeedPollProgressCallback, SourcePolled, _ensure_aware
 from ._reddit_batch import RedditBatchMixin
@@ -259,6 +261,10 @@ class FeedPollOperation(RedditBatchMixin):
         don't read field_map accept and ignore it."""
         field_map = {**self.config.default_field_map, **(source.field_map or {})}
         connector = source_registry.get(spec.kind)
+        # Every connector, built-in or plugin: a missing setting fails this source
+        # (recoverable, watermark untouched) before any request goes out.
+        if message := refusal(spec.kind, connector):
+            raise ConnectorParseError(message)
         # heartbeat: the lease tick the run loop fires between sources, ALSO
         # handed to the connector so a long intentional wait inside one
         # source (rate-limit backoff sleeps) keeps renewing the poll lease.

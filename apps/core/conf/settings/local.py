@@ -27,6 +27,11 @@ from common.env import env_bool, env_list
 from .base import *  # noqa: F403
 
 DEBUG = env_bool("DEBUG", "true")
+ENV_RELOAD_HINT = (
+    "{name} is not set on this server: add `{name}=<value>` to apps/core/.env, then run "
+    "`make reload-core-env` so the server loads it (if it is already in .env, the server has not "
+    "loaded it yet, and that command does)."
+)
 # Dev defaults plus any operator-set hosts. A self-host served on another
 # hostname or IP lists it in ALLOWED_HOSTS in .env instead of editing this
 # file, which would block `make upgrade`.
