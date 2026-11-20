@@ -1,4 +1,6 @@
 import logging
+import platform
+import re
 import time
 from collections.abc import Callable, Iterator
 from datetime import UTC, datetime
@@ -46,12 +48,15 @@ REDDIT_APP_ID = "openmagpie"
 
 
 def reddit_user_agent() -> str:
-    """The honest, Reddit-format User-Agent for `.rss` requests. An operator
-    can set REDDIT_USER_AGENT_CONTACT (e.g. `/u/name`) to identify themselves;
-    otherwise the project URL stands in as the contact."""
+    """The honest, Reddit-format User-Agent for `.rss` requests. The platform is
+    the OS the server runs on (`linux` in the Docker image), kept to characters
+    the format allows, or `server` when Python can't determine the OS. An
+    operator can set REDDIT_USER_AGENT_CONTACT (e.g. `/u/name`) to identify
+    themselves; otherwise the project URL stands in as the contact."""
+    host = re.sub(r"[^a-z0-9._-]", "", platform.system().lower()) or "server"
     contact = settings.REDDIT_USER_AGENT_CONTACT
     suffix = f"by {contact}" if contact else f"+{PROJECT_URL}"
-    return f"linux:{REDDIT_APP_ID}:v{settings.PRODUCT_VERSION} ({suffix})"
+    return f"{host}:{REDDIT_APP_ID}:v{settings.PRODUCT_VERSION} ({suffix})"
 
 
 # Reddit's anonymous max page size is 100. Cap pagination at MAX_PAGES *per sub*

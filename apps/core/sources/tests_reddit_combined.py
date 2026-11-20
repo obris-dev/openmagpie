@@ -13,7 +13,7 @@ from unittest import mock
 import httpx
 from django.test import SimpleTestCase, override_settings
 
-from sources.connectors.base import ConnectorParseError
+from sources.connectors.base import PROJECT_URL, ConnectorParseError
 from sources.connectors.reddit.connector import RedditSubRedditConnector, reddit_user_agent
 
 
@@ -111,17 +111,26 @@ class RedditUserAgentTests(SimpleTestCase):
     Reddit-format one."""
 
     @override_settings(PRODUCT_VERSION="1.2.3", REDDIT_USER_AGENT_CONTACT="")
-    def test_default_format(self):
-        self.assertEqual(
-            reddit_user_agent(),
-            "linux:openmagpie:v1.2.3 (+https://github.com/obris-dev/openmagpie)",
-        )
+    @mock.patch("sources.connectors.reddit.connector.platform.system", return_value="Linux")
+    def test_default_format(self, _system: mock.Mock) -> None:
+        self.assertEqual(reddit_user_agent(), f"linux:openmagpie:v1.2.3 (+{PROJECT_URL})")
 
     @override_settings(PRODUCT_VERSION="1.2.3", REDDIT_USER_AGENT_CONTACT="/u/someone")
-    def test_contact_override(self):
+    @mock.patch("sources.connectors.reddit.connector.platform.system", return_value="Linux")
+    def test_contact_override(self, _system: mock.Mock) -> None:
         self.assertEqual(reddit_user_agent(), "linux:openmagpie:v1.2.3 (by /u/someone)")
 
-    def test_never_a_browser_ua(self):
+    @override_settings(PRODUCT_VERSION="1.2.3", REDDIT_USER_AGENT_CONTACT="")
+    def test_the_platform_is_the_os_the_server_runs_on(self) -> None:
+        cases = (("Darwin", "darwin:"), ("Windows", "windows:"), ("", "server:"), ("Odd OS: 1", "oddos1:"))
+        for system, prefix in cases:
+            with (
+                self.subTest(system=system),
+                mock.patch("sources.connectors.reddit.connector.platform.system", return_value=system),
+            ):
+                self.assertTrue(reddit_user_agent().startswith(prefix + "openmagpie:v1.2.3 "))
+
+    def test_never_a_browser_ua(self) -> None:
         ua = reddit_user_agent()
         for marker in ("Mozilla", "Chrome", "Safari", "Gecko", "python-httpx"):
             self.assertNotIn(marker, ua)
