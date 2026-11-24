@@ -1,0 +1,22 @@
+# OpenMagpie starter: TikTok brand-mention listening.
+# Uses the `tiktok_search` source kind: a TikTok keyword search read through
+# SerpBase (a paid HTTP API in front of TikTok's search), so each poll costs
+# account credits. Set SERPBASE_API_KEY in apps/core/.env first (create a key at
+# https://serpbase.dev/api-keys) and run `make reload-core-env`.
+# Apply by hand (this starter isn't wired into the quickstart seed script):
+#   magpie feed create -f examples/starters/tiktok/feed.yaml
+#   magpie watch create -f examples/starters/tiktok/watch.yaml   (after the edits in examples/README.md)
+# Then set a past last_event_at on each source, or the first tick only sees
+# brand-new videos. Full walkthrough: examples/README.md
+name: "TikTok mentions (starter)"
+kind: curated
+poll_interval_seconds: 1800
+data:
+  retention_days: 30
+sources:
+  # `query` is REQUIRED (the firehose guard): TikTok search runs server-side
+  # before any per-item LLM cost. `count` caps the per-poll fetch (1-30, one
+  # credit per search regardless of count).
+  - spec: {kind: tiktok_search, query: '"social listening"', count: 16}
+  # Watch several phrasings by adding more sources (each is its own poll):
+  #   - spec: {kind: tiktok_search, query: '"brand monitoring"', count: 16}

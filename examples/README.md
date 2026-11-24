@@ -28,6 +28,9 @@ Available starters:
   newly launched companies in your market. Needs your own Product Hunt developer
   token (`PRODUCT_HUNT_TOKEN`); please read Product Hunt's API terms of service
   and use it within them.
+- `tiktok`: a TikTok keyword search (`tiktok_search`), for videos mentioning your
+  product or the problem it solves. Needs a SerpBase API key (`SERPBASE_API_KEY`,
+  a paid HTTP API in front of TikTok search, so polls cost account credits).
 
 Both HN starters take a `query` keyword that runs **server-side as a pre-filter**:
 it narrows which items the connector pulls into the feed at all, before any watch
