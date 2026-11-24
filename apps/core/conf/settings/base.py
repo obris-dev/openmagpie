@@ -565,6 +565,12 @@ SOURCE_ALLOW_INSECURE_TLS = env_bool("SOURCE_ALLOW_INSECURE_TLS", "false")
 # Google account. Empty (the default) disables it.
 YOUTUBE_COOKIES_FILE = os.environ.get("YOUTUBE_COOKIES_FILE", "")
 
+# API key for the SerpBase-backed TikTok search connector (SerpBase is a paid
+# search/data API in front of TikTok's keyword search). Create one at
+# https://serpbase.dev/api-keys; each search costs the account credits. Empty
+# (the default) refuses tiktok_search sources on feed writes and polls.
+SERPBASE_API_KEY = os.environ.get("SERPBASE_API_KEY", "").strip()
+
 # Developer token for the Product Hunt connector (the GraphQL API v2). Create
 # one at https://www.producthunt.com/v2/oauth/applications, and read Product
 # Hunt's API terms of service to use the connector within them. Empty (the

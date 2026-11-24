@@ -1,0 +1,15 @@
+# Companion watch for the TikTok mentions starter. See feed.yaml and
+# examples/README.md. Apply with `magpie watch create -f` after creating the
+# feed, and set its real id below (replacing REPLACE_WITH_FEED_ID).
+name: "TikTok tool mentions (starter)"
+is_active: true
+feed_ids:
+  - REPLACE_WITH_FEED_ID
+actions:
+  - kind: semantic_filter
+    config:
+      instructions: "A TikTok video that reviews, demos, or recommends social listening or brand monitoring tools: tutorials, tool roundups, or hands-on walkthroughs. The caption is the judged text. Not general marketing talk that only mentions listening in passing."
+      threshold: 0.6
+  - kind: log
+    config:
+      prefix: "[tiktok mention]"

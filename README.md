@@ -39,7 +39,7 @@ OpenMagpie listens wherever communities are having those conversations.
 - **Public discussion (today):** X/Twitter, YouTube, Reddit, Hacker News, and any RSS or Atom feed (news, blogs, Substack publications, and forums that publish feeds).
 - **Product launches (today):** Product Hunt, through its official API with your own developer token.
 - **Communities you're in (roadmap):** Slack workspaces and LinkedIn you already belong to, so you catch relevant threads in the groups where you participate, no admin or app install required.
-- **Public discussion (soon to be added):** Facebook, TikTok, and Instagram.
+- **Public discussion:** TikTok keyword search, through SerpBase (an API key, so it needs no scraping of your own).
 
 ## Quickstart
 
@@ -231,7 +231,7 @@ Social listening is a crowded market (Brand24, Mention, Octolens, Syften, and to
 
 | Layer | Shipped |
 |---|---|
-| Connectors | Reddit, Hacker News, RSS/Atom, X/Twitter, YouTube, Product Hunt ([below](#connectors)) |
+| Connectors | Reddit, Hacker News, RSS/Atom, X/Twitter, YouTube, Product Hunt, TikTok ([below](#connectors)) |
 | Engines | Any OpenAI-compatible `/v1` API: Ollama, vLLM, llama.cpp, LM Studio, OpenAI, ... |
 | Action kinds | `semantic_filter` (LLM-judged), `webhook`, `bower` (OpenBower), `log` |
 | Delivery modes | instant, digest |
@@ -248,12 +248,13 @@ Social listening is a crowded market (Brand24, Mention, Octolens, Syften, and to
 | X/Twitter | `twitter_search` | an x.com session cookie |
 | YouTube | `youtube_search` | nothing (a session cookie only for age-restricted videos) |
 | Product Hunt | `producthunt_launches` | your developer token (`PRODUCT_HUNT_TOKEN` in `apps/core/.env`) |
+| TikTok | `tiktok_search` | your SerpBase API key (`SERPBASE_API_KEY` in `apps/core/.env`) |
 
 X/Twitter and YouTube ride an unofficial route; [apps/core/credentials/README.md](apps/core/credentials/README.md) covers the cookie setup and the terms-of-service caveat. Product Hunt is read through its official API; please read Product Hunt's API terms of service and use the connector within them. Per-release history is in the [changelog](CHANGELOG.md).
 
 ## Roadmap
 
-- **More connectors**: Facebook, TikTok, and Instagram (soon to be added), then Slack, LinkedIn, GitHub, Bluesky, and Mastodon.
+- **More connectors**: Facebook and Instagram (soon to be added), then Slack, LinkedIn, GitHub, Bluesky, and Mastodon.
 - **More engines**: Anthropic, OpenAI, and a keyword engine behind the same `Engine` Protocol.
 - **Learns from feedback**: thumbs up/down on past matches become few-shot examples for the next pass.
 - **Run-history in the payload**: the upstream filter score and chain provenance as an opt-in webhook field.

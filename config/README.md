@@ -31,6 +31,9 @@ each source is one `spec` entry under `sources`. Supported kinds:
 - `producthunt_launches`: Product Hunt's front-page launches, optionally one `topic`. Needs
   `PRODUCT_HUNT_TOKEN`; please read Product Hunt's API terms of service and use it within them.
   `{kind: producthunt_launches, topic: developer-tools}`
+- `tiktok_search`: a TikTok keyword search; `query` is required. Needs `SERPBASE_API_KEY`
+  (SerpBase is a paid HTTP API in front of TikTok's search, so the poll costs account credits).
+  `{kind: tiktok_search, query: "your product"}`
 
 Both HN kinds accept a `query` keyword filter (optional for `hn_feed`, required for
 `hn_comment`), matched server-side before anything reaches your watch:

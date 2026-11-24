@@ -3278,6 +3278,7 @@
                   "producthunt_launches": "#/$defs/ProductHuntLaunchesSourceSpec",
                   "reddit_subreddit": "#/$defs/RedditSubredditSourceSpec",
                   "rss": "#/$defs/RssSourceSpec",
+                  "tiktok_search": "#/$defs/TikTokSearchSourceSpec",
                   "twitter_search": "#/$defs/TwitterSearchSourceSpec",
                   "youtube_search": "#/$defs/YouTubeSearchSourceSpec"
                 },
@@ -3304,6 +3305,9 @@
                 },
                 {
                   "$ref": "#/$defs/ProductHuntLaunchesSourceSpec"
+                },
+                {
+                  "$ref": "#/$defs/TikTokSearchSourceSpec"
                 }
               ]
             },
@@ -3472,6 +3476,7 @@
                   "producthunt_launches": "#/$defs/ProductHuntLaunchesSourceSpec",
                   "reddit_subreddit": "#/$defs/RedditSubredditSourceSpec",
                   "rss": "#/$defs/RssSourceSpec",
+                  "tiktok_search": "#/$defs/TikTokSearchSourceSpec",
                   "twitter_search": "#/$defs/TwitterSearchSourceSpec",
                   "youtube_search": "#/$defs/YouTubeSearchSourceSpec"
                 },
@@ -3498,6 +3503,9 @@
                 },
                 {
                   "$ref": "#/$defs/ProductHuntLaunchesSourceSpec"
+                },
+                {
+                  "$ref": "#/$defs/TikTokSearchSourceSpec"
                 }
               ]
             },
@@ -3545,6 +3553,34 @@
         "can_set"
       ],
       "title": "TelemetryState",
+      "type": "object"
+    },
+    "TikTokSearchSourceSpec": {
+      "description": "Identity of one TikTok search stream. Bound to TikTokSearchConnector.\n\n`query` is the keyword expression and is REQUIRED and NON-BLANK, so a source\nalways carries a server-side pre-filter before any per-item LLM cost (the\nsame firehose guard as twitter_search / hn_comment). `count` caps the\nper-cycle fetch (bounded at 30, the connector's per-call page ceiling).",
+      "properties": {
+        "count": {
+          "default": 16,
+          "maximum": 30,
+          "minimum": 1,
+          "title": "Count",
+          "type": "integer"
+        },
+        "kind": {
+          "const": "tiktok_search",
+          "default": "tiktok_search",
+          "title": "Kind",
+          "type": "string"
+        },
+        "query": {
+          "minLength": 1,
+          "title": "Query",
+          "type": "string"
+        }
+      },
+      "required": [
+        "query"
+      ],
+      "title": "TikTokSearchSourceSpec",
       "type": "object"
     },
     "TwitterSearchSourceSpec": {

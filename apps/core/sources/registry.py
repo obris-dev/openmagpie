@@ -16,6 +16,7 @@ from sources.connectors import (
     ProductHuntLaunchesConnector,
     RedditSubRedditConnector,
     RssConnector,
+    TikTokSearchConnector,
     TwitterSearchConnector,
     YouTubeSearchConnector,
 )
@@ -28,6 +29,7 @@ _REGISTRY: dict[str, Connector[Any]] = {
     TwitterSearchConnector.kind: TwitterSearchConnector(),
     YouTubeSearchConnector.kind: YouTubeSearchConnector(),
     ProductHuntLaunchesConnector.kind: ProductHuntLaunchesConnector(),
+    TikTokSearchConnector.kind: TikTokSearchConnector(),
 }
 
 # Core kinds captured before any plugin registers; a plugin can't replace one.

@@ -128,6 +128,22 @@ class NewProductHuntLaunchPayload(FeedItemPayload):
     source_topic: str = ""  # the topic slug the producing source is narrowed to ("" for every topic)
 
 
+class NewTikTokVideoPayload(FeedItemPayload):
+    """`new_tiktok_video`: one TikTok video (TikTokSearchConnector, a SerpBase
+    keyword search). `content` is the caption and `title` its first line (the
+    engine's judgeable body); `handle` is the creator's unique id and the
+    within-kind source slug, `author` their display name, `source_query` the
+    keyword the producing source searched for, `hashtags` the caption's tags
+    (comma-joined), `metrics` the view/like/comment/share/save counters."""
+
+    kind: Literal["new_tiktok_video"]  # required, so a non-tiktok dump can't match here
+    author: str = ""
+    handle: str = ""
+    hashtags: str = ""
+    source_query: str = ""
+    metrics: dict[str, int | None] = {}
+
+
 # Tried left-to-right so a dump resolves to its concrete variant (matched on the
 # required `kind` literal) and only falls to the permissive base when no variant
 # claims it. Variants REQUIRE their `kind`, so an empty / kind-less dict can't
@@ -145,6 +161,7 @@ FeedItemData = Annotated[
     | NewTweetPayload
     | NewVideoPayload
     | NewProductHuntLaunchPayload
+    | NewTikTokVideoPayload
     | FeedItemPayload,
     Field(union_mode="left_to_right"),
 ]

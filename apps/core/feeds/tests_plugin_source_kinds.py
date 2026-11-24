@@ -26,6 +26,7 @@ from openmagpie_schema.configs import (
     RedditSubredditSourceSpec,
     RssSourceSpec,
     SourceSpec,
+    TikTokSearchSourceSpec,
     TwitterSearchSourceSpec,
     YouTubeSearchSourceSpec,
     _BuiltinSourceSpec,
@@ -322,6 +323,7 @@ class BuiltinSourceKindInvariantTests(SimpleTestCase):
                     TwitterSearchSourceSpec.SOURCE_KIND,
                     YouTubeSearchSourceSpec.SOURCE_KIND,
                     ProductHuntLaunchesSourceSpec.SOURCE_KIND,
+                    TikTokSearchSourceSpec.SOURCE_KIND,
                 }
             ),
         )

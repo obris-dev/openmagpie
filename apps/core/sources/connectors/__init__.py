@@ -3,6 +3,7 @@ from .hackernews import HackerNewsCommentConnector, HackerNewsFeedConnector
 from .producthunt import ProductHuntLaunchesConnector
 from .reddit import RedditSubRedditConnector
 from .rss import RssConnector
+from .tiktok import TikTokSearchConnector
 from .twitter import TwitterSearchConnector
 from .youtube import YouTubeSearchConnector
 
@@ -13,6 +14,7 @@ __all__ = [
     "ProductHuntLaunchesConnector",
     "RedditSubRedditConnector",
     "RssConnector",
+    "TikTokSearchConnector",
     "TwitterSearchConnector",
     "YouTubeSearchConnector",
 ]

@@ -14,7 +14,12 @@ from urllib.parse import urlsplit
 
 from pydantic import BaseModel, Field, field_validator
 
-from ._platform_source_specs import ProductHuntLaunchesSourceSpec, TwitterSearchSourceSpec, YouTubeSearchSourceSpec
+from ._platform_source_specs import (
+    ProductHuntLaunchesSourceSpec,
+    TikTokSearchSourceSpec,
+    TwitterSearchSourceSpec,
+    YouTubeSearchSourceSpec,
+)
 from ._unions import _PLUGIN_MEMBER_LOC_NAMES, KIND_MAX_LENGTH, builtin_union_kinds, reject_builtin_kind
 
 # ── Source specs (discriminated union over kind) ──────────────────────────
@@ -161,7 +166,8 @@ _BuiltinSourceSpec = Annotated[
     | HackerNewsCommentSourceSpec
     | TwitterSearchSourceSpec
     | YouTubeSearchSourceSpec
-    | ProductHuntLaunchesSourceSpec,
+    | ProductHuntLaunchesSourceSpec
+    | TikTokSearchSourceSpec,
     Field(discriminator="kind"),
 ]
 
